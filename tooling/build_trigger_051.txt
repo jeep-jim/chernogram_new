@@ -1,0 +1,1 @@
+Build Chernogram 0.5.1 with the standard Android installer flow.
