@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: chernogram-apk-main
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build Android APK
@@ -33,45 +37,11 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
-      - name: Fix known Dart compile error
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('lib/main.dart')
-          source = path.read_text(encoding='utf-8')
-          broken = "child: const Text('ОПУБЛИКОВАТЬ', fontWeight: FontWeight.bold),"
-          fixed = """child: const Text(
-                  'ОПУБЛИКОВАТЬ',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),"""
-
-          if broken in source:
-              source = source.replace(broken, fixed)
-              path.write_text(source, encoding='utf-8')
-              print('Fixed invalid Text fontWeight parameter.')
-          else:
-              print('The fontWeight error is already fixed.')
-          PY
-          dart format lib/main.dart
-
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build release APK
         run: flutter build apk --release
-
-      - name: Save automatic source fixes
-        run: |
-          if git diff --quiet -- lib/main.dart; then
-            echo "No source changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/main.dart
-          git commit -m "Исправить ошибки компиляции Dart [skip ci]"
-          git push origin HEAD:main
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -93,7 +63,7 @@ jobs:
             --notes "Автоматически собранная тестовая версия приложения для Android." \
             --prerelease
 
-      - name: Mark APK as ready
+      - name: Keep download link in repository
         run: |
           cat > APK_READY.md <<'EOF'
           # APK готов
@@ -102,8 +72,12 @@ jobs:
 
           https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
           EOF
+          git add APK_READY.md
+          if git diff --cached --quiet; then
+            echo "APK link file is already up to date."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add APK_READY.md
-          git commit -m "APK готов к скачиванию [skip ci]"
+          git commit -m "Обновить ссылку на APK [skip ci]"
           git push origin HEAD:main
