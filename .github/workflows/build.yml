@@ -113,6 +113,11 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+
           {
             echo "GitHub Actions build failed"
             echo "Commit: ${GITHUB_SHA}"
@@ -128,9 +133,7 @@ jobs:
               cat ci-release.txt
             fi
           } > CI_ERROR.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
+
           git add -f CI_ERROR.txt
           git commit -m "Сохранить точную ошибку сборки 0.5.1 [skip ci]" || true
           git push origin HEAD:main || true
@@ -139,6 +142,11 @@ jobs:
         if: success()
         shell: bash
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+
           cat > BUILD_STATUS.md <<EOF
           APK ready
           Commit: ${GITHUB_SHA}
@@ -146,10 +154,10 @@ jobs:
           Version: $(awk '/^version:/ {print $2}' pubspec.yaml)
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
           EOF
-          rm -f CI_ERROR.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
-          git add -A BUILD_STATUS.md CI_ERROR.txt
+
+          git add BUILD_STATUS.md
+          if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
+            git rm -f CI_ERROR.txt
+          fi
           git commit -m "APK 0.5.1 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
