@@ -35,6 +35,7 @@ jobs:
             echo "fffb11d1c2291fabf10734bf323d5ff6e9e127185074d16c16bf4146f63e03d5  /tmp/chernogram_patch.tar.xz" | sha256sum -c -
             tar -tJf /tmp/chernogram_patch.tar.xz
             tar -xJf /tmp/chernogram_patch.tar.xz -C .
+            sed -i 's/Colors\.black66/Colors.black54/g' lib/media_studio.dart
           } 2>&1 | tee ci-package.txt
           STATUS=${PIPESTATUS[0]}
           if [ "$STATUS" -ne 0 ]; then
