@@ -43,11 +43,12 @@ jobs:
           path: ~/.android/debug.keystore
           key: chernogram-prototype-signing-v1
 
-      - name: Setup latest stable Flutter
+      - name: Setup Flutter 3.44.8
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.44.8"
           channel: stable
-          cache: true
+          cache: false
 
       - name: Build with diagnostics
         shell: bash
@@ -96,7 +97,7 @@ jobs:
           {
             "versionName": "${VERSION_NAME}",
             "versionCode": ${VERSION_CODE},
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk",
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "notesRu": "Новая версия Чернограма: автообновление одной кнопкой, автоматическая проверка при запуске и улучшения приложения.",
             "notesEn": "A new Chernogram version: one-tap updates, automatic update checks on launch, and app improvements."
