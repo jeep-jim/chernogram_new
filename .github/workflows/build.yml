@@ -34,19 +34,29 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show Flutter version
-        run: flutter --version
-
-      - name: Prepare updater integration
+      - name: Build with diagnostics
+        shell: bash
         run: |
-          python3 tooling/prepare_build.py
-          dart format lib/main.dart lib/update_service.dart
+          set +e
+          {
+            flutter --version
+            python3 tooling/prepare_build.py
+            dart format lib/main.dart lib/update_service.dart
+            flutter pub get
+            flutter build apk --release
+          } 2>&1 | tee BUILD_ERROR.log
+          STATUS=${PIPESTATUS[0]}
 
-      - name: Install dependencies
-        run: flutter pub get
+          if [ "$STATUS" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add BUILD_ERROR.log
+            git commit -m "Сохранить лог ошибки сборки [skip ci]" || true
+            git push origin HEAD:main || true
+            exit "$STATUS"
+          fi
 
-      - name: Build release APK
-        run: flutter build apk --release
+          rm -f BUILD_ERROR.log
 
       - name: Save prepared source files
         run: |
