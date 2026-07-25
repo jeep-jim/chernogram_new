@@ -17,11 +17,24 @@ jobs:
   build:
     name: Build Android Test APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+
+      - name: Apply Chernogram 0.4 source package
+        shell: bash
+        run: |
+          set -e
+          tar -xJf tooling/chernogram_040_patch.tar.xz -C .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib pubspec.yaml android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          if ! git diff --cached --quiet; then
+            git commit -m "Чернограм 0.4: бренд, студия, профили и туннели [skip ci]"
+            git push origin HEAD:main
+          fi
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -50,8 +63,10 @@ jobs:
           set -o pipefail
           {
             flutter --version
+            dart format lib
             flutter pub get
             flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
             flutter build apk --debug
           } 2>&1 | tee ci-build.txt
           STATUS=${PIPESTATUS[0]}
@@ -72,8 +87,8 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Новая версия Чернограма: автообновление одной кнопкой, автоматическая проверка при запуске и обновлённый медиаменеджер.",
-            "notesEn": "A new Chernogram version: one-tap updates, automatic checks on launch, and the updated media manager."
+            "notesRu": "Чернограм 0.4: новый логотип и оранжево-золотая тема, понятная медиастудия, реальные фильтры фото, экспорт, локальный профиль с ID, туннели, чат, ссылки и приглашения из контактов, Telegram и Instagram.",
+            "notesEn": "Chernogram 0.4: new logo and orange-gold theme, clear media studio, real photo filters, export, local profile with ID, tunnels, chat, links and invitations from contacts, Telegram and Instagram."
           }
           EOF
 
@@ -94,12 +109,14 @@ jobs:
         run: |
           set +e
           set -o pipefail
+          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
+          VERSION_NAME=${VERSION_FULL%%+*}
           {
             gh release delete latest-apk --cleanup-tag --yes || true
             gh release create latest-apk chernogram.apk update.json \
               --target main \
-              --title "Чернограм 0.3.0 — автообновление" \
-              --notes "Тестовая Android-версия с обновлением одной кнопкой." \
+              --title "Чернограм ${VERSION_NAME} — студия и туннели" \
+              --notes "Тестовая Android-версия: новый бренд, медиастудия, профили, туннели и приглашения." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -126,8 +143,9 @@ jobs:
           } > CI_ERROR.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить точную ошибку сборки [skip ci]" || true
+          git commit -m "Сохранить точную ошибку сборки 0.4 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -144,6 +162,7 @@ jobs:
           rm -f CI_ERROR.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
           git add -A BUILD_STATUS.md CI_ERROR.txt
-          git commit -m "APK готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.4 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
