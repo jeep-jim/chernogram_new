@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Android Test APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -37,6 +37,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - name: Restore prototype signing key
         uses: actions/cache@v4
@@ -51,17 +52,7 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Mark Flutter as ready
-        run: |
-          echo "Flutter ready for ${GITHUB_SHA} at $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > BUILD_STATUS.md
-          flutter --version >> BUILD_STATUS.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BUILD_STATUS.md
-          git commit -m "Flutter подготовлен [skip ci]"
-          git push origin HEAD:main
-
-      - name: Build with diagnostics
+      - name: Prepare and validate source
         shell: bash
         run: |
           set +e
@@ -70,22 +61,22 @@ jobs:
             python3 tooling/prepare_build.py
             dart format lib/main.dart lib/update_service.dart
             flutter pub get
-            flutter build apk --release
-          } 2>&1 | tee BUILD_ERROR.log
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+          } 2>&1 | tee PREPARE_ERROR.log
           STATUS=${PIPESTATUS[0]}
 
           if [ "$STATUS" -ne 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add BUILD_ERROR.log
-            git commit -m "Сохранить лог ошибки сборки [skip ci]" || true
+            git add PREPARE_ERROR.log
+            git commit -m "Сохранить лог подготовки APK [skip ci]" || true
             git push origin HEAD:main || true
             exit "$STATUS"
           fi
 
-          rm -f BUILD_ERROR.log
+          rm -f PREPARE_ERROR.log
 
-      - name: Save prepared source files
+      - name: Save updater source files
         run: |
           git add lib/main.dart lib/update_service.dart
           if git diff --cached --quiet; then
@@ -97,9 +88,27 @@ jobs:
           git commit -m "Подключить интерфейс автообновления [skip ci]"
           git push origin HEAD:main
 
-      - name: Prepare release files
+      - name: Build debug APK with timeout
+        shell: bash
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk chernogram.apk
+          set +e
+          timeout 900s flutter build apk --debug --verbose 2>&1 | tee BUILD_ERROR.log
+          STATUS=${PIPESTATUS[0]}
+
+          if [ "$STATUS" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add BUILD_ERROR.log
+            git commit -m "Сохранить лог ошибки APK [skip ci]" || true
+            git push origin HEAD:main || true
+            exit "$STATUS"
+          fi
+
+          rm -f BUILD_ERROR.log
+
+      - name: Prepare update files
+        run: |
+          cp build/app/outputs/flutter-apk/app-debug.apk chernogram.apk
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
           VERSION_NAME=${VERSION_FULL%%+*}
           VERSION_CODE=${VERSION_FULL##*+}
@@ -110,8 +119,8 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Новая версия Чернограма: автообновление одной кнопкой, автоматическая проверка при запуске и улучшения приложения.",
-            "notesEn": "A new Chernogram version: one-tap updates, automatic update checks on launch, and app improvements."
+            "notesRu": "Новая версия Чернограма: автообновление одной кнопкой, автоматическая проверка при запуске и обновлённый медиаменеджер.",
+            "notesEn": "A new Chernogram version: one-tap updates, automatic checks on launch, and the updated media manager."
           }
           EOF
           cat update.json
@@ -133,8 +142,8 @@ jobs:
           gh release delete latest-apk --cleanup-tag --yes || true
           gh release create latest-apk chernogram.apk update.json \
             --target "$GITHUB_SHA" \
-            --title "Чернограм — тестовая APK" \
-            --notes "Автоматически собранная тестовая версия приложения для Android." \
+            --title "Чернограм 0.3.0 — автообновление" \
+            --notes "Тестовая Android-версия с обновлением одной кнопкой." \
             --prerelease
 
       - name: Mark build as ready
