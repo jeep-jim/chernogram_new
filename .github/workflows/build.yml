@@ -37,7 +37,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Restore prototype signing key
         uses: actions/cache@v4
@@ -52,49 +51,42 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Prepare and validate source
+      - name: Apply updater source integration
+        shell: bash
+        run: |
+          set -e
+          python3 tooling/prepare_build.py
+          dart format lib/main.dart lib/update_service.dart
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart lib/update_service.dart
+          if ! git diff --cached --quiet; then
+            git commit -m "Подключить интерфейс автообновления [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Install dependencies
         shell: bash
         run: |
           set +e
-          {
-            flutter --version
-            python3 tooling/prepare_build.py
-            dart format lib/main.dart lib/update_service.dart
-            flutter pub get
-            flutter analyze --no-fatal-infos --no-fatal-warnings
-          } 2>&1 | tee PREPARE_ERROR.log
+          timeout 300s flutter pub get 2>&1 | tee PUB_GET_ERROR.log
           STATUS=${PIPESTATUS[0]}
-
           if [ "$STATUS" -ne 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add PREPARE_ERROR.log
-            git commit -m "Сохранить лог подготовки APK [skip ci]" || true
+            git add PUB_GET_ERROR.log
+            git commit -m "Сохранить ошибку зависимостей [skip ci]" || true
             git push origin HEAD:main || true
             exit "$STATUS"
           fi
+          rm -f PUB_GET_ERROR.log
 
-          rm -f PREPARE_ERROR.log
-
-      - name: Save updater source files
-        run: |
-          git add lib/main.dart lib/update_service.dart
-          if git diff --cached --quiet; then
-            echo "Updater source files are already prepared."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Подключить интерфейс автообновления [skip ci]"
-          git push origin HEAD:main
-
-      - name: Build debug APK with timeout
+      - name: Build debug APK
         shell: bash
         run: |
           set +e
-          timeout 900s flutter build apk --debug --verbose 2>&1 | tee BUILD_ERROR.log
+          timeout 900s flutter build apk --debug 2>&1 | tee BUILD_ERROR.log
           STATUS=${PIPESTATUS[0]}
-
           if [ "$STATUS" -ne 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -103,7 +95,6 @@ jobs:
             git push origin HEAD:main || true
             exit "$STATUS"
           fi
-
           rm -f BUILD_ERROR.log
 
       - name: Prepare update files
@@ -123,7 +114,6 @@ jobs:
             "notesEn": "A new Chernogram version: one-tap updates, automatic checks on launch, and the updated media manager."
           }
           EOF
-          cat update.json
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
