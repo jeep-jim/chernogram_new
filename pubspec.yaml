@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — local media manager and social content preview studio
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  http: ^1.5.0
+  ota_update: ^7.1.0
+  package_info_plus: ^8.3.1
   photo_manager: ^3.10.0
   shared_preferences: ^2.2.2
 
