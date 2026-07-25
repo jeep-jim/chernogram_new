@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — local media manager, social content studio and sharing tunnels
 publish_to: 'none'
-version: 0.4.0+4
+version: 0.5.0+5
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -15,6 +15,7 @@ dependencies:
   package_info_plus: ^8.3.1
   path_provider: ^2.1.5
   photo_manager: ^3.10.0
+  qr_flutter: ^4.1.0
   share_plus: ^10.1.4
   shared_preferences: ^2.2.2
   url_launcher: ^6.3.1
