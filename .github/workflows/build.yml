@@ -23,30 +23,16 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Apply verified Chernogram 0.4 source package
+      - name: Apply Chernogram 0.5 changes
         shell: bash
         run: |
-          set +e
-          set -o pipefail
-          {
-            cat tooling/patch_chunks/patch_* > /tmp/chernogram_patch.b64
-            echo "caabf77ee649da1ef1431a657074f38a1ccc185b447d0d5dae49426370ce4ff1  /tmp/chernogram_patch.b64" | sha256sum -c -
-            base64 --decode /tmp/chernogram_patch.b64 > /tmp/chernogram_patch.tar.xz
-            echo "fffb11d1c2291fabf10734bf323d5ff6e9e127185074d16c16bf4146f63e03d5  /tmp/chernogram_patch.tar.xz" | sha256sum -c -
-            tar -tJf /tmp/chernogram_patch.tar.xz
-            tar -xJf /tmp/chernogram_patch.tar.xz -C .
-            sed -i 's/Colors\.black66/Colors.black54/g' lib/media_studio.dart
-          } 2>&1 | tee ci-package.txt
-          STATUS=${PIPESTATUS[0]}
-          if [ "$STATUS" -ne 0 ]; then
-            exit "$STATUS"
-          fi
-
+          set -e
+          python3 tooling/apply_05.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib pubspec.yaml android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          git add lib pubspec.yaml
           if ! git diff --cached --quiet; then
-            git commit -m "Чернограм 0.4: бренд, студия, профили и туннели [skip ci]"
+            git commit -m "Чернограм 0.5: QR, аватарки и права туннеля [skip ci]"
             git push origin HEAD:main
           fi
 
@@ -101,8 +87,8 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Чернограм 0.4: новый логотип и оранжево-золотая тема, понятная медиастудия, реальные фильтры фото, экспорт, локальный профиль с ID, туннели, чат, ссылки и приглашения из контактов, Telegram и Instagram.",
-            "notesEn": "Chernogram 0.4: new logo and orange-gold theme, clear media studio, real photo filters, export, local profile with ID, tunnels, chat, links and invitations from contacts, Telegram and Instagram."
+            "notesRu": "Чернограм 0.5: QR-код туннеля, локальные аватарки, права собеседника и исправленный переход к системной установке обновлений.",
+            "notesEn": "Chernogram 0.5: tunnel QR codes, local avatars, guest permissions and an improved Android update installation flow."
           }
           EOF
 
@@ -129,8 +115,8 @@ jobs:
             gh release delete latest-apk --cleanup-tag --yes || true
             gh release create latest-apk chernogram.apk update.json \
               --target main \
-              --title "Чернограм ${VERSION_NAME} — студия и туннели" \
-              --notes "Тестовая Android-версия: новый бренд, медиастудия, профили, туннели и приглашения." \
+              --title "Чернограм ${VERSION_NAME} — QR и аватарки" \
+              --notes "Тестовая Android-версия: QR туннелей, аватарки, права доступа и улучшенное обновление." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -144,13 +130,8 @@ jobs:
             echo "GitHub Actions build failed"
             echo "Commit: ${GITHUB_SHA}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            if [ -f ci-package.txt ]; then
-              echo
-              echo "===== PACKAGE OUTPUT ====="
-              cat ci-package.txt
-            fi
+            echo
             if [ -f ci-build.txt ]; then
-              echo
               echo "===== BUILD OUTPUT ====="
               cat ci-build.txt
             fi
@@ -164,7 +145,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin main || true
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить точную ошибку сборки 0.4 [skip ci]" || true
+          git commit -m "Сохранить точную ошибку сборки 0.5 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -183,5 +164,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin main || true
           git add -A BUILD_STATUS.md CI_ERROR.txt
-          git commit -m "APK 0.4 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.5 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
