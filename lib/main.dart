@@ -93,9 +93,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
             const SizedBox(height: 40),
-            const CircularProgressIndicator(
-              color: Colors.white54,
-            ),
+            const CircularProgressIndicator(color: Colors.white54),
           ],
         ),
       ),
@@ -123,49 +121,49 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _loadPosts() async {
-  final loadedPosts = await db.getPosts();
+    final loadedPosts = await db.getPosts();
 
-  if (loadedPosts.isEmpty) {
-    final demoPosts = [
-      Post(
-        id: 1,
-        author: 'Аноним',
-        text:
-            'Добро пожаловать в Чернограм! Здесь все данные хранятся только на твоем устройстве. 🤫',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-      ),
-      Post(
-        id: 2,
-        author: 'Путник',
-        text:
-            'Наконец-то место без цензуры и слежки. Свобода слова - это важно!',
-        timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-      ),
-      Post(
-        id: 3,
-        author: 'Тень',
-        text: 'Проверка связи. Никто не следит? 👀',
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-    ];
+    if (loadedPosts.isEmpty) {
+      final demoPosts = [
+        Post(
+          id: 1,
+          author: 'Аноним',
+          text:
+              'Добро пожаловать в Чернограм! Здесь все данные хранятся только на твоем устройстве. 🤫',
+          timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+        ),
+        Post(
+          id: 2,
+          author: 'Путник',
+          text:
+              'Наконец-то место без цензуры и слежки. Свобода слова - это важно!',
+          timestamp: DateTime.now().subtract(const Duration(hours: 1)),
+        ),
+        Post(
+          id: 3,
+          author: 'Тень',
+          text: 'Проверка связи. Никто не следит? 👀',
+          timestamp: DateTime.now().subtract(const Duration(hours: 3)),
+        ),
+      ];
 
-    await db.insertPosts(demoPosts);
+      await db.insertPosts(demoPosts);
+
+      if (!mounted) return;
+
+      setState(() {
+        posts = demoPosts;
+      });
+
+      return;
+    }
 
     if (!mounted) return;
 
     setState(() {
-      posts = demoPosts;
+      posts = loadedPosts;
     });
-
-    return;
   }
-
-  if (!mounted) return;
-
-  setState(() {
-    posts = loadedPosts;
-  });
-}
 
   Future<void> _addPost(String text) async {
     if (text.isEmpty) return;
@@ -193,7 +191,10 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Лента'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_circle), label: 'Создать'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle),
+            label: 'Создать',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
         ],
       ),
@@ -234,7 +235,10 @@ class FeedScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.white24),
                   borderRadius: BorderRadius.circular(20),
@@ -384,7 +388,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: const Text('ОПУБЛИКОВАТЬ', fontWeight: FontWeight.bold),
+              child: const Text(
+                'ОПУБЛИКОВАТЬ',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ),
           const Spacer(),
@@ -490,10 +497,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Постов: 0',
-              style: TextStyle(color: Colors.white54),
-            ),
+            const Text('Постов: 0', style: TextStyle(color: Colors.white54)),
             const SizedBox(height: 30),
             Container(
               padding: const EdgeInsets.all(16),
@@ -553,18 +557,18 @@ class Post {
   });
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'author': author,
-        'text': text,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'id': id,
+    'author': author,
+    'text': text,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   factory Post.fromMap(Map<String, dynamic> map) => Post(
-        id: map['id'],
-        author: map['author'],
-        text: map['text'],
-        timestamp: DateTime.parse(map['timestamp']),
-      );
+    id: map['id'],
+    author: map['author'],
+    text: map['text'],
+    timestamp: DateTime.parse(map['timestamp']),
+  );
 }
 
 // ====================== БАЗА ДАННЫХ (ЛОКАЛЬНАЯ) ======================
@@ -580,11 +584,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/chernogram.db';
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _createDatabase,
-    );
+    return await openDatabase(path, version: 1, onCreate: _createDatabase);
   }
 
   Future<void> _createDatabase(Database db, int version) async {
