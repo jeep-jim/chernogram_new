@@ -38,58 +38,11 @@ main_path.write_text(main, encoding="utf-8")
 
 update_path = Path("lib/update_service.dart")
 update = update_path.read_text(encoding="utf-8")
-update = update.replace(
-    "progress.value = value.clamp(0, 100);",
-    "progress.value = value.clamp(0, 100).toDouble();",
-)
-update = update.replace(
-    "if (value != null) progress.value = value.clamp(0, 100);",
-    "if (value != null) {\n                progress.value = value.clamp(0, 100).toDouble();\n              }",
-)
 
-old_switch = """          final eventName = event.status.toString().split('.').last;
-          switch (eventName) {
-            case 'DOWNLOADING':
-              final value = double.tryParse(event.value ?? '') ?? 0;
-              progress.value = value.clamp(0, 100).toDouble();
-              status.value = ru ? 'Скачиваем новую версию…' : 'Downloading the new version…';
-            case 'INSTALLING':
-              final value = double.tryParse(event.value ?? '');
-              if (value != null) {
-                progress.value = value.clamp(0, 100).toDouble();
-              }
-              status.value = ru
-                  ? 'Откройте системное окно и подтвердите установку.'
-                  : 'Confirm installation in the Android system window.';
-              if (value == null) closeDialog();
-            case 'INSTALLATION_DONE':
-              closeDialog();
-              if (!completed.isCompleted) completed.complete();
-            case 'PERMISSION_NOT_GRANTED_ERROR':
-              fail(
-                ru
-                    ? 'Разрешите Чернограму устанавливать обновления в настройках Android и повторите попытку.'
-                    : 'Allow Chernogram to install updates in Android settings and try again.',
-              );
-              if (!completed.isCompleted) completed.complete();
-            case 'DOWNLOAD_ERROR':
-            case 'CHECKSUM_ERROR':
-            case 'INSTALLATION_ERROR':
-            case 'INTERNAL_ERROR':
-            case 'ALREADY_RUNNING_ERROR':
-              fail(
-                ru
-                    ? 'Не удалось установить обновление. Повторите попытку.'
-                    : 'The update could not be installed. Please try again.',
-              );
-              if (!completed.isCompleted) completed.complete();
-            case 'CANCELED':
-              closeDialog();
-              if (!completed.isCompleted) completed.complete();
-          }
-"""
+start_marker = "          final eventName = event.status.toString().split('.').last;\n"
+end_marker = "        },\n        onError:"
 
-new_switch = """          final eventName = event.status.toString().split('.').last;
+new_handler = """          final eventName = event.status.toString().split('.').last;
           if (eventName == 'DOWNLOADING') {
             final value = double.tryParse(event.value ?? '') ?? 0;
             progress.value = value.clamp(0, 100).toDouble();
@@ -150,9 +103,11 @@ new_switch = """          final eventName = event.status.toString().split('.').l
           }
 """
 
-if new_switch not in update:
-    if old_switch not in update:
-        raise RuntimeError("Could not patch OTA event handler")
-    update = update.replace(old_switch, new_switch, 1)
+if new_handler not in update:
+    start = update.find(start_marker)
+    end = update.find(end_marker, start)
+    if start < 0 or end < 0:
+        raise RuntimeError("Could not locate OTA event handler")
+    update = update[:start] + new_handler + update[end:]
 
 update_path.write_text(update, encoding="utf-8")
