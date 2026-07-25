@@ -123,35 +123,49 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _loadPosts() async {
-    final loadedPosts = await db.getPosts();
+  final loadedPosts = await db.getPosts();
+
+  if (loadedPosts.isEmpty) {
+    final demoPosts = [
+      Post(
+        id: 1,
+        author: 'Аноним',
+        text:
+            'Добро пожаловать в Чернограм! Здесь все данные хранятся только на твоем устройстве. 🤫',
+        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+      ),
+      Post(
+        id: 2,
+        author: 'Путник',
+        text:
+            'Наконец-то место без цензуры и слежки. Свобода слова - это важно!',
+        timestamp: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+      Post(
+        id: 3,
+        author: 'Тень',
+        text: 'Проверка связи. Никто не следит? 👀',
+        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
+      ),
+    ];
+
+    await db.insertPosts(demoPosts);
+
+    if (!mounted) return;
+
     setState(() {
-      posts = loadedPosts;
-      if (posts.isEmpty) {
-        // Демо-данные (хардкод)
-        posts = [
-          Post(
-            id: 1,
-            author: 'Аноним',
-            text: 'Добро пожаловать в Чернограм! Здесь все данные хранятся только на твоем устройстве. 🤫',
-            timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-          ),
-          Post(
-            id: 2,
-            author: 'Путник',
-            text: 'Наконец-то место без цензуры и слежки. Свобода слова - это важно!',
-            timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-          ),
-          Post(
-            id: 3,
-            author: 'Тень',
-            text: 'Проверка связи. Никто не следит? 👀',
-            timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-          ),
-        ];
-        await db.insertPosts(posts);
-      }
+      posts = demoPosts;
     });
+
+    return;
   }
+
+  if (!mounted) return;
+
+  setState(() {
+    posts = loadedPosts;
+  });
+}
 
   Future<void> _addPost(String text) async {
     if (text.isEmpty) return;
