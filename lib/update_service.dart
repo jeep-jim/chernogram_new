@@ -191,9 +191,18 @@ class ChernogramUpdater {
       navigator.pop();
     }
 
+    void showMessage(String message, {Duration? duration}) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: duration ?? const Duration(seconds: 8),
+          content: Text(message),
+        ),
+      );
+    }
+
     void fail(String message) {
       closeDialog();
-      messenger.showSnackBar(SnackBar(content: Text(message)));
+      showMessage(message);
     }
 
     showDialog<void>(
@@ -227,23 +236,26 @@ class ChernogramUpdater {
     );
 
     try {
+      // Для обычных телефонов используем стандартный Android installer intent.
+      // PackageInstaller-режим предназначен в основном для kiosk/MDM и на
+      // некоторых оболочках зависает после разрешения неизвестных источников.
+      final destination = 'chernogram-update-${update.versionCode}.apk';
       final stream = update.sha256.isEmpty
           ? OtaUpdate().execute(
               update.apkUrl,
-              destinationFilename: 'chernogram-${update.versionName}.apk',
-              usePackageInstaller: true,
+              destinationFilename: destination,
             )
           : OtaUpdate().execute(
               update.apkUrl,
-              destinationFilename: 'chernogram-${update.versionName}.apk',
+              destinationFilename: destination,
               sha256checksum: update.sha256,
-              usePackageInstaller: true,
             );
 
       final completed = Completer<void>();
       subscription = stream.listen(
         (event) {
           final eventName = event.status.toString().split('.').last;
+
           if (eventName == 'DOWNLOADING') {
             final value = double.tryParse(event.value ?? '') ?? 0;
             progress.value = value.clamp(0, 100).toDouble();
@@ -254,18 +266,18 @@ class ChernogramUpdater {
           }
 
           if (eventName == 'INSTALLING') {
-            // CHERNOGRAM_05_INSTALL_FLOW
+            // Убираем окно Flutter до запуска системного установщика, чтобы
+            // оно не оставалось поверх Android после возврата из настроек.
             closeDialog();
-            messenger.showSnackBar(
-              SnackBar(
-                duration: const Duration(seconds: 10),
-                content: Text(
-                  ru
-                      ? 'APK скачан. Подтвердите установку в системном окне Android. Если появится запрос — разрешите установку из Чернограма и вернитесь назад.'
-                      : 'APK downloaded. Confirm installation in Android. If asked, allow installs from Chernogram and return.',
-                ),
-              ),
+            showMessage(
+              ru
+                  ? 'APK скачан. Подтвердите обновление в системном окне Android.'
+                  : 'APK downloaded. Confirm the update in Android.',
+              duration: const Duration(seconds: 6),
             );
+            Future<void>.delayed(const Duration(seconds: 2), () {
+              if (!completed.isCompleted) completed.complete();
+            });
             return;
           }
 
@@ -278,8 +290,18 @@ class ChernogramUpdater {
           if (eventName == 'PERMISSION_NOT_GRANTED_ERROR') {
             fail(
               ru
-                  ? 'Разрешите Чернограму устанавливать обновления в настройках Android и повторите попытку.'
-                  : 'Allow Chernogram to install updates in Android settings and try again.',
+                  ? 'Разрешите установку из Чернограма, вернитесь в приложение и нажмите «Обновить» ещё раз.'
+                  : 'Allow installs from Chernogram, return to the app and tap Update again.',
+            );
+            if (!completed.isCompleted) completed.complete();
+            return;
+          }
+
+          if (eventName == 'ALREADY_RUNNING_ERROR') {
+            fail(
+              ru
+                  ? 'Предыдущая попытка установки ещё не завершилась. Полностью закройте Чернограм, откройте снова и повторите обновление.'
+                  : 'A previous install attempt is still active. Fully close Chernogram, reopen it and retry.',
             );
             if (!completed.isCompleted) completed.complete();
             return;
@@ -290,7 +312,6 @@ class ChernogramUpdater {
             'CHECKSUM_ERROR',
             'INSTALLATION_ERROR',
             'INTERNAL_ERROR',
-            'ALREADY_RUNNING_ERROR',
           };
           if (errors.contains(eventName)) {
             fail(
@@ -308,9 +329,7 @@ class ChernogramUpdater {
           }
         },
         onError: (_) {
-          fail(
-            ru ? 'Ошибка скачивания обновления.' : 'Update download failed.',
-          );
+          fail(ru ? 'Ошибка скачивания обновления.' : 'Update download failed.');
           if (!completed.isCompleted) completed.complete();
         },
         onDone: () {
@@ -319,17 +338,13 @@ class ChernogramUpdater {
       );
 
       await completed.future.timeout(
-        const Duration(minutes: 4),
+        const Duration(minutes: 3),
         onTimeout: () {
           closeDialog();
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                ru
-                    ? 'Установка передана Android. Проверьте системное окно или повторите обновление.'
-                    : 'Installation was handed to Android. Check the system window or retry.',
-              ),
-            ),
+          showMessage(
+            ru
+                ? 'Android не открыл установщик. Повторите обновление после перезапуска приложения.'
+                : 'Android did not open the installer. Restart the app and retry.',
           );
         },
       );
