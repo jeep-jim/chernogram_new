@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
+import 'tunnel_extras.dart'; // CHERNOGRAM_05_EXTRAS
 
 class LocalProfile {
   final String id;
@@ -246,6 +247,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _nickname = TextEditingController();
   String? _error;
+  int _avatarRevision = 0;
 
   @override
   void initState() {
@@ -265,6 +267,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _nickname.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseAvatar() async {
+    final profile = widget.profile;
+    if (profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.ru
+                ? 'Сначала сохраните никнейм.'
+                : 'Save your nickname first.',
+          ),
+        ),
+      );
+      return;
+    }
+    final changed = await chooseAndSaveLocalAvatar(
+      context,
+      profileId: profile.id,
+      ru: widget.ru,
+    );
+    if (changed && mounted) {
+      setState(() => _avatarRevision++);
+    }
   }
 
   Future<void> _save() async {
@@ -302,7 +328,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Center(
           child: Column(
             children: [
-              const ChernogramLogo(size: 104, withPlate: true),
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  LocalProfileAvatar(
+                    key: ValueKey(_avatarRevision),
+                    profileId: widget.profile?.id,
+                    nickname: widget.profile?.nickname ?? '',
+                    size: 104,
+                    showBrandWhenEmpty: true,
+                  ),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: ChernogramColors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      tooltip: ru ? 'Выбрать аватарку' : 'Choose avatar',
+                      onPressed: _chooseAvatar,
+                      icon: const Icon(Icons.photo_camera_outlined),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
               Text(
                 widget.profile == null
@@ -377,7 +425,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 18),
         const Center(
           child: Text(
-            'CHERNOGRAM 0.4.0',
+            'CHERNOGRAM 0.5.0',
             style: TextStyle(fontSize: 11, color: Colors.white38),
           ),
         ),
@@ -559,11 +607,11 @@ class _TunnelsScreenState extends State<TunnelsScreen> {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  leading: CircleAvatar(
-                    backgroundColor: tunnel.isPublic
-                        ? ChernogramColors.orange
-                        : ChernogramColors.gold,
-                    child: Icon(tunnel.isPublic ? Icons.public : Icons.lock),
+                  leading: LocalProfileAvatar(
+                    profileId: widget.profile?.id,
+                    nickname: widget.profile?.nickname ?? tunnel.name,
+                    size: 46,
+                    showBrandWhenEmpty: true,
                   ),
                   title: Text(
                     tunnel.name,
@@ -693,17 +741,44 @@ class TunnelChatScreen extends StatefulWidget {
 class _TunnelChatScreenState extends State<TunnelChatScreen> {
   final _controller = TextEditingController();
   late TunnelInfo _tunnel;
+  TunnelPermissions _permissions = const TunnelPermissions();
 
   @override
   void initState() {
     super.initState();
     _tunnel = widget.tunnel;
+    _loadPermissions();
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPermissions() async {
+    final value = await LocalTunnelExtrasStore.loadPermissions(_tunnel.id);
+    if (mounted) setState(() => _permissions = value);
+  }
+
+  Future<void> _showQr() async {
+    await showTunnelQrDialog(
+      context,
+      link: _tunnel.link,
+      tunnelName: _tunnel.name,
+      ru: widget.ru,
+    );
+  }
+
+  Future<void> _editPermissions() async {
+    final value = await showTunnelPermissionsDialog(
+      context,
+      initial: _permissions,
+      ru: widget.ru,
+    );
+    if (value == null) return;
+    await LocalTunnelExtrasStore.savePermissions(_tunnel.id, value);
+    if (mounted) setState(() => _permissions = value);
   }
 
   String get _inviteText => widget.ru
@@ -797,6 +872,15 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          leadingWidth: 58,
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: LocalProfileAvatar(
+              profileId: widget.profile.id,
+              nickname: widget.profile.nickname,
+              size: 40,
+            ),
+          ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -810,6 +894,16 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
             ],
           ),
           actions: [
+            IconButton(
+              tooltip: ru ? 'QR-код' : 'QR code',
+              onPressed: _showQr,
+              icon: const Icon(Icons.qr_code_2),
+            ),
+            IconButton(
+              tooltip: ru ? 'Права доступа' : 'Permissions',
+              onPressed: _editPermissions,
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+            ),
             IconButton(onPressed: _copyLink, icon: const Icon(Icons.link)),
             IconButton(
               onPressed: () => Share.share(_inviteText),
@@ -901,9 +995,26 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
                           if (message.assetId != null) const SizedBox(height: 7),
                           Text(message.text),
                           const SizedBox(height: 4),
-                          Text(
-                            '${message.author} • ${_time(message.sentAt)}',
-                            style: const TextStyle(fontSize: 9, color: Colors.white38),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LocalProfileAvatar(
+                                profileId: mine ? widget.profile.id : null,
+                                nickname: message.author,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '${message.author} • ${_time(message.sentAt)}',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.white38,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

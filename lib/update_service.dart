@@ -254,14 +254,18 @@ class ChernogramUpdater {
           }
 
           if (eventName == 'INSTALLING') {
-            final value = double.tryParse(event.value ?? '');
-            if (value != null) {
-              progress.value = value.clamp(0, 100).toDouble();
-            }
-            status.value = ru
-                ? 'Откройте системное окно и подтвердите установку.'
-                : 'Confirm installation in the Android system window.';
-            if (value == null) closeDialog();
+            // CHERNOGRAM_05_INSTALL_FLOW
+            closeDialog();
+            messenger.showSnackBar(
+              SnackBar(
+                duration: const Duration(seconds: 10),
+                content: Text(
+                  ru
+                      ? 'APK скачан. Подтвердите установку в системном окне Android. Если появится запрос — разрешите установку из Чернограма и вернитесь назад.'
+                      : 'APK downloaded. Confirm installation in Android. If asked, allow installs from Chernogram and return.',
+                ),
+              ),
+            );
             return;
           }
 
@@ -314,7 +318,21 @@ class ChernogramUpdater {
         },
       );
 
-      await completed.future;
+      await completed.future.timeout(
+        const Duration(minutes: 4),
+        onTimeout: () {
+          closeDialog();
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                ru
+                    ? 'Установка передана Android. Проверьте системное окно или повторите обновление.'
+                    : 'Installation was handed to Android. Check the system window or retry.',
+              ),
+            ),
+          );
+        },
+      );
     } catch (_) {
       fail(
         ru ? 'Не удалось запустить обновление.' : 'Could not start the update.',
