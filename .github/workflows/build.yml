@@ -17,20 +17,11 @@ jobs:
   build:
     name: Build Android Test APK
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
-
-      - name: Mark build as started
-        run: |
-          echo "Build started for ${GITHUB_SHA} at $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > BUILD_STATUS.md
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BUILD_STATUS.md
-          git commit -m "Сборка APK запущена [skip ci]"
-          git push origin HEAD:main
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -51,54 +42,25 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply updater source integration
+      - name: Validate and build APK
+        id: build_apk
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          {
+            flutter --version
+            flutter pub get
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter build apk --debug
+          } 2>&1 | tee ci-build.txt
+          STATUS=${PIPESTATUS[0]}
+          exit "$STATUS"
+
+      - name: Prepare update files
         shell: bash
         run: |
           set -e
-          python3 tooling/prepare_build.py
-          dart format lib/main.dart lib/update_service.dart
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/main.dart lib/update_service.dart
-          if ! git diff --cached --quiet; then
-            git commit -m "Подключить интерфейс автообновления [skip ci]"
-            git push origin HEAD:main
-          fi
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set +e
-          timeout 300s flutter pub get 2>&1 | tee PUB_GET_ERROR.log
-          STATUS=${PIPESTATUS[0]}
-          if [ "$STATUS" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add PUB_GET_ERROR.log
-            git commit -m "Сохранить ошибку зависимостей [skip ci]" || true
-            git push origin HEAD:main || true
-            exit "$STATUS"
-          fi
-          rm -f PUB_GET_ERROR.log
-
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set +e
-          timeout 900s flutter build apk --debug 2>&1 | tee BUILD_ERROR.log
-          STATUS=${PIPESTATUS[0]}
-          if [ "$STATUS" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add BUILD_ERROR.log
-            git commit -m "Сохранить лог ошибки APK [skip ci]" || true
-            git push origin HEAD:main || true
-            exit "$STATUS"
-          fi
-          rm -f BUILD_ERROR.log
-
-      - name: Prepare update files
-        run: |
           cp build/app/outputs/flutter-apk/app-debug.apk chernogram.apk
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
           VERSION_NAME=${VERSION_FULL%%+*}
@@ -126,25 +88,62 @@ jobs:
           retention-days: 30
 
       - name: Publish APK to GitHub Release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest-apk --cleanup-tag --yes || true
-          gh release create latest-apk chernogram.apk update.json \
-            --target "$GITHUB_SHA" \
-            --title "Чернограм 0.3.0 — автообновление" \
-            --notes "Тестовая Android-версия с обновлением одной кнопкой." \
-            --prerelease
+          set +e
+          set -o pipefail
+          {
+            gh release delete latest-apk --cleanup-tag --yes || true
+            gh release create latest-apk chernogram.apk update.json \
+              --target main \
+              --title "Чернограм 0.3.0 — автообновление" \
+              --notes "Тестовая Android-версия с обновлением одной кнопкой." \
+              --prerelease
+          } 2>&1 | tee ci-release.txt
+          STATUS=${PIPESTATUS[0]}
+          exit "$STATUS"
 
-      - name: Mark build as ready
+      - name: Save exact failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "GitHub Actions build failed"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            if [ -f ci-build.txt ]; then
+              echo "===== BUILD OUTPUT ====="
+              cat ci-build.txt
+            fi
+            if [ -f ci-release.txt ]; then
+              echo
+              echo "===== RELEASE OUTPUT ====="
+              cat ci-release.txt
+            fi
+          } > CI_ERROR.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f CI_ERROR.txt
+          git commit -m "Сохранить точную ошибку сборки [skip ci]" || true
+          git push origin HEAD:main || true
+
+      - name: Mark APK as ready
+        if: success()
+        shell: bash
         run: |
           cat > BUILD_STATUS.md <<EOF
-          Build ready for ${GITHUB_SHA} at $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          APK ready
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Version: $(awk '/^version:/ {print $2}' pubspec.yaml)
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
           EOF
+          rm -f CI_ERROR.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BUILD_STATUS.md
-          git commit -m "APK готов к скачиванию [skip ci]"
-          git push origin HEAD:main
+          git add -A BUILD_STATUS.md CI_ERROR.txt
+          git commit -m "APK готов к скачиванию [skip ci]" || true
+          git push origin HEAD:main || true
