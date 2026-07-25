@@ -37,17 +37,55 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
+      - name: Prepare updater integration
+        run: |
+          python3 tooling/prepare_build.py
+          dart format lib/main.dart lib/update_service.dart
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Save prepared source files
+        run: |
+          git add lib/main.dart lib/update_service.dart
+          if git diff --cached --quiet; then
+            echo "Updater source files are already prepared."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Подключить интерфейс автообновления [skip ci]"
+          git push origin HEAD:main
+
+      - name: Prepare release files
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk chernogram.apk
+          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
+          VERSION_NAME=${VERSION_FULL%%+*}
+          VERSION_CODE=${VERSION_FULL##*+}
+          APK_SHA256=$(sha256sum chernogram.apk | awk '{print $1}')
+          cat > update.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk",
+            "sha256": "${APK_SHA256}",
+            "notesRu": "Новая версия Чернограма: автообновление одной кнопкой, автоматическая проверка при запуске и улучшения приложения.",
+            "notesEn": "A new Chernogram version: one-tap updates, automatic update checks on launch, and app improvements."
+          }
+          EOF
+          cat update.json
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: chernogram-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            chernogram.apk
+            update.json
           if-no-files-found: error
           retention-days: 30
 
@@ -55,9 +93,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk chernogram.apk
           gh release delete latest-apk --cleanup-tag --yes || true
-          gh release create latest-apk chernogram.apk \
+          gh release create latest-apk chernogram.apk update.json \
             --target "$GITHUB_SHA" \
             --title "Чернограм — тестовая APK" \
             --notes "Автоматически собранная тестовая версия приложения для Android." \
