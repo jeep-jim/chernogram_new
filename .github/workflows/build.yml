@@ -23,11 +23,24 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Apply Chernogram 0.4 source package
+      - name: Apply verified Chernogram 0.4 source package
         shell: bash
         run: |
-          set -e
-          tar -xJf tooling/chernogram_040_patch.tar.xz -C .
+          set +e
+          set -o pipefail
+          {
+            cat tooling/patch_chunks/patch_* > /tmp/chernogram_patch.b64
+            echo "caabf77ee649da1ef1431a657074f38a1ccc185b447d0d5dae49426370ce4ff1  /tmp/chernogram_patch.b64" | sha256sum -c -
+            base64 --decode /tmp/chernogram_patch.b64 > /tmp/chernogram_patch.tar.xz
+            echo "fffb11d1c2291fabf10734bf323d5ff6e9e127185074d16c16bf4146f63e03d5  /tmp/chernogram_patch.tar.xz" | sha256sum -c -
+            tar -tJf /tmp/chernogram_patch.tar.xz
+            tar -xJf /tmp/chernogram_patch.tar.xz -C .
+          } 2>&1 | tee ci-package.txt
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" -ne 0 ]; then
+            exit "$STATUS"
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib pubspec.yaml android/app/src/main/AndroidManifest.xml android/app/src/main/res
@@ -130,8 +143,13 @@ jobs:
             echo "GitHub Actions build failed"
             echo "Commit: ${GITHUB_SHA}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo
+            if [ -f ci-package.txt ]; then
+              echo
+              echo "===== PACKAGE OUTPUT ====="
+              cat ci-package.txt
+            fi
             if [ -f ci-build.txt ]; then
+              echo
               echo "===== BUILD OUTPUT ====="
               cat ci-build.txt
             fi
