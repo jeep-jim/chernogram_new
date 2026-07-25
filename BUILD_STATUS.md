@@ -1,5 +1,5 @@
 APK ready
-Commit: 766d9298f3c6319a01c4f5d1d23f10ff0850bb76
-Time: 2026-07-25T21:11:21Z
-Version: 0.5.0+5
+Commit: 6c0f935aa9dcc45b4f6e55588a01c902a0ceb9d8
+Time: 2026-07-25T21:41:40Z
+Version: 0.5.1+6
 Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
