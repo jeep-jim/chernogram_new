@@ -331,7 +331,7 @@ class _AssetThumb extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.black66,
+                  color: Colors.black54,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
