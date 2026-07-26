@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — encrypted internet tunnels, files, calls and local agents
 publish_to: 'none'
-version: 0.10.1+20
+version: 0.11.0+21
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   app_links: ^7.0.0
+  audio_service: ^0.18.18
   camera: ^0.12.0+2
   cryptography: ^2.9.0
   file_picker: 10.3.10
@@ -17,6 +18,7 @@ dependencies:
   flutter_webrtc: ^1.5.2
   http: ^1.5.0
   just_audio: ^0.10.6
+  just_audio_background: ^0.0.1-beta.17
   mobile_scanner: ^7.4.0
   open_filex: ^4.7.0
   ota_update: ^7.1.0
