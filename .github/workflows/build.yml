@@ -17,11 +17,24 @@ jobs:
   build:
     name: Build Android Test APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+
+      - name: Apply Chernogram 0.6 source
+        shell: bash
+        run: |
+          set -e
+          python3 tooling/apply_v06.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml lib/main.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          if ! git diff --cached --quiet; then
+            git commit -m "Чернограм 0.6: применить новый продуктовый интерфейс [skip ci]"
+            git push origin HEAD:main
+          fi
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -74,8 +87,8 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Чернограм 0.5.1: QR-коды, локальные аватарки, права туннеля и исправленная установка обновлений через стандартное системное окно Android.",
-            "notesEn": "Chernogram 0.5.1: QR codes, local avatars, tunnel permissions and fixed updates through the standard Android installer."
+            "notesRu": "Чернограм 0.6: самостоятельные туннели, любые файлы, QR через временную страницу, публичность после создания, голосовые и основа бесплатных WebRTC-звонков.",
+            "notesEn": "Chernogram 0.6: independent tunnels, any files, temporary landing QR, editable privacy, voice messages and a free WebRTC call foundation."
           }
           EOF
 
@@ -103,7 +116,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Тестовая Android-версия: QR туннелей, локальные аватарки, права доступа и исправленный системный установщик обновлений." \
+              --notes "Приватные туннели, любые файлы, QR-вход, голосовые и WebRTC-основа звонков." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -115,27 +128,25 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp ci-build.txt /tmp/ci-build.txt 2>/dev/null || true
+          cp ci-release.txt /tmp/ci-release.txt 2>/dev/null || true
           git fetch origin main
           git reset --hard origin/main
-
           {
             echo "GitHub Actions build failed"
             echo "Commit: ${GITHUB_SHA}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo
-            if [ -f ci-build.txt ]; then
+            if [ -f /tmp/ci-build.txt ]; then
               echo "===== BUILD OUTPUT ====="
-              cat ci-build.txt
+              cat /tmp/ci-build.txt
             fi
-            if [ -f ci-release.txt ]; then
-              echo
+            if [ -f /tmp/ci-release.txt ]; then
               echo "===== RELEASE OUTPUT ====="
-              cat ci-release.txt
+              cat /tmp/ci-release.txt
             fi
           } > CI_ERROR.txt
-
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить точную ошибку сборки 0.5.1 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.6 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -146,18 +157,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git reset --hard origin/main
-
           cat > BUILD_STATUS.md <<EOF
           APK ready
           Commit: ${GITHUB_SHA}
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Version: $(awk '/^version:/ {print $2}' pubspec.yaml)
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
+          Landing: https://jeep-jim.github.io/chernogram_new/
           EOF
-
           git add BUILD_STATUS.md
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.5.1 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.6 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
