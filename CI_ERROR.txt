@@ -1,3 +1,177 @@
 GitHub Actions build failed
-Commit: d8aa92fe3e2b61e1dbba7efa574a7921b1f00af7
-Time: 2026-07-26T08:19:22Z
+Commit: ca7900d27d42f25b0931de252181c6e769605542
+Time: 2026-07-26T08:27:37Z
+===== SIGNING KEY =====
+Alias name: androiddebugkey
+Creation date: Jul 26, 2026
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=Chernogram Prototype, O=Chernogram, C=RU
+Issuer: CN=Chernogram Prototype, O=Chernogram, C=RU
+Serial number: 222792dee8983388
+Valid from: Sun Jul 26 08:21:27 UTC 2026 until: Thu Dec 11 08:21:27 UTC 2053
+Certificate fingerprints:
+	 SHA1: 37:F1:7B:0B:70:83:DA:67:60:A4:EE:96:7F:89:C0:9D:AC:47:5F:86
+	 SHA256: EB:CB:AA:40:EF:5D:4A:2B:91:4B:0D:87:23:19:05:95:E4:2F:88:3B:01:44:01:37:DE:EB:AF:BA:CA:37:50:EC
+Signature algorithm name: SHA256withRSA
+Subject Public Key Algorithm: 2048-bit RSA key
+Version: 3
+
+Extensions: 
+
+#1: ObjectId: 2.5.29.14 Criticality=false
+SubjectKeyIdentifier [
+KeyIdentifier [
+0000: EF AC 6F D5 F7 DA 84 D1   AA 05 3F 46 34 40 9F AD  ..o.......?F4@..
+0010: 1E 81 FF 77                                        ...w
+]
+]
+
+===== BUILD OUTPUT =====
+Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 058e0af2c2 (3 days ago) • 2026-07-23 10:56:21 -0700
+Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (2 days ago) • 2026-07-23 16:11:34.000Z
+Tools • Dart 3.12.2 • DevTools 2.57.0
+Resolving dependencies...
+Downloading packages...
++ app_links 7.2.1
++ app_links_linux 1.0.3
++ app_links_platform_interface 2.0.4
++ app_links_web 1.0.4
++ audio_session 0.2.4
++ dart_webrtc 1.8.1
++ dbus 0.7.14
++ file_picker 10.3.10 (11.0.2 available)
++ fixnum 1.1.1
++ flutter_contacts 1.1.9+2 (2.3.0 available)
+  flutter_lints 3.0.2 (6.0.0 available)
++ flutter_webrtc 1.5.2
++ gtk 2.2.0
+  hooks 2.0.2 (2.1.0 available)
+  http 1.6.0 (from transitive dependency to direct dependency)
++ js 0.7.2
++ just_audio 0.10.6
++ just_audio_platform_interface 4.6.0
++ just_audio_web 0.4.16
+  lints 3.0.0 (6.1.0 available)
++ logger 2.7.0
+  matcher 0.12.19 (0.12.20 available)
+  meta 1.18.0 (1.19.0 available)
++ mobile_scanner 7.4.0
++ ota_update 7.1.0
+  package_config 2.2.0 (3.0.0 available)
++ package_info_plus 8.3.1 (10.2.1 available)
++ package_info_plus_platform_interface 3.2.1 (4.1.0 available)
++ petitparser 7.0.2
++ photo_manager 3.11.0
++ qr 3.0.2 (4.0.0 available)
++ qr_flutter 4.1.0
++ record 6.2.1 (7.1.1 available)
++ record_android 1.5.2 (2.1.2 available)
++ record_ios 1.2.1 (2.1.1 available)
++ record_linux 1.3.1 (2.1.1 available)
++ record_macos 1.2.2 (2.1.1 available)
++ record_platform_interface 1.6.0 (2.1.0 available)
+  record_use 0.6.0 (1.0.0 available)
++ record_web 1.3.0 (2.1.1 available)
++ record_windows 1.0.7 (2.2.2 available)
++ rxdart 0.28.0
++ share_plus 10.1.4 (13.3.0 available)
++ share_plus_platform_interface 5.0.2 (7.2.0 available)
+  test_api 0.7.11 (0.7.13 available)
++ url_launcher 6.3.2
++ url_launcher_android 6.3.32
++ url_launcher_ios 6.4.1
++ url_launcher_linux 3.2.2
++ url_launcher_macos 3.2.5
++ url_launcher_platform_interface 2.3.2
++ url_launcher_web 2.4.3
++ url_launcher_windows 3.1.5
++ uuid 4.6.0
+  vector_math 2.2.0 (2.4.1 available)
++ webrtc_interface 1.5.1
++ win32 5.15.0 (6.3.0 available)
++ xml 6.6.1 (7.0.1 available)
+These packages are no longer being depended on:
+- file_selector_linux 0.9.4
+- file_selector_macos 0.9.5
+- file_selector_platform_interface 2.7.0
+- file_selector_windows 0.9.3+5
+- image_picker 1.2.3
+- image_picker_android 0.8.13+19
+- image_picker_for_web 3.1.1
+- image_picker_ios 0.8.13+6
+- image_picker_linux 0.2.2
+- image_picker_macos 0.2.2+1
+- image_picker_platform_interface 2.11.1
+- image_picker_windows 0.2.2
+- sqflite 2.4.3
+- sqflite_android 2.4.3
+- sqflite_common 2.5.11
+- sqflite_darwin 2.4.3+1
+- sqflite_platform_interface 2.4.1
+Changed 66 dependencies!
+26 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Formatted lib/brand.dart
+Formatted lib/call_service.dart
+Formatted lib/main.dart
+Formatted lib/media_studio.dart
+Formatted lib/tunnel_extras.dart
+Formatted lib/tunnels.dart
+Formatted lib/update_service.dart
+Formatted lib/v06.dart
+Formatted 8 files (8 changed) in 0.17 seconds.
+Analyzing chernogram_new...                                     
+
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/media_studio.dart:2:8 • unnecessary_import
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1133:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:455:7 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:466:7 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:708:23 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1683:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1730:5 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1752:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1754:9 • curly_braces_in_flow_control_structures
+
+9 issues found. (ran in 11.4s)
+
+✅ basic smoke test
+
+🎉 1 test passed.
+Upgrading build.gradle.kts
+Running Gradle task 'assembleDebug'...                          
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): file_picker, flutter_contacts, flutter_webrtc, mobile_scanner, package_info_plus, photo_manager, record_android, share_plus
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing 
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:processDebugResources'.
+> A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+   > Android resource linking failed
+     com.example.chernogram.app-mergeDebugResources-55:/values-v31/values-v31.xml:7: error: style attribute 'android:attr/postSplashScreenTheme' not found.
+     com.example.chernogram.app-mergeDebugResources-55:/values-night-v31/values-night-v31.xml:7: error: style attribute 'android:attr/postSplashScreenTheme' not found.
+     error: failed linking references.
+
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4m 36s
+Running Gradle task 'assembleDebug'...                            277.5s
+Gradle task assembleDebug failed with exit code 1
