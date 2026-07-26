@@ -87,6 +87,7 @@ jobs:
           python3 tooling/fix_v010_rtc_circles.py
           python3 tooling/fix_v0101_chat_keyboard.py
           python3 tooling/fix_v011_messenger_polish.py
+          python3 tooling/fix_v011_compile.py
 
       - name: Validate and build release APK
         id: build_apk
