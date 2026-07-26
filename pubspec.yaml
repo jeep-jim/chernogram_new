@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — encrypted internet tunnels, files, calls and local agents
 publish_to: 'none'
-version: 0.7.3+14
+version: 0.8.0+15
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
