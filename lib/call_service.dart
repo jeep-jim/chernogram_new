@@ -7,6 +7,20 @@ import 'brand.dart';
 import 'core_models.dart';
 import 'internet_core.dart';
 
+class CgCallOutcome {
+  final String status;
+  final int durationSeconds;
+  final bool connected;
+  final bool video;
+
+  const CgCallOutcome({
+    required this.status,
+    required this.durationSeconds,
+    required this.connected,
+    required this.video,
+  });
+}
+
 class ChernogramCallScreen extends StatefulWidget {
   final String tunnelName;
   final bool video;
@@ -46,6 +60,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   MediaStream? _localStream;
   RTCPeerConnection? _peer;
   InternetTunnelSession? _session;
+  Timer? _durationTimer;
   bool _muted = false;
   bool _cameraOff = false;
   bool _speaker = true;
@@ -55,14 +70,20 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   bool _remoteVideoReady = false;
   String _status = '';
   String? _error;
+  DateTime? _connectedAt;
+  int _elapsedSeconds = 0;
+  late final String _resolvedCallId;
 
-  String get _callId => widget.callId ?? CgIds.random(20);
+  String get _callId => _resolvedCallId;
   String get _profileId => widget.profileId ?? '';
 
   @override
   void initState() {
     super.initState();
-    _status = widget.ru ? 'Подключаем защищённый звонок…' : 'Connecting secure call…';
+    _resolvedCallId = widget.callId ?? CgIds.random(20);
+    _status = widget.ru
+        ? 'Подключаем защищённый звонок…'
+        : 'Connecting secure call…';
     unawaited(_prepare());
   }
 
@@ -119,7 +140,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           if (mounted) {
             setState(() {
               _remoteVideoReady = true;
-              _status = widget.ru ? 'Соединено' : 'Connected';
+              _markConnected();
             });
           }
         }
@@ -129,16 +150,21 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         setState(() {
           switch (state) {
             case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
-              _status = widget.ru ? 'Соединено' : 'Connected';
+              _markConnected();
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
-              _status = widget.ru ? 'Устанавливаем канал…' : 'Establishing channel…';
+              _status = widget.ru
+                  ? 'Устанавливаем канал…'
+                  : 'Establishing channel…';
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
-              _status = widget.ru ? 'Не удалось соединить. Повторите звонок.' : 'Connection failed. Try again.';
+              _status = widget.ru
+                  ? 'Не удалось соединить. Повторите звонок.'
+                  : 'Connection failed. Try again.';
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
-              _status = widget.ru ? 'Связь прервана…' : 'Connection interrupted…';
+              _status =
+                  widget.ru ? 'Связь прервана…' : 'Connection interrupted…';
               break;
             default:
               break;
@@ -165,8 +191,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
       if (tunnelId == null || secret == null || _profileId.isEmpty) {
         setState(() {
           _error = widget.ru
-              ? 'Эта старая версия экрана звонка не привязана к интернет-туннелю.'
-              : 'This legacy call screen is not attached to an internet tunnel.';
+              ? 'Звонок не привязан к интернет-туннелю.'
+              : 'This call is not attached to an internet tunnel.';
         });
         return;
       }
@@ -214,6 +240,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
     }
   }
 
+  void _markConnected() {
+    _connectedAt ??= DateTime.now();
+    _status = widget.ru ? 'Соединено' : 'Connected';
+    _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _connectedAt == null) return;
+      setState(() {
+        _elapsedSeconds = DateTime.now().difference(_connectedAt!).inSeconds;
+      });
+    });
+  }
+
   void _onRelayEvent(InternetEvent event) {
     if (event.type != 'signal') return;
     final data = event.data;
@@ -231,8 +268,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           setState(() {
             _status = widget.ru ? 'Звонок отклонён' : 'Call declined';
           });
-          Future<void>.delayed(const Duration(milliseconds: 850), () {
-            if (mounted) Navigator.pop(context);
+          Future<void>.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) _finish('declined');
           });
         }
         break;
@@ -250,8 +287,10 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           setState(() {
             _status = widget.ru ? 'Звонок завершён' : 'Call ended';
           });
-          Future<void>.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) Navigator.pop(context);
+          Future<void>.delayed(const Duration(milliseconds: 350), () {
+            if (mounted) {
+              _finish(_connectedAt == null ? 'missed' : 'completed');
+            }
           });
         }
         break;
@@ -373,14 +412,37 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
 
   Future<void> _hangUp() async {
     if (_ended) return;
-    _ended = true;
     await _sendSignal({'action': 'call_end'});
-    if (mounted) Navigator.pop(context);
+    _finish(_connectedAt == null ? 'cancelled' : 'completed');
+  }
+
+  void _finish(String status) {
+    if (_ended || !mounted) return;
+    _ended = true;
+    final duration = _connectedAt == null
+        ? 0
+        : DateTime.now().difference(_connectedAt!).inSeconds;
+    Navigator.pop(
+      context,
+      CgCallOutcome(
+        status: status,
+        durationSeconds: duration,
+        connected: _connectedAt != null,
+        video: widget.video,
+      ),
+    );
+  }
+
+  String get _durationLabel {
+    final minutes = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (_elapsedSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
   void dispose() {
     _ended = true;
+    _durationTimer?.cancel();
     unawaited(_signalSubscription?.cancel());
     unawaited(_peer?.close());
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
@@ -447,6 +509,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      if (_connectedAt != null) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          _durationLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -479,7 +552,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
               bottom: MediaQuery.paddingOf(context).bottom + 20,
               child: GlassPanel(
                 color: const Color(0xAA111725),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -495,7 +569,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                     ),
                     if (widget.video)
                       _CallButton(
-                        icon: _cameraOff ? Icons.videocam_off : Icons.videocam,
+                        icon:
+                            _cameraOff ? Icons.videocam_off : Icons.videocam,
                         active: _cameraOff,
                         onTap: _toggleCamera,
                       ),
