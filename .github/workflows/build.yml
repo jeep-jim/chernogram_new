@@ -15,30 +15,13 @@ concurrency:
 
 jobs:
   build:
-    name: Build Android Test APK
+    name: Build Chernogram Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
-
-      - name: Apply Chernogram 0.6.3 LAN network core
-        shell: bash
-        run: |
-          set -e
-          python3 tooling/apply_v06.py
-          python3 tooling/apply_v061.py
-          python3 tooling/fix_v062.py
-          python3 tooling/fix_v062_compat.py
-          python3 tooling/apply_network_core.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml tooling/v06_pubspec.yaml tooling/v06_main.dart tooling/v06_manifest.xml tooling/v06_icon_foreground.xml tooling/v06_launch_logo.xml tooling/fix_v062_compat.py tooling/apply_network_core.py lib/main.dart lib/v06.dart lib/network_core.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
-          if ! git diff --cached --quiet; then
-            git commit -m "Чернограм 0.6.3: сетевое ядро LAN и общий чат [skip ci]"
-            git push origin HEAD:main
-          fi
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -59,7 +42,6 @@ jobs:
           set -e
           mkdir -p "$HOME/.android"
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            echo "Creating the canonical Chernogram prototype key for all builds from 0.6.2 onward."
             keytool -genkeypair -v \
               -keystore "$HOME/.android/debug.keystore" \
               -storepass android \
@@ -83,7 +65,7 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Validate and build APK
+      - name: Validate and build release APK
         id: build_apk
         shell: bash
         run: |
@@ -95,7 +77,7 @@ jobs:
             dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
-            flutter build apk --debug
+            flutter build apk --release
           } 2>&1 | tee ci-build.txt
           STATUS=${PIPESTATUS[0]}
           exit "$STATUS"
@@ -104,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          cp build/app/outputs/flutter-apk/app-debug.apk chernogram.apk
+          cp build/app/outputs/flutter-apk/app-release.apk chernogram.apk
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
           VERSION_NAME=${VERSION_FULL%%+*}
           VERSION_CODE=${VERSION_FULL##*+}
@@ -117,8 +99,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${CERT_SHA256}",
-            "notesRu": "Чернограм 0.6.3: добавлено сетевое ядро для общей переписки между Android-телефонами в одной Wi-Fi сети или через точку доступа, сетевой QR, автоматическое переподключение, очередь сообщений и отображение подключённых участников.",
-            "notesEn": "Chernogram 0.6.3: adds the LAN networking core for shared messaging between Android phones on the same Wi-Fi or hotspot, network QR invites, automatic reconnect, an outgoing queue and connected peer presence."
+            "notesRu": "Чернограм 0.7: глобальные зашифрованные сообщения между разными сетями, интернет-QR, аудио- и видеозвонки WebRTC, передача небольших файлов, новый стеклянный интерфейс, холодная светлая тема, приватный взгляд, мгновенные туннели без обязательного названия и вкладка Агента.",
+            "notesEn": "Chernogram 0.7: encrypted messaging across different networks, internet invites, WebRTC audio/video calls, small-file transfer, redesigned glass UI, cool light theme, Privacy Lens, instant unnamed tunnels and the Agent tab."
           }
           EOF
 
@@ -147,7 +129,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Сетевое ядро LAN: общий текстовый чат между телефонами в одной сети, сетевые QR-приглашения, присутствие участников и автоматическое переподключение. Стабильная подпись обновлений сохранена." \
+              --notes "Глобальная зашифрованная переписка, WebRTC-звонки, интернет-QR, новый коммерческий стеклянный интерфейс, приватный взгляд, мгновенные туннели и вкладка Агента. Стабильная подпись обновлений сохранена." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -182,7 +164,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.6.3 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.7 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -207,5 +189,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.6.3 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.7 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
