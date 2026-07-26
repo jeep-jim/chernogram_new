@@ -65,7 +65,7 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply precise Chernogram 0.7 compatibility fixes
+      - name: Apply Chernogram 0.8 build compatibility fixes
         shell: bash
         run: python3 tooling/fix_v07_compile.py
 
@@ -103,8 +103,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${CERT_SHA256}",
-            "notesRu": "Чернограм 0.7: глобальные зашифрованные сообщения между разными сетями, интернет-QR, аудио- и видеозвонки WebRTC, передача небольших файлов, новый стеклянный интерфейс, холодная светлая тема, приватный взгляд, мгновенные туннели без обязательного названия и вкладка Агента.",
-            "notesEn": "Chernogram 0.7: encrypted messaging across different networks, internet invites, WebRTC audio/video calls, small-file transfer, redesigned glass UI, cool light theme, Privacy Lens, instant unnamed tunnels and the Agent tab."
+            "notesRu": "Чернограм 0.8: удаление сообщений и реакции, история и длительность звонков, файлы до 8 МБ, синхронизация названия и аватара владельцем, отдельные контакты, групповые аудио- и видеозвонки до 6 участников, звуки сообщений и входящих звонков, прямое открытие приглашений и мульти-relay для работы с VPN и без него.",
+            "notesEn": "Chernogram 0.8: message deletion and reactions, call history and duration, files up to 8 MB, owner-synced chat name and avatar, contacts, group audio/video calls for up to 6 participants, message and call sounds, direct invite opening and multi-relay connectivity with or without VPN."
           }
           EOF
 
@@ -133,7 +133,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Глобальная зашифрованная переписка, WebRTC-звонки, интернет-QR, новый коммерческий стеклянный интерфейс, приватный взгляд, мгновенные туннели и вкладка Агента. Стабильная подпись обновлений сохранена." \
+              --notes "Чаты и звонки 0.8: реакции, удаление сообщений, история звонков, файлы до 8 МБ, контакты, синхронизация туннелей, групповые звонки до шести участников, звуки и мульти-relay. Стабильная подпись обновлений сохранена." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -168,7 +168,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.7 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.8 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -193,5 +193,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.7 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.8 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
