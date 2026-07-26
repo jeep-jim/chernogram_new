@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: a080b53c92ff38135f3a3db5356b22057759a22c
-Time: 2026-07-26T04:48:11Z
+Commit: 4eef3e699af67d1082fa3bb546099b5d1e3d6dde
+Time: 2026-07-26T05:24:29Z
 ===== BUILD OUTPUT =====
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (2 days ago) • 2026-07-23 10:56:21 -0700
@@ -16,7 +16,7 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 8 files (8 changed) in 0.13 seconds.
+Formatted 8 files (8 changed) in 0.14 seconds.
 Resolving dependencies...
 Downloading packages...
 + app_links 7.2.1
@@ -26,7 +26,7 @@ Downloading packages...
 + audio_session 0.2.4
 + dart_webrtc 1.8.1
 + dbus 0.7.14
-+ file_picker 11.0.2
++ file_picker 10.3.10 (11.0.2 available)
 + fixnum 1.1.1
 + flutter_contacts 1.1.9+2 (2.3.0 available)
   flutter_lints 3.0.2 (6.0.0 available)
@@ -96,7 +96,7 @@ These packages are no longer being depended on:
 - sqflite_darwin 2.4.3+1
 - sqflite_platform_interface 2.4.1
 Changed 66 dependencies!
-25 packages have newer versions incompatible with dependency constraints.
+26 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Analyzing chernogram_new...                                     
 
@@ -110,7 +110,7 @@ Analyzing chernogram_new...
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1437:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1439:9 • curly_braces_in_flow_control_structures
 
-9 issues found. (ran in 11.2s)
+9 issues found. (ran in 11.3s)
 
 ✅ basic smoke test
 
@@ -129,29 +129,22 @@ Note: Some input files use or override a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
 Note: Some input files use unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
-/home/runner/work/chernogram_new/chernogram_new/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java:29: error: cannot find symbol
-      flutterEngine.getPlugins().add(new com.mr.flutter.plugin.filepicker.FilePickerPlugin());
-                                                                         ^
-  symbol:   class FilePickerPlugin
-  location: package com.mr.flutter.plugin.filepicker
-1 error
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':app:compileDebugJavaWithJavac'.
-> Compilation failed; see the compiler output below.
-  /home/runner/work/chernogram_new/chernogram_new/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java:29: error: cannot find symbol
-        flutterEngine.getPlugins().add(new com.mr.flutter.plugin.filepicker.FilePickerPlugin());
-                                                                           ^
-    symbol:   class FilePickerPlugin
-    location: package com.mr.flutter.plugin.filepicker
-  1 error
+Execution failed for task ':app:processDebugResources'.
+> A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+   > Android resource linking failed
+     ERROR: /home/runner/work/chernogram_new/chernogram_new/android/app/src/main/res/drawable-v21/launch_background.xml:3: AAPT: error: '#080808' is incompatible with attribute drawable (attr) reference.
+
 
 * Try:
-> Check your code and dependencies to fix the compilation error(s)
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
 
-BUILD FAILED in 5m 12s
-Running Gradle task 'assembleDebug'...                            314.2s
+BUILD FAILED in 4m 33s
+Running Gradle task 'assembleDebug'...                            275.1s
 Gradle task assembleDebug failed with exit code 1
