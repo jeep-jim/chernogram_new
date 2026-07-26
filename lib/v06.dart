@@ -7,6 +7,7 @@ import 'package:app_links/app_links.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,9 +15,13 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'call_service.dart';
+import 'tunnel_extras.dart';
+
+// CHERNOGRAM_061_PATCH
 
 const temporaryLandingBase = 'https://jeep-jim.github.io/chernogram_new/';
 
@@ -24,6 +29,42 @@ String _randomId([int length = 16]) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   final random = Random.secure();
   return List.generate(length, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+}
+
+
+class ChernogramNicknameRules {
+  static const blockedRoots = <String>[
+    'porn', 'порн', 'sex', 'секс', 'adult', '18plus', 'nude', 'нюд',
+    'pedo', 'педоф', 'child', 'дет', 'violence', 'насил', 'weapon',
+    'оруж', 'gun', 'пистолет', 'drug', 'наркот', 'kill', 'убий',
+    'murder', 'rape', 'terror', 'террор', 'war', 'войн', 'putin',
+    'путин', 'trump', 'трамп', 'vk', 'вк', 'auto', 'авто', 'admin',
+    'support', 'official', 'chernogram',
+  ];
+
+  static String? validate(String input, {required bool ru}) {
+    final value = input.trim().toLowerCase();
+    if (value.length < 4 || value.length > 24) {
+      return ru
+          ? 'Никнейм должен содержать от 4 до 24 символов.'
+          : 'Nickname must contain 4–24 characters.';
+    }
+    if (!RegExp(r'^[a-zа-яё0-9_.]+$', caseSensitive: false)
+        .hasMatch(value)) {
+      return ru
+          ? 'Разрешены буквы, цифры, точка и подчёркивание.'
+          : 'Use letters, numbers, a dot or underscore.';
+    }
+    final compact = value.replaceAll(RegExp(r'[._0-9]'), '');
+    for (final root in blockedRoots) {
+      if (value.contains(root) || compact.contains(root)) {
+        return ru
+            ? 'Этот никнейм или его часть запрещены.'
+            : 'This nickname or part of it is not allowed.';
+      }
+    }
+    return null;
+  }
 }
 
 class ChernogramProfile {
@@ -281,12 +322,16 @@ class ChernogramV06 extends StatefulWidget {
   final bool ru;
   final VoidCallback onChangeLanguage;
   final VoidCallback onCheckUpdates;
+  final bool darkMode;
+  final VoidCallback onToggleTheme;
 
   const ChernogramV06({
     super.key,
     required this.ru,
     required this.onChangeLanguage,
     required this.onCheckUpdates,
+    required this.darkMode,
+    required this.onToggleTheme,
   });
 
   @override
@@ -430,9 +475,15 @@ class _ChernogramV06State extends State<ChernogramV06> {
         ),
         actions: [
           IconButton(
-            tooltip: widget.ru ? 'Сканировать QR' : 'Scan QR',
-            onPressed: _scan,
-            icon: const Icon(Icons.qr_code_scanner_rounded),
+            tooltip: widget.darkMode
+                ? (widget.ru ? 'Светлая тема' : 'Light theme')
+                : (widget.ru ? 'Тёмная тема' : 'Dark theme'),
+            onPressed: widget.onToggleTheme,
+            icon: Icon(
+              widget.darkMode
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
           ),
         ],
       ),
@@ -564,9 +615,35 @@ class TunnelsV06Screen extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Expanded(child: FilledButton.icon(onPressed: () => _create(context), icon: const Icon(Icons.add), label: Text(ru ? 'Создать' : 'Create'))),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _create(context),
+                      icon: const Icon(Icons.add),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          ru ? 'Создать туннель' : 'Create tunnel',
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: OutlinedButton.icon(onPressed: onScan, icon: const Icon(Icons.qr_code_scanner), label: Text(ru ? 'Сканировать' : 'Scan'))),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onScan,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          ru ? 'Сканировать QR' : 'Scan QR',
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -618,12 +695,14 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
   final TextEditingController _text = TextEditingController();
   final AudioRecorder _recorder = AudioRecorder();
   late ChernogramTunnel _tunnel;
+  TunnelPermissions _permissions = const TunnelPermissions();
   bool _recording = false;
 
   @override
   void initState() {
     super.initState();
     _tunnel = widget.tunnel;
+    _loadPermissions();
   }
 
   Future<void> _persist() async {
@@ -729,49 +808,220 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
     ));
   }
 
+  Future<void> _loadPermissions() async {
+    final value =
+        await LocalTunnelExtrasStore.loadPermissions(_tunnel.id);
+    if (mounted) setState(() => _permissions = value);
+  }
+
+  String get _inviteText => widget.ru
+      ? 'Присоединяйся к моему туннелю «${_tunnel.name}» в Чернограме: ${_tunnel.landingUrl}'
+      : 'Join my Chernogram tunnel “${_tunnel.name}”: ${_tunnel.landingUrl}';
+
+  Future<void> _copyInvite() async {
+    await Clipboard.setData(ClipboardData(text: _tunnel.landingUrl));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.ru ? 'Ссылка приглашения скопирована' : 'Invite link copied',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _inviteContacts() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => InviteContactsSheetV061(
+        ru: widget.ru,
+        inviteText: _inviteText,
+      ),
+    );
+  }
+
   Future<void> _settings() async {
     var isPublic = _tunnel.isPublic;
     var revoke = false;
-    final updated = await showModalBottomSheet<(bool, bool)>(
+    var permissions = _permissions;
+    final updated = await showModalBottomSheet<
+        ({bool isPublic, bool revoke, TunnelPermissions permissions})>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Padding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: isPublic,
-                onChanged: (value) => setState(() => isPublic = value),
-                title: Text(widget.ru ? 'Публичный туннель' : 'Public tunnel'),
-                subtitle: Text(isPublic
-                    ? (widget.ru ? 'Вход по действующему QR без подтверждения.' : 'Join with a valid QR without approval.')
-                    : (widget.ru ? 'Новые участники отправляют запрос владельцу.' : 'New participants request owner approval.')),
+        builder: (context, setSheetState) {
+          Widget permissionTile({
+            required IconData icon,
+            required String titleRu,
+            required String titleEn,
+            required bool value,
+            required ValueChanged<bool> onChanged,
+          }) {
+            return SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(icon),
+              value: value,
+              onChanged: (next) {
+                onChanged(next);
+                setSheetState(() {});
+              },
+              title: Text(widget.ru ? titleRu : titleEn),
+            );
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                18,
+                0,
+                18,
+                18 + MediaQuery.viewInsetsOf(context).bottom,
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: revoke,
-                onChanged: (value) => setState(() => revoke = value ?? false),
-                title: Text(widget.ru ? 'Отозвать старые QR и ссылки' : 'Revoke old QR codes and links'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.ru ? 'Настройки туннеля' : 'Tunnel settings',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      isPublic ? Icons.public : Icons.lock_outline,
+                    ),
+                    value: isPublic,
+                    onChanged: (value) =>
+                        setSheetState(() => isPublic = value),
+                    title: Text(
+                      widget.ru ? 'Публичный туннель' : 'Public tunnel',
+                    ),
+                    subtitle: Text(
+                      isPublic
+                          ? (widget.ru
+                              ? 'Вход по действующему QR без подтверждения.'
+                              : 'Join with a valid QR without approval.')
+                          : (widget.ru
+                              ? 'Новые участники отправляют запрос владельцу.'
+                              : 'New participants request owner approval.'),
+                    ),
+                  ),
+                  const Divider(),
+                  Text(
+                    widget.ru ? 'Права участников' : 'Participant permissions',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  permissionTile(
+                    icon: Icons.chat_bubble_outline,
+                    titleRu: 'Писать сообщения',
+                    titleEn: 'Send messages',
+                    value: permissions.canWriteMessages,
+                    onChanged: (next) => permissions = permissions.copyWith(
+                      canWriteMessages: next,
+                    ),
+                  ),
+                  permissionTile(
+                    icon: Icons.attach_file,
+                    titleRu: 'Отправлять медиа и файлы',
+                    titleEn: 'Send media and files',
+                    value: permissions.canSendMedia,
+                    onChanged: (next) => permissions = permissions.copyWith(
+                      canSendMedia: next,
+                    ),
+                  ),
+                  permissionTile(
+                    icon: Icons.download_outlined,
+                    titleRu: 'Скачивать файлы',
+                    titleEn: 'Download files',
+                    value: permissions.canDownload,
+                    onChanged: (next) => permissions = permissions.copyWith(
+                      canDownload: next,
+                    ),
+                  ),
+                  permissionTile(
+                    icon: Icons.person_add_alt_1_outlined,
+                    titleRu: 'Приглашать других',
+                    titleEn: 'Invite others',
+                    value: permissions.canInvite,
+                    onChanged: (next) => permissions = permissions.copyWith(
+                      canInvite: next,
+                    ),
+                  ),
+                  permissionTile(
+                    icon: Icons.history,
+                    titleRu: 'Видеть прошлую историю',
+                    titleEn: 'See previous history',
+                    value: permissions.canSeeHistory,
+                    onChanged: (next) => permissions = permissions.copyWith(
+                      canSeeHistory: next,
+                    ),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: revoke,
+                    onChanged: (value) =>
+                        setSheetState(() => revoke = value ?? false),
+                    title: Text(
+                      widget.ru
+                          ? 'Отозвать старые QR и ссылки'
+                          : 'Revoke old QR codes and links',
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _inviteContacts,
+                      icon: const Icon(Icons.contacts_outlined),
+                      label: Text(
+                        widget.ru
+                            ? 'Пригласить из телефонной книги'
+                            : 'Invite from contacts',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(
+                        context,
+                        (
+                          isPublic: isPublic,
+                          revoke: revoke,
+                          permissions: permissions,
+                        ),
+                      ),
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(widget.ru ? 'Сохранить' : 'Save'),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(onPressed: () => Navigator.pop(context, (isPublic, revoke)), child: Text(widget.ru ? 'Сохранить' : 'Save')),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
     if (updated == null) return;
     setState(() {
       _tunnel = _tunnel.copyWith(
-        isPublic: updated.$1,
-        inviteSecret: updated.$2 ? _randomId(32) : _tunnel.inviteSecret,
+        isPublic: updated.isPublic,
+        inviteSecret:
+            updated.revoke ? _randomId(32) : _tunnel.inviteSecret,
       );
+      _permissions = updated.permissions;
     });
+    await LocalTunnelExtrasStore.savePermissions(
+      _tunnel.id,
+      updated.permissions,
+    );
     await _persist();
   }
 
@@ -828,6 +1078,15 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
       },
       child: Scaffold(
         appBar: AppBar(
+          leadingWidth: 58,
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: LocalProfileAvatar(
+              profileId: widget.profile.id,
+              nickname: widget.profile.nickname,
+              size: 40,
+            ),
+          ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -841,6 +1100,11 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
           actions: [
             IconButton(onPressed: () => _openCall(false), icon: const Icon(Icons.call_outlined)),
             IconButton(onPressed: () => _openCall(true), icon: const Icon(Icons.videocam_outlined)),
+            IconButton(
+              tooltip: widget.ru ? 'Пригласить' : 'Invite',
+              onPressed: _inviteContacts,
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+            ),
             IconButton(onPressed: _showQr, icon: const Icon(Icons.qr_code_2)),
             IconButton(onPressed: _settings, icon: const Icon(Icons.tune)),
           ],
@@ -851,7 +1115,61 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(12, 4, 12, 6),
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: ChernogramColors.surface, borderRadius: BorderRadius.circular(15)),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.link,
+                        color: ChernogramColors.goldLight,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _tunnel.landingUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _copyInvite,
+                        child: Text(widget.ru ? 'Копировать' : 'Copy'),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _inviteContacts,
+                        icon: const Icon(Icons.contacts_outlined),
+                        label: Text(widget.ru ? 'Контакты' : 'Contacts'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => Share.share(_inviteText),
+                        icon: const Icon(Icons.share_outlined),
+                        label: Text(widget.ru ? 'Поделиться' : 'Share'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(15),
+              ),
               child: Row(
                 children: [
                   const Icon(Icons.shield_outlined, color: ChernogramColors.goldLight),
@@ -1202,19 +1520,60 @@ class ProfileV06Screen extends StatefulWidget {
 }
 
 class _ProfileV06ScreenState extends State<ProfileV06Screen> {
-  late final TextEditingController _nickname = TextEditingController(text: widget.profile?.nickname ?? '');
+  late final TextEditingController _nickname =
+      TextEditingController(text: widget.profile?.nickname ?? '');
+  String? _error;
+  int _avatarRevision = 0;
+
+  Future<void> _chooseAvatar() async {
+    final profile = widget.profile;
+    if (profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.ru
+                ? 'Сначала сохраните никнейм.'
+                : 'Save your nickname first.',
+          ),
+        ),
+      );
+      return;
+    }
+    final changed = await chooseAndSaveLocalAvatar(
+      context,
+      profileId: profile.id,
+      ru: widget.ru,
+    );
+    if (changed && mounted) {
+      setState(() => _avatarRevision++);
+    }
+  }
 
   Future<void> _save() async {
     final nickname = _nickname.text.trim().toLowerCase();
-    if (!RegExp(r'^[a-zа-яё0-9_.]{4,24}$', caseSensitive: false).hasMatch(nickname)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.ru ? 'Ник: 4–24 символа, буквы, цифры, точка или подчёркивание.' : 'Nickname: 4–24 letters, numbers, dot or underscore.')));
+    final error =
+        ChernogramNicknameRules.validate(nickname, ru: widget.ru);
+    if (error != null) {
+      setState(() => _error = error);
       return;
     }
-    widget.onSave(ChernogramProfile(
-      id: widget.profile?.id ?? _randomId(12),
-      nickname: nickname,
-      createdAt: widget.profile?.createdAt ?? DateTime.now(),
-    ));
+    widget.onSave(
+      ChernogramProfile(
+        id: widget.profile?.id ?? _randomId(12),
+        nickname: nickname,
+        createdAt: widget.profile?.createdAt ?? DateTime.now(),
+      ),
+    );
+    setState(() => _error = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.ru
+              ? 'Профиль сохранён локально.'
+              : 'Profile saved locally.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -1227,12 +1586,55 @@ class _ProfileV06ScreenState extends State<ProfileV06Screen> {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
         children: [
-          const Center(child: ChernogramLogo(size: 104, withPlate: true)),
+          Center(
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                LocalProfileAvatar(
+                  key: ValueKey(
+                    '${widget.profile?.id}:$_avatarRevision',
+                  ),
+                  profileId: widget.profile?.id,
+                  nickname: widget.profile?.nickname ?? '',
+                  size: 104,
+                  showBrandWhenEmpty: true,
+                ),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: ChernogramColors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    tooltip: widget.ru
+                        ? 'Выбрать аватарку'
+                        : 'Choose avatar',
+                    onPressed: _chooseAvatar,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 14),
           Center(child: Text(widget.profile == null ? (widget.ru ? 'Локальный профиль' : 'Local profile') : '@${widget.profile!.nickname}', style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900))),
           if (widget.profile != null) Center(child: SelectableText('ID ${widget.profile!.id}', style: const TextStyle(color: ChernogramColors.goldLight))),
           const SizedBox(height: 20),
-          TextField(controller: _nickname, decoration: InputDecoration(labelText: widget.ru ? 'Никнейм' : 'Nickname', prefixText: '@')),
+          TextField(
+            controller: _nickname,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.none,
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+            decoration: InputDecoration(
+              labelText: widget.ru ? 'Никнейм' : 'Nickname',
+              prefixText: '@',
+              errorText: _error,
+              helperText: widget.ru
+                  ? 'Стоп-слова и служебные названия блокируются.'
+                  : 'Restricted and reserved terms are blocked.',
+            ),
+          ),
           const SizedBox(height: 10),
           FilledButton.icon(onPressed: _save, icon: const Icon(Icons.save_outlined), label: Text(widget.ru ? 'Сохранить профиль' : 'Save profile')),
           const SizedBox(height: 10),
@@ -1252,4 +1654,169 @@ class _ProfileV06ScreenState extends State<ProfileV06Screen> {
           ),
         ],
       );
+}
+
+
+class InviteContactsSheetV061 extends StatefulWidget {
+  final bool ru;
+  final String inviteText;
+
+  const InviteContactsSheetV061({
+    super.key,
+    required this.ru,
+    required this.inviteText,
+  });
+
+  @override
+  State<InviteContactsSheetV061> createState() =>
+      _InviteContactsSheetV061State();
+}
+
+class _InviteContactsSheetV061State
+    extends State<InviteContactsSheetV061> {
+  final TextEditingController _search = TextEditingController();
+  List<Contact> _contacts = [];
+  bool _loading = true;
+  bool _denied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final allowed = await FlutterContacts.requestPermission(readonly: true);
+    if (!allowed) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _denied = true;
+        });
+      }
+      return;
+    }
+    final contacts =
+        await FlutterContacts.getContacts(withProperties: true);
+    contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
+    if (!mounted) return;
+    setState(() {
+      _contacts = contacts;
+      _loading = false;
+    });
+  }
+
+  Future<void> _invite(Contact contact) async {
+    final phone =
+        contact.phones.isEmpty ? null : contact.phones.first.number;
+    if (phone == null || phone.trim().isEmpty) {
+      await Share.share(widget.inviteText);
+      return;
+    }
+    final uri = Uri(
+      scheme: 'sms',
+      path: phone,
+      queryParameters: {'body': widget.inviteText},
+    );
+    final opened =
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) await Share.share(widget.inviteText);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _search.text.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? _contacts
+        : _contacts
+            .where(
+              (contact) =>
+                  contact.displayName.toLowerCase().contains(query),
+            )
+            .toList();
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .78,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.ru
+                  ? 'Пригласить из контактов'
+                  : 'Invite from contacts',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText:
+                    widget.ru ? 'Найти человека' : 'Find a person',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _denied
+                      ? Center(
+                          child: Text(
+                            widget.ru
+                                ? 'Доступ к контактам не разрешён. Используйте системное меню «Поделиться».'
+                                : 'Contacts permission was denied. Use the system Share menu.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: visible.length,
+                          itemBuilder: (_, index) {
+                            final contact = visible[index];
+                            final name = contact.displayName.trim();
+                            final letter =
+                                name.isEmpty ? '?' : name[0].toUpperCase();
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    ChernogramColors.orangeDeep,
+                                child: Text(letter),
+                              ),
+                              title: Text(contact.displayName),
+                              subtitle: contact.phones.isEmpty
+                                  ? null
+                                  : Text(contact.phones.first.number),
+                              trailing:
+                                  const Icon(Icons.send_outlined),
+                              onTap: () => _invite(contact),
+                            );
+                          },
+                        ),
+            ),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Share.share(widget.inviteText),
+                icon: const Icon(Icons.apps),
+                label: Text(
+                  widget.ru
+                      ? 'Отправить через другое приложение'
+                      : 'Send through another app',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

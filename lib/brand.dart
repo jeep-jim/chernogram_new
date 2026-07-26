@@ -85,6 +85,91 @@ ThemeData chernogramTheme() {
   );
 }
 
+
+ThemeData chernogramLightTheme() {
+  const background = Color(0xFFFFF8F1);
+  const surface = Color(0xFFFFFFFF);
+  const surfaceHigh = Color(0xFFF2E9DF);
+  final scheme = ColorScheme.fromSeed(
+    seedColor: ChernogramColors.orange,
+    brightness: Brightness.light,
+    surface: surface,
+  ).copyWith(
+    primary: ChernogramColors.orangeDeep,
+    secondary: ChernogramColors.gold,
+    tertiary: ChernogramColors.orange,
+    surface: surface,
+    surfaceContainerHighest: surfaceHigh,
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: background,
+    colorScheme: scheme,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: background,
+      foregroundColor: Color(0xFF21160E),
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: surface,
+      indicatorColor: ChernogramColors.orange.withValues(alpha: .18),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 11,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w800
+              : FontWeight.w600,
+          color: states.contains(WidgetState.selected)
+              ? ChernogramColors.orangeDeep
+              : const Color(0xFF6A6057),
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: surfaceHigh,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: ChernogramColors.orange),
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: ChernogramColors.orangeDeep,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: ChernogramColors.orangeDeep,
+        side: const BorderSide(color: ChernogramColors.gold),
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    ),
+  );
+}
+
 class ChernogramLogo extends StatelessWidget {
   final double size;
   final bool withPlate;
