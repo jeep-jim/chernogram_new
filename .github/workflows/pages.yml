@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -35,3 +35,20 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Record Pages status
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+          cat > PAGES_STATUS.md <<EOF
+          Status: ${{ job.status }}
+          URL: ${{ steps.deployment.outputs.page_url }}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Commit: ${GITHUB_SHA}
+          EOF
+          git add PAGES_STATUS.md
+          git commit -m "Статус страницы приглашения: ${{ job.status }} [skip ci]" || true
+          git push origin HEAD:main || true
