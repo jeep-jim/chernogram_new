@@ -151,18 +151,6 @@ jobs:
           }
           EOF
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: chernogram-apk
-          path: |
-            chernogram.apk
-            update.json
-            signing-key.txt
-            apk-signature.txt
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Publish APK to GitHub Release
         shell: bash
         env:
