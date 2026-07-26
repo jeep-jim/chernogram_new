@@ -23,17 +23,18 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Apply Chernogram 0.6.1 source
+      - name: Apply Chernogram 0.6.2 source
         shell: bash
         run: |
           set -e
           python3 tooling/apply_v06.py
           python3 tooling/apply_v061.py
+          python3 tooling/fix_v062.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml lib/main.dart lib/v06.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          git add pubspec.yaml tooling/v06_pubspec.yaml tooling/v06_main.dart tooling/v06_icon_foreground.xml tooling/v06_launch_logo.xml lib/main.dart lib/v06.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
           if ! git diff --cached --quiet; then
-            git commit -m "Чернограм 0.6.1: вернуть приглашения права темы и стоп-слова [skip ci]"
+            git commit -m "Чернограм 0.6.2: тёмная заставка точный логотип и рабочий QR [skip ci]"
             git push origin HEAD:main
           fi
 
@@ -43,11 +44,26 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore prototype signing key
+      - name: Restore canonical prototype signing key
+        id: signing_cache
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
           key: chernogram-prototype-signing-v1
+
+      - name: Verify canonical signing key
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            echo "Canonical signing key is missing. Refusing to publish an APK with a new random signature."
+            exit 1
+          fi
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android | tee signing-key.txt
 
       - name: Setup Flutter 3.44.8
         uses: subosito/flutter-action@v2
@@ -64,8 +80,8 @@ jobs:
           set -o pipefail
           {
             flutter --version
-            dart format lib
             flutter pub get
+            dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
             flutter build apk --debug
@@ -82,14 +98,16 @@ jobs:
           VERSION_NAME=${VERSION_FULL%%+*}
           VERSION_CODE=${VERSION_FULL##*+}
           APK_SHA256=$(sha256sum chernogram.apk | awk '{print $1}')
+          CERT_SHA256=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //')
           cat > update.json <<EOF
           {
             "versionName": "${VERSION_NAME}",
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Чернограм 0.6.1: рабочий лендинг приглашений, светлая тема, контакты, стоп-слова, аватарки и расширенные права туннеля.",
-            "notesEn": "Chernogram 0.6.1: invite landing, light theme, contacts, restricted nicknames, avatars and expanded tunnel permissions."
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Чернограм 0.6.2: исправлена сборка, полностью тёмный запуск, ровный фирменный знак, анимация сборки логотипа, автоматическая проверка обновлений и новый QR-вход без выдуманного домена.",
+            "notesEn": "Chernogram 0.6.2: fixed build, fully dark launch, corrected brand mark, assembled-logo animation, automatic update checks and a new QR entry without a fake domain."
           }
           EOF
 
@@ -100,6 +118,7 @@ jobs:
           path: |
             chernogram.apk
             update.json
+            signing-key.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -117,7 +136,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Восстановлены приглашения, контакты, права доступа, стоп-слова и переключение темы." \
+              --notes "Тёмная анимированная заставка, исправленный логотип, стабильная подпись будущих обновлений и рабочий QR-вход." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -131,12 +150,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           cp ci-build.txt /tmp/ci-build.txt 2>/dev/null || true
           cp ci-release.txt /tmp/ci-release.txt 2>/dev/null || true
+          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
           git fetch origin main
           git reset --hard origin/main
           {
             echo "GitHub Actions build failed"
             echo "Commit: ${GITHUB_SHA}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            if [ -f /tmp/signing-key.txt ]; then
+              echo "===== SIGNING KEY ====="
+              cat /tmp/signing-key.txt
+            fi
             if [ -f /tmp/ci-build.txt ]; then
               echo "===== BUILD OUTPUT ====="
               cat /tmp/ci-build.txt
@@ -147,7 +171,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.6.1 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.6.2 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -156,6 +180,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          CERT_SHA256=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //')
           git fetch origin main
           git reset --hard origin/main
           cat > BUILD_STATUS.md <<EOF
@@ -163,12 +188,13 @@ jobs:
           Commit: ${GITHUB_SHA}
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Version: $(awk '/^version:/ {print $2}' pubspec.yaml)
+          Certificate SHA-256: ${CERT_SHA256}
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
-          Landing: https://jeep-jim.github.io/chernogram_new/
+          Landing: https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html
           EOF
           git add BUILD_STATUS.md
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.6.1 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.6.2 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
