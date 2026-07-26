@@ -1,3 +1,3 @@
 iOS simulator build failed
-Commit: 16c46e5d93dd947302e3a374cc3ba81b089f7102
-Time: 2026-07-26T13:31:05Z
+Commit: c491e8b278b88eb14e9c405362a53cfcee1130d9
+Time: 2026-07-26T13:39:41Z
