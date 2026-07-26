@@ -86,6 +86,7 @@ jobs:
           python3 tooling/fix_v091_player_header.py
           python3 tooling/fix_v010_rtc_circles.py
           python3 tooling/fix_v0101_chat_keyboard.py
+          python3 tooling/fix_v011_messenger_polish.py
 
       - name: Validate and build release APK
         id: build_apk
@@ -150,8 +151,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.10.1: чат открывается на последних сообщениях, клавиатура не появляется сама и закрывается касанием или свайпом по чату. Настройки доступны всем участникам и показывают параметры чата; владелец управляет общими параметрами, любой участник может выйти и полностью удалить локальную историю и файлы. Голосовые, аудио и кружки отображаются без внешнего цветного облака. Исправлена видимость времени и батареи в светлой теме. На главной: Сообщения, файлы и звонки без vpn.",
-            "notesEn": "Chernogram 0.10.1: chats open on the latest messages, the keyboard no longer appears automatically and dismisses on tap or drag. Every member can view full chat information; the owner controls shared settings, while any member can leave and permanently remove local history and files. Voice, audio and circle messages render without an outer coloured bubble. Light-theme system bar contrast is fixed."
+            "notesRu": "Чернограм 0.11: восстановлены стоп-слова и запрещённые корни никнеймов; звонящий показывает свою аватарку; добавлены отступы 10 пикселей; настоящий локальный музыкальный плеер с поиском по чатам и телефону, фоновой работой и управлением на заблокированном экране; исправлены системные значки светлой темы; непрочитанные чаты получают счётчик и поднимаются вверх; файлы прикрепляются пачкой; аватар профиля отображается в нижнем меню; свайп вправо отвечает с цитатой, свайп влево пересылает любой текст или файл; контакты можно быстро пригласить из телефонной книги или через системный список мессенджеров.",
+            "notesEn": "Chernogram 0.11 restores reserved nickname roots, displays caller avatars, adds consistent spacing, a real offline/background music player with lock-screen controls, light-theme system-bar contrast, unread badges and chat reordering, multi-file attachments, profile avatar navigation, swipe-to-reply/forward for text and files, and fast invites from phone contacts or the system share sheet."
           }
           EOF
 
@@ -169,7 +170,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Исправлено открытие чата на последних сообщениях, поведение клавиатуры, полные настройки для всех участников, выход с полным локальным удалением, прозрачное отображение голосовых и кружков, а также системная панель светлой темы. APK подписан тем же постоянным ключом." \
+              --notes "Фоновый музыкальный плеер, управление на экране блокировки, непрочитанные чаты, пачки файлов, аватары звонящих, приглашения из телефонной книги, свайпы ответа и пересылки, стоп-слова никнеймов и исправленная светлая системная панель. APK подписан тем же постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -209,7 +210,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.10.1 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.11 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -234,5 +235,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.10.1 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.11 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
