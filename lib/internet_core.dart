@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:mqtt_client/mqtt_client.dart';
-import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:http/http.dart' as http;
 
 import 'core_models.dart';
 
@@ -14,9 +14,24 @@ class InternetEvent {
   const InternetEvent(this.type, [this.data = const <String, dynamic>{}]);
 }
 
+class _PendingEnvelope {
+  final String kind;
+  final Map<String, dynamic> data;
+
+  const _PendingEnvelope(this.kind, this.data);
+}
+
+/// Internet relay for Chernogram tunnels.
+///
+/// Transport:
+/// - standard HTTPS/WSS on port 443, so it works across mobile operators,
+///   home Wi-Fi and different cities without opening custom ports;
+/// - public ntfy relay is used only as an encrypted transport;
+/// - message content is encrypted locally with AES-256-GCM before upload;
+/// - the relay topic is derived from the tunnel secret and is not guessable.
 class InternetTunnelSession {
-  static const String brokerHost = 'broker.emqx.io';
-  static const int brokerPort = 8084;
+  static const String relayBase = 'https://ntfy.sh';
+  static const String relaySocketHost = 'ntfy.sh';
 
   final String tunnelId;
   final String secret;
@@ -28,9 +43,11 @@ class InternetTunnelSession {
   final Map<String, DateTime> _peers = <String, DateTime>{};
   final Set<String> _seenPackets = <String>{};
   final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+  final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
+  final http.Client _http = http.Client();
 
-  MqttServerClient? _client;
-  StreamSubscription<dynamic>? _updatesSubscription;
+  WebSocket? _socket;
+  StreamSubscription<dynamic>? _socketSubscription;
   Timer? _reconnectTimer;
   Timer? _presenceTimer;
   Timer? _peerCleanupTimer;
@@ -55,49 +72,52 @@ class InternetTunnelSession {
   Future<void> connect() async {
     if (_closed || _connecting || _connected) return;
     _connecting = true;
-    _emit('status', {'state': 'connecting'});
+    _emit('status', {'state': 'connecting', 'transport': 'https443'});
+
     try {
       await _prepareCryptoAndTopic();
-      final clientId =
-          'cg_${profileId}_${CgIds.random(8)}'.replaceAll(RegExp('[^A-Za-z0-9_]'), '');
-      final client = MqttServerClient.withPort(brokerHost, clientId, brokerPort)
-        ..useWebSocket = true
-        ..secure = true
-        ..websocketProtocols = MqttClientConstants.protocolsSingleDefault
-        ..keepAlivePeriod = 20
-        ..connectTimeoutPeriod = 9000
-        ..logging(on: false);
-      client.onDisconnected = _onDisconnected;
-      client.onConnected = _onConnected;
-      client.pongCallback = () => _emit('pong');
-      client.connectionMessage = MqttConnectMessage()
-          .withClientIdentifier(clientId)
-          .startClean()
-          .withWillQos(MqttQos.atLeastOnce);
+      final topic = _topic!;
+      final uri = Uri(
+        scheme: 'wss',
+        host: relaySocketHost,
+        path: '/$topic/ws',
+        queryParameters: const {'since': '12h'},
+      );
 
-      _client = client;
-      await client.connect();
-      if (client.connectionStatus?.state !=
-          MqttConnectionState.connected) {
-        throw StateError(
-          'Relay connection failed: ${client.connectionStatus?.returnCode}',
-        );
+      final socket = await WebSocket.connect(uri.toString()).timeout(
+        const Duration(seconds: 14),
+      );
+      if (_closed) {
+        await socket.close();
+        return;
       }
+
+      socket.pingInterval = const Duration(seconds: 25);
+      await _socketSubscription?.cancel();
+      _socket = socket;
       _connected = true;
       _reconnectAttempt = 0;
-      client.subscribe('$_topic/events', MqttQos.atLeastOnce);
-      _updatesSubscription?.cancel();
-      _updatesSubscription = client.updates?.listen(_handleUpdates);
+      _emit('status', {'state': 'connected', 'transport': 'https443'});
+      _emitPresence();
+
+      _socketSubscription = socket.listen(
+        (raw) => unawaited(_handleSocketMessage(raw)),
+        onError: (Object error) => _onDisconnected(error.toString()),
+        onDone: () => _onDisconnected('socket_closed'),
+        cancelOnError: true,
+      );
+
       _startTimers();
       await _publishPresence();
-      await _sendEnvelope('sync_request', <String, dynamic>{
-        'known': _history.map((message) => message['id']).toList(),
-      });
-      _emit('status', {'state': 'connected'});
-      _emitPresence();
+      await _flushOutbox();
     } catch (error) {
       _connected = false;
-      _emit('status', {'state': 'error', 'error': error.toString()});
+      _socket = null;
+      _emit('status', {
+        'state': 'error',
+        'code': 'relay_unavailable',
+        'debug': error.toString(),
+      });
       _scheduleReconnect();
     } finally {
       _connecting = false;
@@ -108,53 +128,84 @@ class InternetTunnelSession {
     if (_secretKey != null && _topic != null) return;
     final hash = await Sha256().hash(utf8.encode('$tunnelId:$secret'));
     _secretKey = SecretKey(hash.bytes);
-    _topic = 'chernogram/v3/${base64Url.encode(hash.bytes).replaceAll('=', '')}';
+    final encoded = base64Url.encode(hash.bytes).replaceAll('=', '');
+    _topic = 'cg_$encoded';
   }
 
-  void _onConnected() {
-    _connected = true;
+  Future<void> _handleSocketMessage(dynamic raw) async {
+    try {
+      final decoded = jsonDecode(raw.toString());
+      if (decoded is! Map) return;
+      final message = Map<String, dynamic>.from(decoded);
+      final event = message['event']?.toString() ?? '';
+      if (event == 'open') {
+        if (!_connected) {
+          _connected = true;
+          _emit('status', {'state': 'connected', 'transport': 'https443'});
+        }
+        return;
+      }
+      if (event != 'message') return;
+
+      String? encrypted;
+      final attachment = message['attachment'];
+      if (attachment is Map) {
+        final url = attachment['url']?.toString();
+        if (url != null && url.isNotEmpty) {
+          final response = await _http
+              .get(Uri.parse(url))
+              .timeout(const Duration(seconds: 30));
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            encrypted = utf8.decode(response.bodyBytes, allowMalformed: true);
+          }
+        }
+      }
+      encrypted ??= message['message']?.toString();
+      if (encrypted == null || encrypted.isEmpty) return;
+      await _handleEncryptedPacket(encrypted);
+    } catch (_) {
+      // A malformed packet must never break the tunnel stream.
+    }
   }
 
-  void _onDisconnected() {
+  void _onDisconnected(String reason) {
     if (_closed) return;
     _connected = false;
+    _socket = null;
+    _emit('presence', {'peers': 1});
     _emit('status', {
       'state': 'disconnected',
-      'error': 'Internet relay disconnected',
+      'code': 'relay_unavailable',
+      'debug': reason,
     });
     _scheduleReconnect();
-  }
-
-  void _handleUpdates(dynamic batch) {
-    if (batch is! List || batch.isEmpty) return;
-    for (final item in batch) {
-      try {
-        final payload = item.payload;
-        if (payload is! MqttPublishMessage) continue;
-        final text = MqttPublishPayload.bytesToStringAsString(
-          payload.payload.message,
-        );
-        unawaited(_handleEncryptedPacket(text));
-      } catch (_) {}
-    }
   }
 
   Future<void> _handleEncryptedPacket(String encrypted) async {
     final envelope = await _decrypt(encrypted);
     if (envelope == null) return;
+
     final packetId = envelope['packetId']?.toString() ?? '';
     final sender = envelope['from']?.toString() ?? '';
     if (packetId.isEmpty || !_seenPackets.add(packetId)) return;
-    if (_seenPackets.length > 4000) {
+    if (_seenPackets.length > 5000) {
       _seenPackets.remove(_seenPackets.first);
     }
     if (sender == profileId) return;
+
+    final kind = envelope['kind']?.toString() ?? '';
+    final sentAt = DateTime.tryParse(envelope['sentAt']?.toString() ?? '');
+    if (kind == 'signal' &&
+        sentAt != null &&
+        DateTime.now().toUtc().difference(sentAt.toUtc()).abs() >
+            const Duration(minutes: 2)) {
+      return;
+    }
 
     final senderName = envelope['name']?.toString() ?? 'user';
     _peers[sender] = DateTime.now();
     _emitPresence();
 
-    final kind = envelope['kind']?.toString() ?? '';
     final rawData = envelope['data'];
     final data = rawData is Map
         ? Map<String, dynamic>.from(rawData)
@@ -169,13 +220,6 @@ class InternetTunnelSession {
           _rememberMessage(message);
           _emit('message', {'message': message});
         }
-        break;
-      case 'sync_request':
-        await _sendEnvelope('history', <String, dynamic>{
-          'messages': _history.length > 150
-              ? _history.sublist(_history.length - 150)
-              : List<Map<String, dynamic>>.from(_history),
-        });
         break;
       case 'history':
         final messages = ((data['messages'] as List?) ?? const <dynamic>[])
@@ -214,26 +258,27 @@ class InternetTunnelSession {
   }
 
   Future<void> _publishPresence() async {
-    await _sendEnvelope('presence', <String, dynamic>{
-      'online': true,
-      'at': DateTime.now().toUtc().toIso8601String(),
-    });
+    await _sendEnvelope(
+      'presence',
+      <String, dynamic>{
+        'online': true,
+        'at': DateTime.now().toUtc().toIso8601String(),
+      },
+      queueOnFailure: false,
+    );
   }
 
   Future<void> _sendEnvelope(
     String kind,
-    Map<String, dynamic> data,
-  ) async {
+    Map<String, dynamic> data, {
+    bool queueOnFailure = true,
+  }) async {
     if (_closed) return;
-    if (!_connected) {
-      _emit('status', {'state': 'queued'});
-      await connect();
-      if (!_connected) return;
-    }
-    final client = _client;
-    if (client == null || _topic == null) return;
+    await _prepareCryptoAndTopic();
+    if (!_connected) unawaited(connect());
+
     final body = <String, dynamic>{
-      'v': 3,
+      'v': 4,
       'packetId': CgIds.random(24),
       'from': profileId,
       'name': nickname,
@@ -242,14 +287,67 @@ class InternetTunnelSession {
       'data': data,
     };
     final encrypted = await _encrypt(body);
-    final builder = MqttClientPayloadBuilder()..addString(encrypted);
-    final payload = builder.payload;
-    if (payload == null) return;
-    client.publishMessage(
-      '$_topic/events',
-      MqttQos.atLeastOnce,
-      payload,
-    );
+
+    try {
+      await _publishEncrypted(
+        encrypted,
+        cache: kind != 'presence',
+      );
+      if (kind == 'message') {
+        _emit('status', {'state': 'connected', 'transport': 'https443'});
+      }
+    } catch (error) {
+      if (queueOnFailure && kind == 'message') {
+        final packetId = (data['message'] as Map?)?['id']?.toString();
+        final duplicate = packetId != null &&
+            _outbox.any(
+              (item) =>
+                  (item.data['message'] as Map?)?['id']?.toString() == packetId,
+            );
+        if (!duplicate) {
+          _outbox.add(_PendingEnvelope(kind, Map<String, dynamic>.from(data)));
+        }
+        _emit('status', {'state': 'queued', 'code': 'relay_unavailable'});
+      } else {
+        _emit('status', {
+          'state': 'error',
+          'code': 'relay_unavailable',
+          'debug': error.toString(),
+        });
+      }
+      _scheduleReconnect();
+    }
+  }
+
+  Future<void> _publishEncrypted(
+    String encrypted, {
+    required bool cache,
+  }) async {
+    final response = await _http
+        .post(
+          Uri.parse('$relayBase/${_topic!}'),
+          headers: <String, String>{
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Title': 'Chernogram',
+            'Priority': 'min',
+            'Firebase': 'no',
+            if (!cache) 'Cache': 'no',
+          },
+          body: encrypted,
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException('relay_http_${response.statusCode}');
+    }
+  }
+
+  Future<void> _flushOutbox() async {
+    if (_outbox.isEmpty) return;
+    final pending = List<_PendingEnvelope>.from(_outbox);
+    _outbox.clear();
+    for (final item in pending) {
+      await _sendEnvelope(item.kind, item.data);
+    }
   }
 
   Future<String> _encrypt(Map<String, dynamic> body) async {
@@ -306,11 +404,11 @@ class InternetTunnelSession {
   void _startTimers() {
     _presenceTimer?.cancel();
     _peerCleanupTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 18), (_) {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       unawaited(_publishPresence());
     });
     _peerCleanupTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      final cutoff = DateTime.now().subtract(const Duration(seconds: 55));
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 70));
       _peers.removeWhere((_, seenAt) => seenAt.isBefore(cutoff));
       _emitPresence();
     });
@@ -321,10 +419,12 @@ class InternetTunnelSession {
   }
 
   void _scheduleReconnect() {
-    if (_closed) return;
+    if (_closed || _connected) return;
     _reconnectTimer?.cancel();
     _reconnectAttempt++;
-    final seconds = _reconnectAttempt.clamp(1, 8);
+    final seconds = _reconnectAttempt <= 1
+        ? 2
+        : (_reconnectAttempt * _reconnectAttempt).clamp(4, 30).toInt();
     _reconnectTimer = Timer(Duration(seconds: seconds), () {
       unawaited(connect());
     });
@@ -343,8 +443,9 @@ class InternetTunnelSession {
     _reconnectTimer?.cancel();
     _presenceTimer?.cancel();
     _peerCleanupTimer?.cancel();
-    await _updatesSubscription?.cancel();
-    _client?.disconnect();
+    await _socketSubscription?.cancel();
+    await _socket?.close();
+    _http.close();
     await _events.close();
   }
 }
