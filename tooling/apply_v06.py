@@ -16,7 +16,13 @@ def main() -> None:
     copy('tooling/v06_launch_logo.xml', 'android/app/src/main/res/drawable/launch_logo.xml')
     copy('tooling/v06_launch_background.xml', 'android/app/src/main/res/drawable/launch_background.xml')
     copy('tooling/v06_launch_background.xml', 'android/app/src/main/res/drawable-v21/launch_background.xml')
-    print('Applied Chernogram 0.6 source, manifest, icon and splash resources')
+
+    v06_path = Path('lib/v06.dart')
+    v06 = v06_path.read_text(encoding='utf-8')
+    v06 = v06.replace('FilePicker.platform.pickFiles(', 'FilePicker.pickFiles(')
+    v06_path.write_text(v06, encoding='utf-8')
+
+    print('Applied Chernogram 0.6 source, manifest, icon, splash and picker API')
 
 
 if __name__ == '__main__':
