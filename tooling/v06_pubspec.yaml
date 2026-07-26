@@ -1,0 +1,35 @@
+name: chernogram
+description: Chernogram — private tunnels, files, calls and a local device network
+publish_to: 'none'
+version: 0.6.0+7
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  app_links: ^7.0.0
+  file_picker: ^11.0.2
+  flutter_contacts: ^1.1.9+2
+  flutter_webrtc: ^1.5.2
+  http: ^1.5.0
+  just_audio: ^0.10.6
+  mobile_scanner: ^7.4.0
+  ota_update: ^7.1.0
+  package_info_plus: ^8.3.1
+  path_provider: ^2.1.5
+  photo_manager: ^3.10.0
+  qr_flutter: ^4.1.0
+  record: ^6.2.1
+  share_plus: ^10.1.4
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
