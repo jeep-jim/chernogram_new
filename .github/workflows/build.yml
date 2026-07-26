@@ -65,6 +65,10 @@ jobs:
           channel: stable
           cache: false
 
+      - name: Apply precise Chernogram 0.7 compatibility fixes
+        shell: bash
+        run: python3 tooling/fix_v07_compile.py
+
       - name: Validate and build release APK
         id: build_apk
         shell: bash
