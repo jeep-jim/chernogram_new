@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: bf2371fd2caa41805a4406459ea9da809450d2aa
-Time: 2026-07-26T13:27:27Z
+Commit: 16c46e5d93dd947302e3a374cc3ba81b089f7102
+Time: 2026-07-26T13:34:41Z
 ===== SIGNING KEY =====
 Alias name: androiddebugkey
 Creation date: Jul 26, 2026
@@ -145,7 +145,7 @@ Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
 Formatted lib/v07.dart
-Formatted 18 files (18 changed) in 0.34 seconds.
+Formatted 18 files (18 changed) in 0.31 seconds.
 Analyzing chernogram_new...                                     
 
 warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/call_service_v08.dart:7:8 • unused_import
@@ -178,8 +178,9 @@ warning • The receiver can't be null, so the null-aware operator '?.' is unnec
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1937:5 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
+warning • Duplicate import. Try removing all but one import of the library • lib/v07.dart:9:8 • duplicate_import
 
-30 issues found. (ran in 13.0s)
+31 issues found. (ran in 11.6s)
 
 ✅ basic smoke test
 
@@ -227,6 +228,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 3m 23s
-Running Gradle task 'assembleRelease'...                          203.7s
+BUILD FAILED in 3m 20s
+Running Gradle task 'assembleRelease'...                          200.6s
 Gradle task assembleRelease failed with exit code 1
