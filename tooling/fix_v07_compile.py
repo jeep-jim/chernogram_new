@@ -31,6 +31,12 @@ def main() -> None:
 
     replace(
         'lib/chat_screen.dart',
+        "  String get _inviteUrl =>\n      '$_landingBase?invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';",
+        "  String get _inviteUrl =>\n      '$_landingBase?v=15&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';",
+    )
+
+    replace(
+        'lib/chat_screen.dart',
         "          _mergeMessages([raw]);\n          _rememberContact(",
         "          _playIncomingMessageSound(raw);\n          _mergeMessages([raw]);\n          _rememberContact(",
     )
