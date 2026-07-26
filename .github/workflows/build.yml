@@ -52,8 +52,6 @@ jobs:
             chmod 600 "$HOME/.android/debug.keystore"
           fi
 
-          # Never generate another key. If the permanent key is unavailable,
-          # the build stops before an incompatible APK can reach users.
           if [ ! -s "$HOME/.android/debug.keystore" ]; then
             echo "::error::Permanent Chernogram signing key is unavailable. Publication is blocked."
             exit 1
@@ -132,15 +130,6 @@ jobs:
             echo "::error::Final APK certificate mismatch. Publication is blocked."
             exit 1
           fi
-
-      - name: Upload protected signing-key backup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: chernogram-signing-key-backup
-          path: ~/.android/debug.keystore
-          if-no-files-found: error
-          retention-days: 90
-          include-hidden-files: true
 
       - name: Prepare update files
         shell: bash
