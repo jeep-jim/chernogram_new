@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: b2355dbcafac025e62201e639a952e1ce79e71b3
-Time: 2026-07-26T04:39:28Z
+Commit: a080b53c92ff38135f3a3db5356b22057759a22c
+Time: 2026-07-26T04:48:11Z
 ===== BUILD OUTPUT =====
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (2 days ago) • 2026-07-23 10:56:21 -0700
@@ -16,7 +16,7 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 8 files (8 changed) in 0.11 seconds.
+Formatted 8 files (8 changed) in 0.13 seconds.
 Resolving dependencies...
 Downloading packages...
 + app_links 7.2.1
@@ -105,21 +105,12 @@ Analyzing chernogram_new...
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:377:7 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:388:7 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:624:23 • curly_braces_in_flow_control_structures
-  error • The getter 'platform' isn't defined for the type 'FilePicker'. Try importing the library that defines 'platform', correcting the name to the name of an existing getter, or defining a getter or field named 'platform' • lib/v06.dart:829:37 • undefined_getter
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1368:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1415:5 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1437:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1439:9 • curly_braces_in_flow_control_structures
-  error • Target of URI doesn't exist: 'brand.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • tooling/v06_main.dart:4:8 • uri_does_not_exist
-  error • Target of URI doesn't exist: 'update_service.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • tooling/v06_main.dart:5:8 • uri_does_not_exist
-  error • Target of URI doesn't exist: 'v06.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • tooling/v06_main.dart:6:8 • uri_does_not_exist
-  error • The method 'chernogramTheme' isn't defined for the type '_ChernogramAppState'. Try correcting the name to the name of an existing method, or defining a method named 'chernogramTheme' • tooling/v06_main.dart:46:14 • undefined_method
-  error • Invalid constant value • tooling/v06_main.dart:50:24 • invalid_constant
-  error • The method 'ChernogramLogo' isn't defined for the type '_ChernogramAppState'. Try correcting the name to the name of an existing method, or defining a method named 'ChernogramLogo' • tooling/v06_main.dart:50:24 • undefined_method
-  error • The method 'ChernogramV06' isn't defined for the type '_ChernogramAppState'. Try correcting the name to the name of an existing method, or defining a method named 'ChernogramV06' • tooling/v06_main.dart:54:37 • undefined_method
-  error • Undefined name 'ChernogramUpdater'. Try correcting the name to one that is defined, or defining the name • tooling/v06_main.dart:57:39 • undefined_identifier
 
-18 issues found. (ran in 10.3s)
+9 issues found. (ran in 11.2s)
 
 ✅ basic smoke test
 
@@ -134,24 +125,33 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-lib/v06.dart:829:37: Error: Member not found: 'platform'.
-    final result = await FilePicker.platform.pickFiles(
-                                    ^^^^^^^^
-Target kernel_snapshot_program failed: Exception
-
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+/home/runner/work/chernogram_new/chernogram_new/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java:29: error: cannot find symbol
+      flutterEngine.getPlugins().add(new com.mr.flutter.plugin.filepicker.FilePickerPlugin());
+                                                                         ^
+  symbol:   class FilePickerPlugin
+  location: package com.mr.flutter.plugin.filepicker
+1 error
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':app:compileFlutterBuildDebug'.
-> Process 'command '/opt/hostedtoolcache/flutter/stable-3.44.8-x64/flutter/bin/flutter'' finished with non-zero exit value 1
+Execution failed for task ':app:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler output below.
+  /home/runner/work/chernogram_new/chernogram_new/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java:29: error: cannot find symbol
+        flutterEngine.getPlugins().add(new com.mr.flutter.plugin.filepicker.FilePickerPlugin());
+                                                                           ^
+    symbol:   class FilePickerPlugin
+    location: package com.mr.flutter.plugin.filepicker
+  1 error
 
 * Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
+> Check your code and dependencies to fix the compilation error(s)
 > Run with --scan to generate a Build Scan (Powered by Develocity).
-> Get more help at https://help.gradle.org.
 
-BUILD FAILED in 2m 47s
-Running Gradle task 'assembleDebug'...                            169.7s
+BUILD FAILED in 5m 12s
+Running Gradle task 'assembleDebug'...                            314.2s
 Gradle task assembleDebug failed with exit code 1
