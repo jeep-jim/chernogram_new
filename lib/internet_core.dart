@@ -21,14 +21,11 @@ class _PendingEnvelope {
   const _PendingEnvelope(this.kind, this.data);
 }
 
-/// Internet relay for Chernogram tunnels.
+/// Encrypted HTTPS/WSS relay for Chernogram tunnels.
 ///
-/// Transport:
-/// - standard HTTPS/WSS on port 443, so it works across mobile operators,
-///   home Wi-Fi and different cities without opening custom ports;
-/// - public ntfy relay is used only as an encrypted transport;
-/// - message content is encrypted locally with AES-256-GCM before upload;
-/// - the relay topic is derived from the tunnel secret and is not guessable.
+/// All tunnel content is encrypted locally with AES-256-GCM. The relay only
+/// sees opaque packets. Small packets are sent as text; larger encrypted
+/// packets are uploaded as relay attachments and downloaded by recipients.
 class InternetTunnelSession {
   static const String relayBase = 'https://ntfy.sh';
   static const String relaySocketHost = 'ntfy.sh';
@@ -41,6 +38,7 @@ class InternetTunnelSession {
   final StreamController<InternetEvent> _events =
       StreamController<InternetEvent>.broadcast(sync: true);
   final Map<String, DateTime> _peers = <String, DateTime>{};
+  final Map<String, String> _peerNames = <String, String>{};
   final Set<String> _seenPackets = <String>{};
   final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
   final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
@@ -68,6 +66,22 @@ class InternetTunnelSession {
   Stream<InternetEvent> get events => _events.stream;
   bool get connected => _connected;
   int get onlinePeers => _peers.length + 1;
+  List<Map<String, dynamic>> get members => [
+        {
+          'id': profileId,
+          'name': nickname,
+          'self': true,
+          'seenAt': DateTime.now().toUtc().toIso8601String(),
+        },
+        ..._peers.entries.map(
+          (entry) => {
+            'id': entry.key,
+            'name': _peerNames[entry.key] ?? 'user',
+            'self': false,
+            'seenAt': entry.value.toUtc().toIso8601String(),
+          },
+        ),
+      ];
 
   Future<void> connect() async {
     if (_closed || _connecting || _connected) return;
@@ -76,11 +90,10 @@ class InternetTunnelSession {
 
     try {
       await _prepareCryptoAndTopic();
-      final topic = _topic!;
       final uri = Uri(
         scheme: 'wss',
         host: relaySocketHost,
-        path: '/$topic/ws',
+        path: '/${_topic!}/ws',
         queryParameters: const {'since': '12h'},
       );
 
@@ -154,7 +167,7 @@ class InternetTunnelSession {
         if (url != null && url.isNotEmpty) {
           final response = await _http
               .get(Uri.parse(url))
-              .timeout(const Duration(seconds: 30));
+              .timeout(const Duration(seconds: 90));
           if (response.statusCode >= 200 && response.statusCode < 300) {
             encrypted = utf8.decode(response.bodyBytes, allowMalformed: true);
           }
@@ -164,7 +177,7 @@ class InternetTunnelSession {
       if (encrypted == null || encrypted.isEmpty) return;
       await _handleEncryptedPacket(encrypted);
     } catch (_) {
-      // A malformed packet must never break the tunnel stream.
+      // One malformed relay packet must never stop the tunnel.
     }
   }
 
@@ -172,7 +185,7 @@ class InternetTunnelSession {
     if (_closed) return;
     _connected = false;
     _socket = null;
-    _emit('presence', {'peers': 1});
+    _emit('presence', {'peers': 1, 'members': members});
     _emit('status', {
       'state': 'disconnected',
       'code': 'relay_unavailable',
@@ -204,6 +217,12 @@ class InternetTunnelSession {
 
     final senderName = envelope['name']?.toString() ?? 'user';
     _peers[sender] = DateTime.now();
+    _peerNames[sender] = senderName;
+    _emit('peer', {
+      'id': sender,
+      'name': senderName,
+      'seenAt': DateTime.now().toUtc().toIso8601String(),
+    });
     _emitPresence();
 
     final rawData = envelope['data'];
@@ -218,7 +237,11 @@ class InternetTunnelSession {
         if (data['message'] is Map) {
           final message = Map<String, dynamic>.from(data['message'] as Map);
           _rememberMessage(message);
-          _emit('message', {'message': message});
+          _emit('message', {
+            'message': message,
+            'relaySender': sender,
+            'relaySenderName': senderName,
+          });
         }
         break;
       case 'history':
@@ -229,7 +252,18 @@ class InternetTunnelSession {
         for (final message in messages) {
           _rememberMessage(message);
         }
-        _emit('history', {'messages': messages});
+        _emit('history', {
+          'messages': messages,
+          'relaySender': sender,
+          'relaySenderName': senderName,
+        });
+        break;
+      case 'control':
+        _emit('control', {
+          ...data,
+          'relaySender': sender,
+          'relaySenderName': senderName,
+        });
         break;
       case 'signal':
         _emit('signal', {
@@ -246,8 +280,19 @@ class InternetTunnelSession {
     await _sendEnvelope('message', {'message': message});
   }
 
+  Future<void> sendControl(Map<String, dynamic> control) async {
+    await _sendEnvelope('control', control);
+  }
+
   Future<void> sendSignal(Map<String, dynamic> signal) async {
-    await _sendEnvelope('signal', signal);
+    await _sendEnvelope('signal', signal, queueOnFailure: false);
+  }
+
+  Future<void> sendHistory() async {
+    if (_history.isEmpty) return;
+    await _sendEnvelope('history', {
+      'messages': _history.take(500).toList(),
+    });
   }
 
   void replaceHistory(List<Map<String, dynamic>> messages) {
@@ -278,7 +323,7 @@ class InternetTunnelSession {
     if (!_connected) unawaited(connect());
 
     final body = <String, dynamic>{
-      'v': 4,
+      'v': 5,
       'packetId': CgIds.random(24),
       'from': profileId,
       'name': nickname,
@@ -293,17 +338,24 @@ class InternetTunnelSession {
         encrypted,
         cache: kind != 'presence',
       );
-      if (kind == 'message') {
+      if (kind == 'message' || kind == 'control') {
         _emit('status', {'state': 'connected', 'transport': 'https443'});
       }
     } catch (error) {
-      if (queueOnFailure && kind == 'message') {
-        final packetId = (data['message'] as Map?)?['id']?.toString();
-        final duplicate = packetId != null &&
-            _outbox.any(
-              (item) =>
-                  (item.data['message'] as Map?)?['id']?.toString() == packetId,
-            );
+      final canQueue = queueOnFailure && (kind == 'message' || kind == 'control');
+      if (canQueue) {
+        final uniqueId = kind == 'message'
+            ? (data['message'] as Map?)?['id']?.toString()
+            : data['operationId']?.toString();
+        final duplicate = uniqueId != null &&
+            _outbox.any((item) {
+              if (item.kind != kind) return false;
+              if (kind == 'message') {
+                return (item.data['message'] as Map?)?['id']?.toString() ==
+                    uniqueId;
+              }
+              return item.data['operationId']?.toString() == uniqueId;
+            });
         if (!duplicate) {
           _outbox.add(_PendingEnvelope(kind, Map<String, dynamic>.from(data)));
         }
@@ -323,19 +375,24 @@ class InternetTunnelSession {
     String encrypted, {
     required bool cache,
   }) async {
+    final bytes = utf8.encode(encrypted);
+    final large = bytes.length > 3500;
     final response = await _http
         .post(
           Uri.parse('$relayBase/${_topic!}'),
           headers: <String, String>{
-            'Content-Type': 'text/plain; charset=utf-8',
+            'Content-Type': large
+                ? 'application/octet-stream'
+                : 'text/plain; charset=utf-8',
             'Title': 'Chernogram',
             'Priority': 'min',
             'Firebase': 'no',
+            if (large) 'Filename': 'chernogram-packet.cg',
             if (!cache) 'Cache': 'no',
           },
-          body: encrypted,
+          body: large ? bytes : encrypted,
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 120));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('relay_http_${response.statusCode}');
     }
@@ -390,9 +447,11 @@ class InternetTunnelSession {
 
   bool _rememberMessage(Map<String, dynamic> message) {
     final id = message['id']?.toString() ?? '';
-    if (id.isEmpty ||
-        _history.any((item) => item['id']?.toString() == id)) {
-      return false;
+    if (id.isEmpty) return false;
+    final index = _history.indexWhere((item) => item['id']?.toString() == id);
+    if (index >= 0) {
+      _history[index] = Map<String, dynamic>.from(message);
+      return true;
     }
     _history.add(Map<String, dynamic>.from(message));
     if (_history.length > 500) {
@@ -409,13 +468,19 @@ class InternetTunnelSession {
     });
     _peerCleanupTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       final cutoff = DateTime.now().subtract(const Duration(seconds: 70));
-      _peers.removeWhere((_, seenAt) => seenAt.isBefore(cutoff));
+      final removed = _peers.keys
+          .where((id) => _peers[id]?.isBefore(cutoff) == true)
+          .toList();
+      for (final id in removed) {
+        _peers.remove(id);
+        _peerNames.remove(id);
+      }
       _emitPresence();
     });
   }
 
   void _emitPresence() {
-    _emit('presence', {'peers': onlinePeers});
+    _emit('presence', {'peers': onlinePeers, 'members': members});
   }
 
   void _scheduleReconnect() {
