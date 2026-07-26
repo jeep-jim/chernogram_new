@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: daeb77775f2bf715c5bd143fd5dab3072e50f767
-Time: 2026-07-26T13:17:50Z
+Commit: bf2371fd2caa41805a4406459ea9da809450d2aa
+Time: 2026-07-26T13:27:27Z
 ===== SIGNING KEY =====
 Alias name: androiddebugkey
 Creation date: Jul 26, 2026
@@ -145,13 +145,11 @@ Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
 Formatted lib/v07.dart
-Formatted 18 files (18 changed) in 0.29 seconds.
+Formatted 18 files (18 changed) in 0.34 seconds.
 Analyzing chernogram_new...                                     
 
 warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/call_service_v08.dart:7:8 • unused_import
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/call_service_v08.dart:208:11 • curly_braces_in_flow_control_structures
-warning • The value of the field '_networkError' isn't used. Try removing the field, or using it • lib/chat_screen.dart:49:11 • unused_field
-   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/chat_screen.dart:233:7 • curly_braces_in_flow_control_structures
   error • The name 'CgContact' is defined in the libraries 'package:chernogram/chat_state.dart' and 'package:chernogram/core_models.dart'. Try using 'as prefix' for one of the import directives, or hiding the name from all but one of the imports • lib/contacts_screen.dart:9:14 • ambiguous_import
   error • The property 'nickname' can't be unconditionally accessed because the receiver can be 'null'. Try making the access conditional (using '?.') or adding a null check to the target ('!') • lib/contacts_screen.dart:44:41 • unchecked_use_of_nullable_value
   error • The property 'lastSeenAt' can't be unconditionally accessed because the receiver can be 'null'. Try making the access conditional (using '?.') or adding a null check to the target ('!') • lib/contacts_screen.dart:47:30 • unchecked_use_of_nullable_value
@@ -181,7 +179,7 @@ warning • The receiver can't be null, so the null-aware operator '?.' is unnec
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-32 issues found. (ran in 11.5s)
+30 issues found. (ran in 13.0s)
 
 ✅ basic smoke test
 
@@ -229,6 +227,6 @@ Execution failed for task ':app:compileFlutterBuildRelease'.
 > Run with --scan to generate a Build Scan (Powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 3m 21s
-Running Gradle task 'assembleRelease'...                          202.3s
+BUILD FAILED in 3m 23s
+Running Gradle task 'assembleRelease'...                          203.7s
 Gradle task assembleRelease failed with exit code 1
