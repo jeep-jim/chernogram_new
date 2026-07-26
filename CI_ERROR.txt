@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: 8c86803a43e3db6819293decb4aec44c5b506904
-Time: 2026-07-26T16:10:01Z
+Commit: 39f93636369ec96b024b0452206aa2249eed14dc
+Time: 2026-07-26T16:24:02Z
 ===== SIGNING KEY =====
 Alias name: androiddebugkey
 Creation date: Jul 26, 2026
@@ -152,7 +152,7 @@ Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
 Formatted lib/v07.dart
-Formatted 19 files (18 changed) in 0.35 seconds.
+Formatted 19 files (18 changed) in 0.34 seconds.
 Analyzing chernogram_new...                                     
 
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:277:7 • use_build_context_synchronously
@@ -175,7 +175,7 @@ warning • Unused import: 'core_models.dart'. Try removing the import directive
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-19 issues found. (ran in 12.5s)
+19 issues found. (ran in 12.7s)
 
 ✅ basic smoke test
 
@@ -202,5 +202,5 @@ Note: Recompile with -Xlint:deprecation for details.
 Note: Some input files use unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
 Caught exception: Already watching path: /home/runner/work/chernogram_new/chernogram_new/android
-Running Gradle task 'assembleRelease'...                          523.3s
+Running Gradle task 'assembleRelease'...                          507.9s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (110.6MB)
