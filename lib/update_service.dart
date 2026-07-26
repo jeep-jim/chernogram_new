@@ -37,8 +37,11 @@ class RemoteUpdate {
 }
 
 class ChernogramUpdater {
-  static const _manifestUrl =
-      'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/update.json';
+  static const _manifestUrls = <String>[
+    'https://raw.githubusercontent.com/jeep-jim/chernogram_new/main/update.json',
+    'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/update.json',
+    'https://cdn.jsdelivr.net/gh/jeep-jim/chernogram_new@main/update.json',
+  ];
 
   static bool _automaticCheckDone = false;
   static bool _checking = false;
@@ -46,34 +49,64 @@ class ChernogramUpdater {
 
   static Future<String> currentVersion() async {
     final info = await PackageInfo.fromPlatform();
-    return info.version;
+    return '${info.version}+${info.buildNumber}';
   }
 
   static Future<RemoteUpdate?> checkForUpdate() async {
     if (!Platform.isAndroid) return null;
 
-    final response = await http
-        .get(
-          Uri.parse('$_manifestUrl?t=${DateTime.now().millisecondsSinceEpoch}'),
-          headers: const {'Cache-Control': 'no-cache'},
-        )
-        .timeout(const Duration(seconds: 15));
+    Object? lastError;
+    RemoteUpdate? newest;
 
-    if (response.statusCode != 200) {
-      throw HttpException('Update server returned ${response.statusCode}');
+    for (final baseUrl in _manifestUrls) {
+      try {
+        final separator = baseUrl.contains('?') ? '&' : '?';
+        final response = await http
+            .get(
+              Uri.parse(
+                '$baseUrl${separator}t=${DateTime.now().millisecondsSinceEpoch}',
+              ),
+              headers: const {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Accept': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 18));
+
+        if (response.statusCode != 200) {
+          throw HttpException(
+            'Update server returned ${response.statusCode}',
+          );
+        }
+
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+        if (decoded is! Map) {
+          throw const FormatException('Invalid update manifest');
+        }
+
+        final remote = RemoteUpdate.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+        if (remote.versionCode <= 0 || remote.apkUrl.isEmpty) {
+          throw const FormatException('Incomplete update manifest');
+        }
+        if (newest == null || remote.versionCode > newest.versionCode) {
+          newest = remote;
+        }
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Invalid update manifest');
+    if (newest == null) {
+      throw lastError ?? const HttpException('No update source available');
     }
 
-    final remote = RemoteUpdate.fromJson(decoded);
     final current = await PackageInfo.fromPlatform();
     final currentCode = int.tryParse(current.buildNumber) ?? 0;
-
-    if (remote.versionCode <= currentCode || remote.apkUrl.isEmpty) return null;
-    return remote;
+    if (newest.versionCode <= currentCode) return null;
+    return newest;
   }
 
   static Future<void> checkAndPrompt(
@@ -93,12 +126,14 @@ class ChernogramUpdater {
 
       if (update == null) {
         if (manual) {
+          final current = await currentVersion();
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
                 ru
-                    ? 'У вас уже установлена последняя версия.'
-                    : 'You already have the latest version.',
+                    ? 'Установлена последняя версия: $current.'
+                    : 'The latest version is installed: $current.',
               ),
             ),
           );
@@ -153,14 +188,14 @@ class ChernogramUpdater {
               : 'The update server did not respond.',
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (manual && context.mounted) {
         _showError(
           context,
           ru,
           ru
-              ? 'Не удалось проверить обновления. Проверьте интернет.'
-              : 'Could not check for updates. Check your connection.',
+              ? 'Не удалось проверить обновления: $error'
+              : 'Could not check for updates: $error',
         );
       }
     } finally {
@@ -182,13 +217,13 @@ class ChernogramUpdater {
     final status = ValueNotifier<String>(
       ru ? 'Подготовка обновления…' : 'Preparing the update…',
     );
-    bool dialogOpen = true;
+    var dialogOpen = true;
     StreamSubscription<OtaEvent>? subscription;
 
     void closeDialog() {
       if (!dialogOpen) return;
       dialogOpen = false;
-      navigator.pop();
+      if (navigator.canPop()) navigator.pop();
     }
 
     void showMessage(String message, {Duration? duration}) {
@@ -205,30 +240,36 @@ class ChernogramUpdater {
       showMessage(message);
     }
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          title: Text(ru ? 'Обновление Чернограма' : 'Updating Chernogram'),
-          content: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, value, __) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LinearProgressIndicator(value: value <= 0 ? null : value / 100),
-                const SizedBox(height: 14),
-                ValueListenableBuilder<String>(
-                  valueListenable: status,
-                  builder: (_, text, __) => Text(text),
-                ),
-                if (value > 0) ...[
-                  const SizedBox(height: 6),
-                  Text('${value.toStringAsFixed(0)}%'),
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: Text(
+              ru ? 'Обновление Чернограма' : 'Updating Chernogram',
+            ),
+            content: ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, __) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: value <= 0 ? null : value / 100,
+                  ),
+                  const SizedBox(height: 14),
+                  ValueListenableBuilder<String>(
+                    valueListenable: status,
+                    builder: (_, text, __) => Text(text),
+                  ),
+                  if (value > 0) ...[
+                    const SizedBox(height: 6),
+                    Text('${value.toStringAsFixed(0)}%'),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -236,9 +277,6 @@ class ChernogramUpdater {
     );
 
     try {
-      // Для обычных телефонов используем стандартный Android installer intent.
-      // PackageInstaller-режим предназначен в основном для kiosk/MDM и на
-      // некоторых оболочках зависает после разрешения неизвестных источников.
       final destination = 'chernogram-update-${update.versionCode}.apk';
       final stream = update.sha256.isEmpty
           ? OtaUpdate().execute(
@@ -266,16 +304,14 @@ class ChernogramUpdater {
           }
 
           if (eventName == 'INSTALLING') {
-            // Убираем окно Flutter до запуска системного установщика, чтобы
-            // оно не оставалось поверх Android после возврата из настроек.
             closeDialog();
             showMessage(
               ru
-                  ? 'APK скачан. Подтвердите обновление в системном окне Android.'
-                  : 'APK downloaded. Confirm the update in Android.',
-              duration: const Duration(seconds: 6),
+                  ? 'APK скачан. Если Android откроет разрешение установки, включите его и вернитесь — установщик продолжит работу.'
+                  : 'APK downloaded. If Android asks for install permission, enable it and return to continue.',
+              duration: const Duration(seconds: 10),
             );
-            Future<void>.delayed(const Duration(seconds: 2), () {
+            Future<void>.delayed(const Duration(seconds: 3), () {
               if (!completed.isCompleted) completed.complete();
             });
             return;
@@ -288,10 +324,12 @@ class ChernogramUpdater {
           }
 
           if (eventName == 'PERMISSION_NOT_GRANTED_ERROR') {
-            fail(
+            closeDialog();
+            showMessage(
               ru
-                  ? 'Разрешите установку из Чернограма, вернитесь в приложение и нажмите «Обновить» ещё раз.'
-                  : 'Allow installs from Chernogram, return to the app and tap Update again.',
+                  ? 'Разрешите установку из Чернограма, вернитесь и снова нажмите «Проверить обновления». APK повторно скачивать не придётся.'
+                  : 'Allow installs from Chernogram, return and tap Check updates again. The APK will be reused.',
+              duration: const Duration(seconds: 12),
             );
             if (!completed.isCompleted) completed.complete();
             return;
@@ -300,8 +338,8 @@ class ChernogramUpdater {
           if (eventName == 'ALREADY_RUNNING_ERROR') {
             fail(
               ru
-                  ? 'Предыдущая попытка установки ещё не завершилась. Полностью закройте Чернограм, откройте снова и повторите обновление.'
-                  : 'A previous install attempt is still active. Fully close Chernogram, reopen it and retry.',
+                  ? 'Предыдущая попытка ещё активна. Полностью закройте Чернограм и откройте снова.'
+                  : 'A previous install attempt is still active. Fully close and reopen Chernogram.',
             );
             if (!completed.isCompleted) completed.complete();
             return;
@@ -316,8 +354,8 @@ class ChernogramUpdater {
           if (errors.contains(eventName)) {
             fail(
               ru
-                  ? 'Не удалось установить обновление. Повторите попытку.'
-                  : 'The update could not be installed. Please try again.',
+                  ? 'Не удалось установить обновление ($eventName).'
+                  : 'The update could not be installed ($eventName).',
             );
             if (!completed.isCompleted) completed.complete();
             return;
@@ -328,8 +366,12 @@ class ChernogramUpdater {
             if (!completed.isCompleted) completed.complete();
           }
         },
-        onError: (_) {
-          fail(ru ? 'Ошибка скачивания обновления.' : 'Update download failed.');
+        onError: (Object error) {
+          fail(
+            ru
+                ? 'Ошибка скачивания обновления: $error'
+                : 'Update download failed: $error',
+          );
           if (!completed.isCompleted) completed.complete();
         },
         onDone: () {
@@ -338,19 +380,21 @@ class ChernogramUpdater {
       );
 
       await completed.future.timeout(
-        const Duration(minutes: 3),
+        const Duration(minutes: 4),
         onTimeout: () {
           closeDialog();
           showMessage(
             ru
-                ? 'Android не открыл установщик. Повторите обновление после перезапуска приложения.'
+                ? 'Android не открыл установщик. Перезапустите приложение и повторите проверку.'
                 : 'Android did not open the installer. Restart the app and retry.',
           );
         },
       );
-    } catch (_) {
+    } catch (error) {
       fail(
-        ru ? 'Не удалось запустить обновление.' : 'Could not start the update.',
+        ru
+            ? 'Не удалось запустить обновление: $error'
+            : 'Could not start the update: $error',
       );
     } finally {
       await subscription?.cancel();
@@ -360,13 +404,21 @@ class ChernogramUpdater {
     }
   }
 
-  static void _showError(BuildContext context, bool ru, String message) {
+  static void _showError(
+    BuildContext context,
+    bool ru,
+    String message,
+  ) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         action: SnackBarAction(
           label: ru ? 'Повторить' : 'Retry',
-          onPressed: () => checkAndPrompt(context, ru: ru, manual: true),
+          onPressed: () => checkAndPrompt(
+            context,
+            ru: ru,
+            manual: true,
+          ),
         ),
       ),
     );
