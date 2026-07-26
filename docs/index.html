@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#080808" />
+  <title>Чернограм — приватные туннели между устройствами</title>
+  <style>
+    :root{color-scheme:dark;--bg:#080808;--card:#151210;--orange:#e96800;--gold:#c99a45;--text:#fff;--muted:#b9b3ac}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;display:grid;place-items:center;padding:24px}
+    main{width:min(680px,100%);background:linear-gradient(145deg,#1e130d,#0d0c0b);border:1px solid #3b2a1d;border-radius:28px;padding:28px;box-shadow:0 22px 70px #0008}
+    .logo{width:112px;height:112px;margin:auto;display:block}.brand{text-align:center;margin:12px 0 4px;font-size:28px;font-weight:900;letter-spacing:1.2px}.tag{text-align:center;color:var(--muted);line-height:1.5;margin-bottom:24px}
+    .actions{display:grid;gap:12px}.btn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;border-radius:18px;padding:15px 18px;font-weight:800;border:1px solid #5f4930;color:#fff;background:#21170f}.btn.primary{background:var(--orange);border-color:var(--orange)}.btn[hidden]{display:none}
+    .note{margin-top:18px;padding:14px 16px;border-radius:16px;background:#171411;color:var(--muted);font-size:13px;line-height:1.5}.token{overflow-wrap:anywhere;color:#f1c56d}.small{text-align:center;color:#756e68;font-size:12px;margin-top:14px}
+  </style>
+</head>
+<body>
+<main>
+  <svg class="logo" viewBox="0 0 1024 1024" aria-label="Чернограм">
+    <rect width="1024" height="1024" rx="230" fill="#0b0a0a"/>
+    <path fill="#e96800" d="M512 120 150 820h724z"/>
+    <path fill="#c99a45" d="M120 315h780L520 935V535z"/>
+    <path fill="#090909" d="m120 315 380 220-350 270h35l350-260v-25L155 300z"/>
+  </svg>
+  <div class="brand">ЧЕРНОГРАМ</div>
+  <div class="tag">Приватные туннели, файлы, чат и связь между вашими устройствами.</div>
+  <div class="actions">
+    <a id="openApp" class="btn primary" href="chernogram://join">Открыть в Чернограме</a>
+    <a id="android" class="btn" href="https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk">Скачать для Android</a>
+    <a id="ios" class="btn" href="#" hidden>Версия для iPhone готовится</a>
+    <a id="mac" class="btn" href="#" hidden>Версия для macOS готовится</a>
+  </div>
+  <div class="note">Приглашение: <span id="invite" class="token">не указано</span><br>Файлы и сообщения не загружаются на эту страницу. Она только открывает приложение или помогает установить его.</div>
+  <div class="small">Временная страница проекта. Позже переедет на официальный домен .com.</div>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const token = params.get('invite') || params.get('t') || location.hash.replace(/^#/, '');
+  const deep = token ? `chernogram://join/${encodeURIComponent(token)}` : 'chernogram://join';
+  document.getElementById('openApp').href = deep;
+  document.getElementById('invite').textContent = token || 'не указано';
+  const ua = navigator.userAgent.toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) { document.getElementById('ios').hidden = false; document.getElementById('android').hidden = true; }
+  if (/macintosh|mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua)) document.getElementById('mac').hidden = false;
+  let timer = setTimeout(() => {}, 1200);
+  document.getElementById('openApp').addEventListener('click', () => clearTimeout(timer));
+</script>
+</body>
+</html>
