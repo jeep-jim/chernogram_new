@@ -1,4 +1,4 @@
-name: Publish Chernogram landing
+name: Validate Chernogram landing
 
 on:
   push:
@@ -9,63 +9,38 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: pages
+  group: cernogram-landing-validation
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  validate:
+    name: Validate temporary QR landing
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Enable Pages for workflow deployment
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Validate local landing
+        shell: bash
+        run: |
+          set -e
+          test -s docs/index.html
+          grep -q 'intent://join' docs/index.html
+          grep -q 'chernogram://join' docs/index.html
+          grep -q 'latest-apk/chernogram.apk' docs/index.html
+          grep -q 'TestFlight' docs/index.html
+
+      - name: Smoke-test temporary host
         shell: bash
         run: |
           set +e
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow
-          POST_STATUS=$?
-          if [ "$POST_STATUS" -ne 0 ]; then
-            gh api --method PUT "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow
+          URL="https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html?t=$(date +%s)"
+          HTTP_CODE=$(curl -L --max-time 25 -s -o /tmp/landing.html -w '%{http_code}' "$URL")
+          echo "Temporary landing HTTP: ${HTTP_CODE}"
+          if [ "$HTTP_CODE" = "200" ]; then
+            grep -q 'ЧЕРНОГРАМ' /tmp/landing.html || true
           fi
           exit 0
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: docs
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Record Pages status
-        if: always()
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git reset --hard origin/main
-          cat > PAGES_STATUS.md <<EOF
-          Status: ${{ job.status }}
-          URL: ${{ steps.deployment.outputs.page_url }}
-          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Commit: ${GITHUB_SHA}
-          EOF
-          git add PAGES_STATUS.md
-          git commit -m "Статус страницы приглашения: ${{ job.status }} [skip ci]" || true
-          git push origin HEAD:main || true
