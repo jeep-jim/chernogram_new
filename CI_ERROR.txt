@@ -1,0 +1,243 @@
+GitHub Actions build failed
+Commit: 537250ec84a997151674e25a4f1a6077f44624b4
+Time: 2026-07-26T19:26:46Z
+===== SIGNING KEY =====
+Alias name: androiddebugkey
+Creation date: Jul 26, 2026
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=Chernogram Prototype, O=Chernogram, C=RU
+Issuer: CN=Chernogram Prototype, O=Chernogram, C=RU
+Serial number: 967052ca6b03ab0c
+Valid from: Sun Jul 26 08:31:07 UTC 2026 until: Thu Dec 11 08:31:07 UTC 2053
+Certificate fingerprints:
+	 SHA1: 77:F4:C8:E6:D1:BD:16:77:71:73:2B:9E:D3:2F:6A:16:5F:B0:55:69
+	 SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+Signature algorithm name: SHA256withRSA
+Subject Public Key Algorithm: 2048-bit RSA key
+Version: 3
+
+Extensions: 
+
+#1: ObjectId: 2.5.29.14 Criticality=false
+SubjectKeyIdentifier [
+KeyIdentifier [
+0000: 5D 0A 01 66 F4 65 7B D0   A3 7E 37 D0 83 15 C4 E2  ]..f.e....7.....
+0010: 5C 63 54 2F                                        \cT/
+]
+]
+
+===== BUILD OUTPUT =====
+Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 058e0af2c2 (3 days ago) • 2026-07-23 10:56:21 -0700
+Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (3 days ago) • 2026-07-23 16:11:34.000Z
+Tools • Dart 3.12.2 • DevTools 2.57.0
+Resolving dependencies...
+Downloading packages...
++ app_links 7.2.1
++ app_links_linux 1.0.3
++ app_links_platform_interface 2.0.4
++ app_links_web 1.0.4
++ audio_service 0.18.19
++ audio_service_platform_interface 0.1.3
++ audio_service_web 0.1.4
++ audio_session 0.2.4
++ camera 0.12.0+2
++ camera_android_camerax 0.7.4+2
++ camera_avfoundation 0.10.2
++ camera_platform_interface 2.13.1
++ camera_web 0.3.5+4
++ cryptography 2.9.0
++ csslib 1.0.2
++ dart_webrtc 1.8.1
++ dbus 0.7.14
++ file_picker 10.3.10 (11.0.2 available)
++ fixnum 1.1.1
++ flutter_cache_manager 3.4.2
++ flutter_contacts 1.1.9+2 (2.3.0 available)
+  flutter_lints 3.0.2 (6.0.0 available)
++ flutter_webrtc 1.5.2
++ gtk 2.2.0
+  hooks 2.0.2 (2.1.0 available)
++ html 0.15.6
+  http 1.6.0 (from transitive dependency to direct dependency)
++ js 0.7.2
++ just_audio 0.10.6
++ just_audio_background 0.0.1-beta.17
++ just_audio_platform_interface 4.6.0
++ just_audio_web 0.4.16
+  lints 3.0.0 (6.1.0 available)
++ logger 2.7.0
+  matcher 0.12.19 (0.12.20 available)
+  meta 1.18.0 (1.19.0 available)
++ mobile_scanner 7.4.0
++ open_filex 4.7.0
++ ota_update 7.1.0
+  package_config 2.2.0 (3.0.0 available)
++ package_info_plus 8.3.1 (10.2.1 available)
++ package_info_plus_platform_interface 3.2.1 (4.1.0 available)
++ petitparser 7.0.2
++ photo_manager 3.11.0
++ qr 3.0.2 (4.0.0 available)
++ qr_flutter 4.1.0
++ record 6.2.1 (7.1.1 available)
++ record_android 1.5.2 (2.1.2 available)
++ record_ios 1.2.1 (2.1.1 available)
++ record_linux 1.3.1 (2.1.1 available)
++ record_macos 1.2.2 (2.1.1 available)
++ record_platform_interface 1.6.0 (2.1.0 available)
+  record_use 0.6.0 (1.0.0 available)
++ record_web 1.3.0 (2.1.1 available)
++ record_windows 1.0.7 (2.2.2 available)
++ rxdart 0.28.0
++ share_plus 10.1.4 (13.3.0 available)
++ share_plus_platform_interface 5.0.2 (7.2.0 available)
+  sqflite 2.4.3 (from direct dependency to transitive dependency)
++ stream_transform 2.1.1
+  test_api 0.7.11 (0.7.13 available)
++ url_launcher 6.3.2
++ url_launcher_android 6.3.32
++ url_launcher_ios 6.4.1
++ url_launcher_linux 3.2.2
++ url_launcher_macos 3.2.5
++ url_launcher_platform_interface 2.3.2
++ url_launcher_web 2.4.3
++ url_launcher_windows 3.1.5
++ uuid 4.6.0
+  vector_math 2.2.0 (2.4.1 available)
++ video_player 2.13.0
++ video_player_android 2.12.0
++ video_player_avfoundation 2.11.0
++ video_player_platform_interface 6.9.0
++ video_player_web 2.4.0
++ webrtc_interface 1.5.1
++ win32 5.15.0 (6.3.0 available)
++ xml 6.6.1 (7.0.1 available)
+These packages are no longer being depended on:
+- file_selector_linux 0.9.4
+- file_selector_macos 0.9.5
+- file_selector_platform_interface 2.7.0
+- file_selector_windows 0.9.3+5
+- image_picker 1.2.3
+- image_picker_android 0.8.13+19
+- image_picker_for_web 3.1.1
+- image_picker_ios 0.8.13+6
+- image_picker_linux 0.2.2
+- image_picker_macos 0.2.2+1
+- image_picker_platform_interface 2.11.1
+- image_picker_windows 0.2.2
+Changed 82 dependencies!
+26 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Formatted lib/agent_screen.dart
+Formatted lib/app_monitor.dart
+Formatted lib/brand.dart
+Formatted lib/call_avatar.dart
+Formatted lib/call_service.dart
+Formatted lib/chat_media.dart
+Could not format because the source could not be parsed:
+
+line 1735, column 13 of lib/chat_screen.dart: Expected to find ']'.
+     ╷
+1735 │             ),
+     │             ^
+     ╵
+line 1737, column 9 of lib/chat_screen.dart: Expected to find ')'.
+     ╷
+1737 │         ],
+     │         ^
+     ╵
+Formatted lib/core_models.dart
+Formatted lib/group_call_service.dart
+Formatted lib/inline_music_player.dart
+Formatted lib/internet_core.dart
+Formatted lib/main.dart
+Formatted lib/media_studio.dart
+Formatted lib/music_player.dart
+Formatted lib/network_core.dart
+Formatted lib/sound_service.dart
+Formatted lib/tunnel_extras.dart
+Formatted lib/tunnels.dart
+Formatted lib/update_service.dart
+Formatted lib/v06.dart
+Formatted lib/v07.dart
+Formatted 21 files (20 changed) in 0.35 seconds.
+Analyzing chernogram_new...                                     
+
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:279:7 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/call_service.dart:282:11 • curly_braces_in_flow_control_structures
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_media.dart:5:8 • unnecessary_import
+  error • The argument type 'bool' can't be assigned to the parameter type 'String?'.  • lib/chat_screen.dart:1251:60 • argument_type_not_assignable
+  error • 4 positional arguments expected by '_showIncomingGroupCall', but 3 found. Try adding the missing arguments • lib/chat_screen.dart:1251:65 • not_enough_positional_arguments
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1265:7 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1344:7 • use_build_context_synchronously
+  error • Expected to find ']' • lib/chat_screen.dart:1735:13 • expected_token
+  error • Expected to find ')' • lib/chat_screen.dart:1737:9 • expected_token
+warning • The declaration '_AttachmentPreview' isn't referenced. Try removing the declaration of '_AttachmentPreview' • lib/chat_screen.dart:2249:7 • unused_element
+warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/group_call_service.dart:8:8 • unused_import
+  error • The name 'PlayerState' isn't a type, so it can't be used as a type argument. Try correcting the name to an existing type, or defining a type named 'PlayerState' • lib/inline_music_player.dart:88:29 • non_type_as_type_argument
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/main.dart:91:42 • use_build_context_synchronously
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/media_studio.dart:2:8 • unnecessary_import
+warning • Dead code. Try removing the code, or fixing the code before it so that it can be reached • lib/music_player.dart:202:49 • dead_code
+warning • The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand • lib/music_player.dart:202:52 • dead_null_aware_expression
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/network_core.dart:394:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1133:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:456:7 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:467:7 • curly_braces_in_flow_control_structures
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:503:7 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:714:23 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1890:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1937:5 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v07.dart:388:11 • curly_braces_in_flow_control_structures
+
+27 issues found. (ran in 13.2s)
+
+✅ basic smoke test
+
+🎉 1 test passed.
+Running Gradle task 'assembleRelease'...                        
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): file_picker, flutter_contacts, flutter_webrtc, mobile_scanner, package_info_plus, photo_manager, record_android, share_plus
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing 
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
+License for package CMake 3.22.1 accepted.
+Preparing "Install CMake 3.22.1 v.3.22.1".
+"Install CMake 3.22.1 v.3.22.1" ready.
+Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+"Install CMake 3.22.1 v.3.22.1" complete.
+"Install CMake 3.22.1 v.3.22.1" finished.
+lib/chat_screen.dart:1636:27: Error: Can't find ']' to match '['.
+                children: [
+                          ^
+lib/chat_screen.dart:1630:19: Error: Can't find ')' to match '('.
+          SafeArea(
+                  ^
+lib/chat_screen.dart:1251:41: Error: Too few positional arguments: 4 required, 3 given.
+        unawaited(_showIncomingGroupCall(callId, fromName, video));
+                                        ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command '/opt/hostedtoolcache/flutter/stable-3.44.8-x64/flutter/bin/flutter'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3m 31s
+Running Gradle task 'assembleRelease'...                          212.3s
+Gradle task assembleRelease failed with exit code 1
