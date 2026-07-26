@@ -143,6 +143,12 @@ def main() -> None:
 
     replace(
         'lib/chat_screen.dart',
+        "    } else if (status == 'cancelled') {\n      subtitle = ru ? 'Звонок отменён' : 'Call cancelled';",
+        "    } else if (status == 'cancelled') {\n      subtitle = mine\n          ? (ru ? 'Звонок отменён' : 'Call cancelled')\n          : (ru ? 'Пропущенный звонок' : 'Missed call');",
+    )
+
+    replace(
+        'lib/chat_screen.dart',
         "  void dispose() {\n    unawaited(_subscription?.cancel());",
         "  void dispose() {\n    unawaited(ChernogramSound.stopIncomingCall());\n    unawaited(_subscription?.cancel());",
     )
