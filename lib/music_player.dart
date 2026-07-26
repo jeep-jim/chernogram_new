@@ -9,7 +9,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 
-import 'brand.dart';
 import 'core_models.dart';
 
 class CgMusicTrack {
@@ -43,7 +42,7 @@ class CgMusicHub {
     int initialIndex = 0,
   }) async {
     if (tracks.isEmpty) return;
-    final safeIndex = initialIndex.clamp(0, tracks.length - 1);
+    final safeIndex = initialIndex.clamp(0, tracks.length - 1).toInt();
     queue.value = List<CgMusicTrack>.unmodifiable(tracks);
     await _indexSubscription?.cancel();
     _indexSubscription = player.currentIndexStream.listen((index) {
@@ -378,7 +377,9 @@ class _MusicNowPlaying extends StatelessWidget {
               child: StreamBuilder<int?>(
                 stream: hub.player.currentIndexStream,
                 builder: (context, indexSnapshot) {
-                  final index = (indexSnapshot.data ?? 0).clamp(0, queue.length - 1);
+                  final index = (indexSnapshot.data ?? 0)
+                      .clamp(0, queue.length - 1)
+                      .toInt();
                   final track = queue[index];
                   return Column(
                     mainAxisSize: MainAxisSize.min,
