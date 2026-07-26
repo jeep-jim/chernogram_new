@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#080808" />
-  <title>Чернограм — приватные туннели между устройствами</title>
+  <title>Чернограм — открыть туннель</title>
   <style>
     :root{color-scheme:dark;--bg:#080808;--card:#151210;--orange:#e96800;--gold:#c99a45;--text:#fff;--muted:#b9b3ac}
-    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;display:grid;place-items:center;padding:24px}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;display:grid;place-items:center;padding:22px}
     main{width:min(680px,100%);background:linear-gradient(145deg,#1e130d,#0d0c0b);border:1px solid #3b2a1d;border-radius:28px;padding:28px;box-shadow:0 22px 70px #0008}
-    .logo{width:112px;height:112px;margin:auto;display:block}.brand{text-align:center;margin:12px 0 4px;font-size:28px;font-weight:900;letter-spacing:1.2px}.tag{text-align:center;color:var(--muted);line-height:1.5;margin-bottom:24px}
-    .actions{display:grid;gap:12px}.btn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;border-radius:18px;padding:15px 18px;font-weight:800;border:1px solid #5f4930;color:#fff;background:#21170f}.btn.primary{background:var(--orange);border-color:var(--orange)}.btn[hidden]{display:none}
-    .note{margin-top:18px;padding:14px 16px;border-radius:16px;background:#171411;color:var(--muted);font-size:13px;line-height:1.5}.token{overflow-wrap:anywhere;color:#f1c56d}.small{text-align:center;color:#756e68;font-size:12px;margin-top:14px}
+    .logo{width:106px;height:106px;margin:auto;display:block}.brand{text-align:center;margin:12px 0 4px;font-size:28px;font-weight:900;letter-spacing:1.2px}.tag{text-align:center;color:var(--muted);line-height:1.5;margin-bottom:22px}
+    .actions{display:grid;gap:12px}.btn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;border-radius:18px;padding:15px 18px;font-weight:800;border:1px solid #5f4930;color:#fff;background:#21170f}.btn.primary{background:var(--orange);border-color:var(--orange)}.btn.install{background:#fff;color:#16110d;border-color:#fff}.btn[hidden]{display:none}
+    .status{margin:16px 0 0;padding:13px 15px;border-radius:16px;background:#171411;color:var(--muted);font-size:13px;line-height:1.5}.token{overflow-wrap:anywhere;color:#f1c56d;max-height:72px;overflow:auto}.small{text-align:center;color:#756e68;font-size:12px;margin-top:14px}.pulse{animation:pulse 1.2s ease-in-out 2}@keyframes pulse{50%{transform:scale(1.025);box-shadow:0 0 0 8px #e9680025}}
   </style>
 </head>
 <body>
@@ -23,27 +23,68 @@
     <path fill="#090909" d="m120 315 380 220-350 270h35l350-260v-25L155 300z"/>
   </svg>
   <div class="brand">ЧЕРНОГРАМ</div>
-  <div class="tag">Приватные туннели, файлы, чат и связь между вашими устройствами.</div>
+  <div class="tag">Откройте приватный туннель или установите приложение на это устройство.</div>
   <div class="actions">
-    <a id="openApp" class="btn primary" href="chernogram://join">Открыть в Чернограме</a>
-    <a id="android" class="btn" href="https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk">Скачать для Android</a>
+    <a id="openApp" class="btn primary" href="chernogram://join">Открыть туннель в приложении</a>
+    <a id="android" class="btn install" href="https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk">Установить Чернограм для Android</a>
     <a id="ios" class="btn" href="#" hidden>Версия для iPhone готовится</a>
     <a id="mac" class="btn" href="#" hidden>Версия для macOS готовится</a>
+    <button id="copy" class="btn" type="button">Скопировать код приглашения</button>
   </div>
-  <div class="note">Приглашение: <span id="invite" class="token">не указано</span><br>Файлы и сообщения не загружаются на эту страницу. Она только открывает приложение или помогает установить его.</div>
-  <div class="small">Временная страница проекта. Позже переедет на официальный домен .com.</div>
+  <div id="status" class="status">Проверяем, установлен ли Чернограм…</div>
+  <div class="status">Код приглашения:<div id="invite" class="token">не указан</div></div>
+  <div class="small">Файлы и сообщения на этой странице не хранятся. Она только открывает приложение или помогает установить его.</div>
 </main>
 <script>
   const params = new URLSearchParams(location.search);
   const token = params.get('invite') || params.get('t') || location.hash.replace(/^#/, '');
   const deep = token ? `chernogram://join/${encodeURIComponent(token)}` : 'chernogram://join';
-  document.getElementById('openApp').href = deep;
-  document.getElementById('invite').textContent = token || 'не указано';
+  const apk = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=8';
+  const openButton = document.getElementById('openApp');
+  const androidButton = document.getElementById('android');
+  const status = document.getElementById('status');
+  openButton.href = deep;
+  androidButton.href = apk;
+  document.getElementById('invite').textContent = token || 'не указан';
+
   const ua = navigator.userAgent.toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) { document.getElementById('ios').hidden = false; document.getElementById('android').hidden = true; }
-  if (/macintosh|mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua)) document.getElementById('mac').hidden = false;
-  let timer = setTimeout(() => {}, 1200);
-  document.getElementById('openApp').addEventListener('click', () => clearTimeout(timer));
+  const isAndroid = /android/.test(ua);
+  const isIos = /iphone|ipad|ipod/.test(ua);
+  const isMac = /macintosh|mac os x/.test(ua) && !isIos;
+
+  if (isIos) {
+    document.getElementById('ios').hidden = false;
+    androidButton.hidden = true;
+    status.textContent = 'Если Чернограм уже установлен, нажмите «Открыть». Версия для App Store готовится.';
+  } else if (isMac) {
+    document.getElementById('mac').hidden = false;
+    status.textContent = 'На Mac можно открыть установленное приложение. Версия установщика готовится.';
+  } else if (isAndroid) {
+    status.textContent = 'Пробуем открыть Чернограм. Если приложение не установлено, нажмите кнопку установки ниже.';
+  } else {
+    status.textContent = 'Откройте ссылку на Android-устройстве или скачайте APK вручную.';
+  }
+
+  document.getElementById('copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(token || location.href);
+      status.textContent = 'Код приглашения скопирован.';
+    } catch (_) {
+      status.textContent = 'Не удалось скопировать автоматически. Удерживайте код приглашения выше.';
+    }
+  });
+
+  if (token && (isAndroid || isIos)) {
+    setTimeout(() => { location.href = deep; }, 250);
+    setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        status.textContent = isAndroid
+          ? 'Приложение не открылось. Установите Чернограм, затем снова откройте эту ссылку.'
+          : 'Приложение не открылось. Версия для iPhone пока готовится.';
+        if (isAndroid) androidButton.classList.add('pulse');
+      }
+    }, 1500);
+  }
 </script>
 </body>
 </html>
