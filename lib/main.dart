@@ -19,16 +19,21 @@ class ChernogramApp extends StatefulWidget {
 
 class _ChernogramAppState extends State<ChernogramApp> {
   bool? _ru;
+  bool _darkMode = true;
 
   @override
   void initState() {
     super.initState();
-    _loadLanguage();
+    _loadSettings();
   }
 
-  Future<void> _loadLanguage() async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    if (mounted) setState(() => _ru = prefs.getString('lang') != 'en');
+    if (!mounted) return;
+    setState(() {
+      _ru = prefs.getString('lang') != 'en';
+      _darkMode = prefs.getBool('dark_mode') ?? true;
+    });
   }
 
   Future<void> _toggleLanguage() async {
@@ -38,12 +43,21 @@ class _ChernogramAppState extends State<ChernogramApp> {
     if (mounted) setState(() => _ru = value);
   }
 
+  Future<void> _toggleTheme() async {
+    final value = !_darkMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dark_mode', value);
+    if (mounted) setState(() => _darkMode = value);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Chernogram',
-      theme: chernogramTheme(),
+      theme: chernogramLightTheme(),
+      darkTheme: chernogramTheme(),
+      themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       home: _ru == null
           ? const Scaffold(
               body: Center(
@@ -59,6 +73,8 @@ class _ChernogramAppState extends State<ChernogramApp> {
                   ru: _ru!,
                   manual: true,
                 ),
+                darkMode: _darkMode,
+                onToggleTheme: _toggleTheme,
               ),
             ),
     );
