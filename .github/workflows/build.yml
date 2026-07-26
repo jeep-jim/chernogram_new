@@ -85,6 +85,7 @@ jobs:
           python3 tooling/fix_v09_compile.py
           python3 tooling/fix_v091_player_header.py
           python3 tooling/fix_v010_rtc_circles.py
+          python3 tooling/fix_v0101_chat_keyboard.py
 
       - name: Validate and build release APK
         id: build_apk
@@ -149,8 +150,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.10: непрерывное восстановление WebRTC после смены или просадки сети, повтор offer/answer/ICE, расширенный набор STUN/TURN-маршрутов, усиленное эхоподавление, шумоподавление и автогейн. Групповые звонки получили heartbeat, повтор сигналинга, дедупликацию ICE и автоматический ICE-restart. Видеокружок записывается с кольцом оставшегося времени и отображается в чате настоящим круглым видеосообщением.",
-            "notesEn": "Chernogram 0.10: continuous WebRTC recovery after network changes or drops, offer/answer/ICE retries, broader STUN/TURN routing, stronger echo cancellation, noise suppression and automatic gain. Group calls add heartbeat signalling, replay, ICE deduplication and automatic ICE restarts. Video circles now record with a remaining-time ring and render as real circular messages in chat."
+            "notesRu": "Чернограм 0.10.1: чат открывается на последних сообщениях, клавиатура не появляется сама и закрывается касанием или свайпом по чату. Настройки доступны всем участникам и показывают параметры чата; владелец управляет общими параметрами, любой участник может выйти и полностью удалить локальную историю и файлы. Голосовые, аудио и кружки отображаются без внешнего цветного облака. Исправлена видимость времени и батареи в светлой теме. На главной: Сообщения, файлы и звонки без vpn.",
+            "notesEn": "Chernogram 0.10.1: chats open on the latest messages, the keyboard no longer appears automatically and dismisses on tap or drag. Every member can view full chat information; the owner controls shared settings, while any member can leave and permanently remove local history and files. Voice, audio and circle messages render without an outer coloured bubble. Light-theme system bar contrast is fixed."
           }
           EOF
 
@@ -168,7 +169,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Усиленный P2P WebRTC: непрерывное восстановление медиаканала, повтор сигналинга, heartbeat групповых комнат, ICE-restart, эхоподавление и профиль качества для звонков до шести участников. Видеокружки получили кольцо времени и круглый вид прямо в чате. APK подписан тем же постоянным ключом." \
+              --notes "Исправлено открытие чата на последних сообщениях, поведение клавиатуры, полные настройки для всех участников, выход с полным локальным удалением, прозрачное отображение голосовых и кружков, а также системная панель светлой темы. APK подписан тем же постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -208,7 +209,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.10 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.10.1 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -233,5 +234,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.10 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.10.1 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
