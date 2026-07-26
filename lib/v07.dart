@@ -5,6 +5,7 @@ import 'package:app_links/app_links.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'agent_screen.dart';
 import 'brand.dart';
@@ -36,6 +37,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
   StreamSubscription<Uri>? _linkSubscription;
   CgProfile? _profile;
   List<CgTunnel> _tunnels = <CgTunnel>[];
+  List<CgContact> _contacts = <CgContact>[];
   bool _loading = true;
   bool _privacyLens = false;
   int _tab = 0;
@@ -49,11 +51,13 @@ class _ChernogramV07State extends State<ChernogramV07> {
   Future<void> _bootstrap() async {
     final profile = await CgStore.loadOrCreateProfile();
     final tunnels = await CgStore.loadTunnels();
+    final contacts = await CgStore.loadContacts();
     final privacy = await CgStore.loadPrivacyLens();
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _tunnels = tunnels;
+      _contacts = contacts;
       _privacyLens = privacy;
       _loading = false;
     });
@@ -121,7 +125,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
         ),
         title: Text(widget.ru ? 'Подключиться?' : 'Join tunnel?'),
         content: Text(
-          '${tunnel.displayName}\n\n${widget.ru ? 'Сообщения и звонки работают через интернет, даже если участники находятся в разных сетях.' : 'Messages and calls work over the internet even when participants use different networks.'}',
+          '${tunnel.displayName}\n\n${widget.ru ? 'Чат, файлы и звонки работают через интернет между разными сетями.' : 'Chat, files and calls work across different networks.'}',
           textAlign: TextAlign.center,
         ),
         actions: [
@@ -176,7 +180,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.ru ? 'Новый туннель' : 'New tunnel',
+                  widget.ru ? 'Новый чат' : 'New chat',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w900,
                       ),
@@ -184,10 +188,13 @@ class _ChernogramV07State extends State<ChernogramV07> {
                 const SizedBox(height: 6),
                 Text(
                   widget.ru
-                      ? 'Название можно не вводить — туннель создастся сразу и предложит отправить ссылку.'
-                      : 'The name is optional. The tunnel opens immediately and offers an invite.',
+                      ? 'Название можно не вводить. Чат создастся сразу и предложит отправить приглашение.'
+                      : 'The name is optional. The chat opens immediately and offers an invite.',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .56),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: .56),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -195,8 +202,11 @@ class _ChernogramV07State extends State<ChernogramV07> {
                   controller: name,
                   autofocus: true,
                   decoration: InputDecoration(
-                    labelText: widget.ru ? 'Название — необязательно' : 'Name — optional',
-                    hintText: widget.ru ? 'Можно оставить пустым' : 'You may leave it empty',
+                    labelText:
+                        widget.ru ? 'Название — необязательно' : 'Name — optional',
+                    hintText: widget.ru
+                        ? 'Например: Семья'
+                        : 'For example: Family',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -204,7 +214,9 @@ class _ChernogramV07State extends State<ChernogramV07> {
                   value: isPrivate,
                   contentPadding: EdgeInsets.zero,
                   secondary: Icon(
-                    isPrivate ? Icons.visibility_off_outlined : Icons.public,
+                    isPrivate
+                        ? Icons.visibility_off_outlined
+                        : Icons.public,
                   ),
                   title: Text(
                     isPrivate
@@ -215,13 +227,14 @@ class _ChernogramV07State extends State<ChernogramV07> {
                   subtitle: Text(
                     isPrivate
                         ? (widget.ru
-                            ? 'Секретная ссылка и сквозное шифрование.'
-                            : 'Secret invite and end-to-end encryption.')
+                            ? 'Вход только по секретной ссылке или QR.'
+                            : 'Join only with the secret invite or QR.')
                         : (widget.ru
                             ? 'Ссылку можно свободно пересылать.'
                             : 'The invite can be freely forwarded.'),
                   ),
-                  onChanged: (value) => setSheetState(() => isPrivate = value),
+                  onChanged: (value) =>
+                      setSheetState(() => isPrivate = value),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -232,7 +245,11 @@ class _ChernogramV07State extends State<ChernogramV07> {
                       (name: name.text.trim(), isPrivate: isPrivate),
                     ),
                     icon: const Icon(Icons.arrow_forward_rounded),
-                    label: Text(widget.ru ? 'Создать и пригласить' : 'Create and invite'),
+                    label: Text(
+                      widget.ru
+                          ? 'Создать и пригласить'
+                          : 'Create and invite',
+                    ),
                   ),
                 ),
               ],
@@ -256,7 +273,10 @@ class _ChernogramV07State extends State<ChernogramV07> {
     await _openTunnel(tunnel, autoInvite: true);
   }
 
-  Future<void> _openTunnel(CgTunnel tunnel, {bool autoInvite = false}) async {
+  Future<void> _openTunnel(
+    CgTunnel tunnel, {
+    bool autoInvite = false,
+  }) async {
     final profile = _profile;
     if (profile == null || !mounted) return;
     await Navigator.push<void>(
@@ -269,6 +289,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
           privacyLens: _privacyLens,
           autoInvite: autoInvite,
           onChanged: _updateTunnel,
+          onContactSeen: _rememberContact,
         ),
       ),
     );
@@ -283,8 +304,63 @@ class _ChernogramV07State extends State<ChernogramV07> {
       copy[index] = updated;
       _tunnels = copy;
     }
+    _tunnels.sort((a, b) {
+      final aTime =
+          a.messages.isEmpty ? a.createdAt : a.messages.last.sentAt;
+      final bTime =
+          b.messages.isEmpty ? b.createdAt : b.messages.last.sentAt;
+      return bTime.compareTo(aTime);
+    });
     if (mounted) setState(() {});
     unawaited(CgStore.saveTunnels(_tunnels));
+  }
+
+  void _rememberContact(CgContact incoming) {
+    if (incoming.id.isEmpty || incoming.id == _profile?.id) return;
+    final index = _contacts.indexWhere((item) => item.id == incoming.id);
+    if (index < 0) {
+      _contacts = [incoming, ..._contacts];
+    } else {
+      final existing = _contacts[index];
+      final tunnelIds = <String>{
+        ...existing.tunnelIds,
+        ...incoming.tunnelIds,
+      }.toList();
+      final updated = existing.copyWith(
+        nickname: incoming.nickname.trim().isEmpty
+            ? existing.nickname
+            : incoming.nickname,
+        lastSeenAt: incoming.lastSeenAt,
+        tunnelIds: tunnelIds,
+        avatarBase64: incoming.avatarBase64,
+      );
+      final copy = [..._contacts];
+      copy[index] = updated;
+      _contacts = copy;
+    }
+    _contacts.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    if (mounted) setState(() {});
+    unawaited(CgStore.saveContacts(_contacts));
+  }
+
+  Future<void> _openContact(CgContact contact) async {
+    for (final tunnelId in contact.tunnelIds) {
+      final index = _tunnels.indexWhere((item) => item.id == tunnelId);
+      if (index >= 0) {
+        await _openTunnel(_tunnels[index]);
+        return;
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.ru
+              ? 'Чат с этим контактом пока не найден.'
+              : 'No chat was found for this contact.',
+        ),
+      ),
+    );
   }
 
   Future<void> _saveProfile(CgProfile profile) async {
@@ -312,13 +388,19 @@ class _ChernogramV07State extends State<ChernogramV07> {
       );
     }
     final pages = <Widget>[
-      _TunnelsHome(
+      _ChatsHome(
         ru: widget.ru,
         tunnels: _tunnels,
         privacyLens: _privacyLens,
         onCreate: _createTunnel,
         onScan: _scanQr,
         onOpen: _openTunnel,
+      ),
+      _ContactsScreen(
+        ru: widget.ru,
+        contacts: _contacts,
+        privacyLens: _privacyLens,
+        onOpen: _openContact,
       ),
       CgAgentScreen(
         ru: widget.ru,
@@ -328,7 +410,6 @@ class _ChernogramV07State extends State<ChernogramV07> {
         onCreateTunnel: _createTunnel,
         onTogglePrivacy: _togglePrivacy,
       ),
-      _DevicesScreen(ru: widget.ru, profile: _profile!),
       _ProfileScreen(
         ru: widget.ru,
         profile: _profile!,
@@ -341,9 +422,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
       extendBody: true,
       appBar: AppBar(
         title: BrandHeader(
-          subtitle: widget.ru
-              ? 'ЗАЩИЩЁННЫЕ ТУННЕЛИ И ЗВОНКИ'
-              : 'SECURE TUNNELS AND CALLS',
+          subtitle: widget.ru ? 'ЧАТЫ И ЗВОНКИ' : 'CHATS AND CALLS',
         ),
         actions: [
           GlassIconButton(
@@ -366,7 +445,9 @@ class _ChernogramV07State extends State<ChernogramV07> {
               PopupMenuItem(
                 value: 'theme',
                 child: ListTile(
-                  leading: Icon(widget.darkMode ? Icons.light_mode : Icons.dark_mode),
+                  leading: Icon(
+                    widget.darkMode ? Icons.light_mode : Icons.dark_mode,
+                  ),
                   title: Text(
                     widget.darkMode
                         ? (widget.ru ? 'Светлая тема' : 'Light theme')
@@ -385,7 +466,11 @@ class _ChernogramV07State extends State<ChernogramV07> {
                 value: 'update',
                 child: ListTile(
                   leading: const Icon(Icons.system_update_alt_rounded),
-                  title: Text(widget.ru ? 'Проверить обновления' : 'Check updates'),
+                  title: Text(
+                    widget.ru
+                        ? 'Проверить обновления'
+                        : 'Check updates',
+                  ),
                 ),
               ),
             ],
@@ -401,17 +486,17 @@ class _ChernogramV07State extends State<ChernogramV07> {
           NavigationDestination(
             icon: const Icon(Icons.forum_outlined),
             selectedIcon: const Icon(Icons.forum_rounded),
-            label: widget.ru ? 'Туннели' : 'Tunnels',
+            label: widget.ru ? 'Чаты' : 'Chats',
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.people_outline_rounded),
+            selectedIcon: const Icon(Icons.people_rounded),
+            label: widget.ru ? 'Контакты' : 'Contacts',
           ),
           NavigationDestination(
             icon: const Icon(Icons.auto_awesome_outlined),
             selectedIcon: const Icon(Icons.auto_awesome_rounded),
             label: widget.ru ? 'Агент' : 'Agent',
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.devices_outlined),
-            selectedIcon: const Icon(Icons.devices_rounded),
-            label: widget.ru ? 'Устройства' : 'Devices',
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),
@@ -424,7 +509,7 @@ class _ChernogramV07State extends State<ChernogramV07> {
   }
 }
 
-class _TunnelsHome extends StatelessWidget {
+class _ChatsHome extends StatelessWidget {
   final bool ru;
   final List<CgTunnel> tunnels;
   final bool privacyLens;
@@ -432,7 +517,7 @@ class _TunnelsHome extends StatelessWidget {
   final VoidCallback onScan;
   final Future<void> Function(CgTunnel tunnel) onOpen;
 
-  const _TunnelsHome({
+  const _ChatsHome({
     required this.ru,
     required this.tunnels,
     required this.privacyLens,
@@ -454,14 +539,17 @@ class _TunnelsHome extends StatelessWidget {
             children: [
               Text(
                 ru ? 'Связь без границ' : 'Connection without borders',
-                style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                style:
+                    const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 5),
               Text(
                 ru
-                    ? 'Создайте туннель за одно нажатие. Сообщения и звонки работают между разными городами и сетями.'
-                    : 'Create a tunnel in one tap. Messages and calls work across cities and networks.',
-                style: TextStyle(color: scheme.onSurface.withValues(alpha: .57)),
+                    ? 'Сообщения, файлы и звонки между разными городами и сетями.'
+                    : 'Messages, files and calls across cities and networks.',
+                style: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: .57),
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -471,7 +559,7 @@ class _TunnelsHome extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onCreate,
                       icon: const Icon(Icons.add_rounded),
-                      label: Text(ru ? 'Новый туннель' : 'New tunnel'),
+                      label: Text(ru ? 'Новый чат' : 'New chat'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -479,7 +567,7 @@ class _TunnelsHome extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: onScan,
                       icon: const Icon(Icons.qr_code_scanner_rounded),
-                      label: Text(ru ? 'QR' : 'QR'),
+                      label: const Text('QR'),
                     ),
                   ),
                 ],
@@ -492,13 +580,16 @@ class _TunnelsHome extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                ru ? 'Мои туннели' : 'My tunnels',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ru ? 'Чаты' : 'Chats',
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
             ),
             Text(
               '${tunnels.length}',
-              style: TextStyle(color: scheme.onSurface.withValues(alpha: .45)),
+              style: TextStyle(
+                color: scheme.onSurface.withValues(alpha: .45),
+              ),
             ),
           ],
         ),
@@ -508,19 +599,25 @@ class _TunnelsHome extends StatelessWidget {
             padding: const EdgeInsets.only(top: 50),
             child: Column(
               children: [
-                Icon(Icons.forum_outlined, size: 68, color: scheme.onSurface.withValues(alpha: .18)),
+                Icon(
+                  Icons.forum_outlined,
+                  size: 68,
+                  color: scheme.onSurface.withValues(alpha: .18),
+                ),
                 const SizedBox(height: 12),
                 Text(
-                  ru ? 'Туннелей пока нет' : 'No tunnels yet',
+                  ru ? 'Чатов пока нет' : 'No chats yet',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   ru
-                      ? 'Название вводить необязательно — нажмите «Новый туннель».'
-                      : 'A name is optional — tap New tunnel.',
+                      ? 'Создайте чат или подключитесь по QR.'
+                      : 'Create a chat or join with a QR code.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: scheme.onSurface.withValues(alpha: .48)),
+                  style: TextStyle(
+                    color: scheme.onSurface.withValues(alpha: .48),
+                  ),
                 ),
               ],
             ),
@@ -553,6 +650,29 @@ class _TunnelTile extends StatelessWidget {
     required this.onTap,
   });
 
+  String _lastText(CgMessage? message) {
+    if (message == null) return ru ? 'Готов к приглашению' : 'Ready to invite';
+    if (message.deleted) return ru ? 'Сообщение удалено' : 'Message deleted';
+    if (message.type == 'call') {
+      final video = message.meta['video'] == true;
+      final group = message.meta['group'] == true;
+      if (group) {
+        return video
+            ? (ru ? 'Групповой видеозвонок' : 'Group video call')
+            : (ru ? 'Групповой звонок' : 'Group call');
+      }
+      return video
+          ? (ru ? 'Видеозвонок' : 'Video call')
+          : (ru ? 'Аудиозвонок' : 'Audio call');
+    }
+    if (message.attachment != null) {
+      return ru
+          ? 'Вложение: ${message.attachment!.name}'
+          : 'Attachment: ${message.attachment!.name}';
+    }
+    return message.text;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -578,7 +698,10 @@ class _TunnelTile extends StatelessWidget {
                             privacyLens ? '••••••••' : tunnel.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                         Icon(
@@ -586,19 +709,15 @@ class _TunnelTile extends StatelessWidget {
                               ? Icons.visibility_off_outlined
                               : Icons.public,
                           size: 16,
-                          color: tunnel.isPrivate ? scheme.primary : scheme.secondary,
+                          color: tunnel.isPrivate
+                              ? scheme.primary
+                              : scheme.secondary,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      last == null
-                          ? (ru ? 'Готов к приглашению' : 'Ready to invite')
-                          : privacyLens
-                              ? '••••••••••••'
-                              : last.attachment != null
-                                  ? (ru ? 'Вложение: ${last.attachment!.name}' : 'Attachment: ${last.attachment!.name}')
-                                  : last.text,
+                      privacyLens ? '••••••••••••' : _lastText(last),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -659,106 +778,127 @@ class _TunnelListAvatar extends StatelessWidget {
   }
 }
 
-class _DevicesScreen extends StatelessWidget {
+class _ContactsScreen extends StatelessWidget {
   final bool ru;
-  final CgProfile profile;
+  final List<CgContact> contacts;
+  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
 
-  const _DevicesScreen({required this.ru, required this.profile});
-
-  @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
-        children: [
-          Text(
-            ru ? 'Сеть и устройства' : 'Network and devices',
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 12),
-          GlassPanel(
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const CircleAvatar(child: Icon(Icons.smartphone_rounded)),
-              title: Text(
-                ru ? 'Это устройство' : 'This device',
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-              subtitle: Text('ID ${profile.id}'),
-              trailing: const Chip(
-                avatar: Icon(Icons.circle, size: 9, color: ChernogramColors.success),
-                label: Text('ONLINE'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          _RouteCard(
-            icon: Icons.public_rounded,
-            title: ru ? 'Глобальный relay' : 'Global relay',
-            subtitle: ru
-                ? 'Переписка между разными городами, операторами и Wi‑Fi.'
-                : 'Messaging across cities, carriers and Wi-Fi networks.',
-            status: ru ? 'АКТИВНО' : 'ACTIVE',
-          ),
-          _RouteCard(
-            icon: Icons.lock_outline_rounded,
-            title: ru ? 'Сквозное шифрование' : 'End-to-end encryption',
-            subtitle: ru
-                ? 'Relay получает только AES-256-GCM шифротекст.'
-                : 'The relay receives AES-256-GCM ciphertext only.',
-            status: ru ? 'АКТИВНО' : 'ACTIVE',
-          ),
-          _RouteCard(
-            icon: Icons.call_outlined,
-            title: 'WebRTC + STUN/TURN',
-            subtitle: ru
-                ? 'Прямые аудио- и видеозвонки с relay-резервом.'
-                : 'Direct audio/video calls with relay fallback.',
-            status: 'BETA',
-          ),
-          _RouteCard(
-            icon: Icons.wifi_rounded,
-            title: ru ? 'Локальный ускоритель' : 'Local accelerator',
-            subtitle: ru
-                ? 'Позже большие файлы будут идти напрямую в одной сети.'
-                : 'Large files will later use a direct local route.',
-            status: ru ? 'СКОРО' : 'SOON',
-          ),
-        ],
-      );
-}
-
-class _RouteCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String status;
-
-  const _RouteCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.status,
+  const _ContactsScreen({
+    required this.ru,
+    required this.contacts,
+    required this.privacyLens,
+    required this.onOpen,
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Card(
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-            subtitle: Text(subtitle),
-            trailing: Text(
-              status,
-              style: const TextStyle(
-                fontSize: 8,
-                fontWeight: FontWeight.w900,
-                color: ChernogramColors.success,
-              ),
-            ),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 112),
+      children: [
+        Text(
+          ru ? 'Контакты' : 'Contacts',
+          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          ru
+              ? 'Здесь сохраняются люди, с которыми вы общались.'
+              : 'People you have chatted with are saved here.',
+          style: TextStyle(
+            color: scheme.onSurface.withValues(alpha: .56),
           ),
         ),
-      );
+        const SizedBox(height: 16),
+        if (contacts.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 60),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.people_outline_rounded,
+                  size: 70,
+                  color: scheme.onSurface.withValues(alpha: .18),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  ru ? 'Контактов пока нет' : 'No contacts yet',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          )
+        else
+          for (final contact in contacts)
+            Card(
+              child: ListTile(
+                onTap: () => onOpen(contact),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                leading: _ContactAvatar(contact: contact),
+                title: Text(
+                  privacyLens ? '••••••••' : '@${contact.nickname}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                subtitle: Text(
+                  privacyLens
+                      ? '••••••••'
+                      : _lastSeen(contact.lastSeenAt, ru),
+                ),
+                trailing: const Icon(Icons.chat_bubble_outline_rounded),
+              ),
+            ),
+      ],
+    );
+  }
+
+  static String _lastSeen(DateTime value, bool ru) {
+    final now = DateTime.now();
+    final difference = now.difference(value);
+    if (difference.inMinutes < 1) return ru ? 'только что' : 'just now';
+    if (difference.inHours < 1) {
+      return ru
+          ? '${difference.inMinutes} мин назад'
+          : '${difference.inMinutes} min ago';
+    }
+    if (difference.inDays < 1) {
+      return ru
+          ? '${difference.inHours} ч назад'
+          : '${difference.inHours} h ago';
+    }
+    return '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}';
+  }
+}
+
+class _ContactAvatar extends StatelessWidget {
+  final CgContact contact;
+
+  const _ContactAvatar({required this.contact});
+
+  @override
+  Widget build(BuildContext context) {
+    if (contact.avatarBase64 != null) {
+      try {
+        return CircleAvatar(
+          backgroundImage: MemoryImage(base64Decode(contact.avatarBase64!)),
+        );
+      } catch (_) {}
+    }
+    final letter = contact.nickname.trim().isEmpty
+        ? '?'
+        : contact.nickname.trim()[0].toUpperCase();
+    return CircleAvatar(
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      child: Text(
+        letter,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
 }
 
 class _ProfileScreen extends StatefulWidget {
@@ -784,11 +924,20 @@ class _ProfileScreenState extends State<_ProfileScreen> {
   late final TextEditingController _nickname =
       TextEditingController(text: widget.profile.nickname);
   String? _avatarBase64;
+  String _version = '';
 
   @override
   void initState() {
     super.initState();
     _avatarBase64 = widget.profile.avatarBase64;
+    unawaited(_loadVersion());
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() => _version = '${info.version} (${info.buildNumber})');
+    }
   }
 
   Future<void> _pickAvatar() async {
@@ -807,7 +956,9 @@ class _ProfileScreenState extends State<_ProfileScreen> {
     if (nickname.length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.ru ? 'Минимум 3 символа.' : 'Use at least 3 characters.'),
+          content: Text(
+            widget.ru ? 'Минимум 3 символа.' : 'Use at least 3 characters.',
+          ),
         ),
       );
       return;
@@ -819,7 +970,11 @@ class _ProfileScreenState extends State<_ProfileScreen> {
       ),
     );
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(widget.ru ? 'Профиль сохранён' : 'Profile saved')),
+      SnackBar(
+        content: Text(
+          widget.ru ? 'Профиль сохранён' : 'Profile saved',
+        ),
+      ),
     );
   }
 
@@ -846,12 +1001,16 @@ class _ProfileScreenState extends State<_ProfileScreen> {
                   ),
                   Container(
                     decoration: const BoxDecoration(
-                      color: ChernogramColors.orange,
+                      color: Color(0xFF18B8FF),
                       shape: BoxShape.circle,
                     ),
                     child: const Padding(
                       padding: EdgeInsets.all(9),
-                      child: Icon(Icons.photo_camera_outlined, color: Colors.white, size: 20),
+                      child: Icon(
+                        Icons.photo_camera_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
@@ -862,15 +1021,37 @@ class _ProfileScreenState extends State<_ProfileScreen> {
           Center(
             child: Text(
               '@${widget.profile.nickname}',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
             ),
           ),
           Center(
             child: Text(
               'ID ${widget.profile.id}',
-              style: const TextStyle(fontSize: 11, color: ChernogramColors.gold),
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: .48),
+              ),
             ),
           ),
+          if (_version.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Center(
+              child: Text(
+                '${widget.ru ? 'Версия' : 'Version'} $_version',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: .48),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           TextField(
             controller: _nickname,
@@ -884,29 +1065,22 @@ class _ProfileScreenState extends State<_ProfileScreen> {
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.save_outlined),
-            label: Text(widget.ru ? 'Сохранить профиль' : 'Save profile'),
+            label: Text(
+              widget.ru ? 'Сохранить профиль' : 'Save profile',
+            ),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: widget.onCheckUpdates,
             icon: const Icon(Icons.system_update_alt_rounded),
-            label: Text(widget.ru ? 'Проверить обновления' : 'Check updates'),
+            label: Text(
+              widget.ru ? 'Проверить обновления' : 'Check updates',
+            ),
           ),
           OutlinedButton.icon(
             onPressed: widget.onChangeLanguage,
             icon: const Icon(Icons.language),
             label: Text(widget.ru ? 'English' : 'Русский'),
-          ),
-          const SizedBox(height: 16),
-          GlassPanel(
-            child: Text(
-              widget.ru
-                  ? 'Чернограм не хранит seed-фразы и пароли кошельков. Будущий кошелёк будет подключать внешние приложения через подтверждение каждой операции.'
-                  : 'Chernogram will never store wallet seed phrases. Future wallet connections will require approval for every transaction.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .58),
-              ),
-            ),
           ),
         ],
       );
@@ -937,7 +1111,8 @@ class _ProfileAvatar extends StatelessWidget {
         );
       } catch (_) {}
     }
-    final letter = nickname.trim().isEmpty ? '?' : nickname.trim()[0].toUpperCase();
+    final letter =
+        nickname.trim().isEmpty ? '?' : nickname.trim()[0].toUpperCase();
     return Container(
       width: size,
       height: size,
@@ -1002,7 +1177,9 @@ class _CgQrScannerState extends State<CgQrScanner> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: Text(widget.ru ? 'Сканировать приглашение' : 'Scan invite'),
+          title: Text(
+            widget.ru ? 'Сканировать приглашение' : 'Scan invite',
+          ),
         ),
         body: Stack(
           fit: StackFit.expand,
@@ -1013,7 +1190,10 @@ class _CgQrScannerState extends State<CgQrScanner> {
                 width: 250,
                 height: 250,
                 decoration: BoxDecoration(
-                  border: Border.all(color: ChernogramColors.goldLight, width: 3),
+                  border: Border.all(
+                    color: const Color(0xFF18B8FF),
+                    width: 3,
+                  ),
                   borderRadius: BorderRadius.circular(32),
                 ),
               ),
