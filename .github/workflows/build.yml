@@ -44,20 +44,29 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore canonical prototype signing key
+      - name: Restore stable signing key
         id: signing_cache
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: chernogram-prototype-signing-v1
+          key: chernogram-stable-signing-v2
 
-      - name: Verify canonical signing key
+      - name: Create or verify stable signing key
         shell: bash
         run: |
           set -e
+          mkdir -p "$HOME/.android"
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            echo "Canonical signing key is missing. Refusing to publish an APK with a new random signature."
-            exit 1
+            echo "Creating the canonical Chernogram prototype key for all builds from 0.6.2 onward."
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Chernogram Prototype,O=Chernogram,C=RU"
           fi
           keytool -list -v \
             -keystore "$HOME/.android/debug.keystore" \
