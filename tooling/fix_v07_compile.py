@@ -20,6 +20,22 @@ def main() -> None:
         if file.exists():
             file.unlink()
 
+    replace(
+        'lib/internet_core.dart',
+        """      await Future.wait(
+        relayHosts.map((host) => _connectHost(host)),
+        eagerError: false,
+      );
+""",
+        """      for (final host in relayHosts) {
+        unawaited(_connectHost(host));
+      }
+      for (var attempt = 0; attempt < 20 && !connected; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+""",
+    )
+
     chat_file = Path('lib/chat_screen.dart')
     chat_source = chat_file.read_text(encoding='utf-8')
     if "import 'sound_service.dart';" not in chat_source:
