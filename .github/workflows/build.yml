@@ -30,9 +30,10 @@ jobs:
           python3 tooling/apply_v06.py
           python3 tooling/apply_v061.py
           python3 tooling/fix_v062.py
+          python3 tooling/fix_v062_compat.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml tooling/v06_pubspec.yaml tooling/v06_main.dart tooling/v06_icon_foreground.xml tooling/v06_launch_logo.xml lib/main.dart lib/v06.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          git add pubspec.yaml tooling/v06_pubspec.yaml tooling/v06_main.dart tooling/v06_icon_foreground.xml tooling/v06_launch_logo.xml tooling/fix_v062_compat.py lib/main.dart lib/v06.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
           if ! git diff --cached --quiet; then
             git commit -m "Чернограм 0.6.2: тёмная заставка точный логотип и рабочий QR [skip ci]"
             git push origin HEAD:main
