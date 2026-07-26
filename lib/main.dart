@@ -18,8 +18,12 @@ class ChernogramApp extends StatefulWidget {
 }
 
 class _ChernogramAppState extends State<ChernogramApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   bool? _ru;
   bool _darkMode = true;
+  bool _introDone = false;
+  bool _automaticUpdateScheduled = false;
 
   @override
   void initState() {
@@ -50,33 +54,69 @@ class _ChernogramAppState extends State<ChernogramApp> {
     if (mounted) setState(() => _darkMode = value);
   }
 
+  void _finishIntro() {
+    if (!mounted) return;
+    setState(() => _introDone = true);
+    _scheduleAutomaticUpdate();
+  }
+
+  void _scheduleAutomaticUpdate() {
+    if (_automaticUpdateScheduled || _ru == null) return;
+    _automaticUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _navigatorKey.currentContext;
+      if (context == null) {
+        _automaticUpdateScheduled = false;
+        Future<void>.delayed(
+          const Duration(milliseconds: 350),
+          _scheduleAutomaticUpdate,
+        );
+        return;
+      }
+      ChernogramUpdater.checkAndPrompt(
+        context,
+        ru: _ru!,
+        manual: false,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final settingsReady = _ru != null;
+
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Chernogram',
       theme: chernogramLightTheme(),
       darkTheme: chernogramTheme(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: _ru == null
-          ? const Scaffold(
-              body: Center(
+      home: !settingsReady
+          ? const ColoredBox(
+              color: ChernogramColors.background,
+              child: Center(
                 child: ChernogramLogo(size: 112, withPlate: true),
               ),
             )
-          : Builder(
-              builder: (context) => ChernogramV06(
-                ru: _ru!,
-                onChangeLanguage: _toggleLanguage,
-                onCheckUpdates: () => ChernogramUpdater.checkAndPrompt(
-                  context,
+          : !_introDone
+              ? ChernogramAnimatedIntro(
                   ru: _ru!,
-                  manual: true,
+                  onDone: _finishIntro,
+                )
+              : Builder(
+                  builder: (context) => ChernogramV06(
+                    ru: _ru!,
+                    onChangeLanguage: _toggleLanguage,
+                    onCheckUpdates: () => ChernogramUpdater.checkAndPrompt(
+                      context,
+                      ru: _ru!,
+                      manual: true,
+                    ),
+                    darkMode: _darkMode,
+                    onToggleTheme: _toggleTheme,
+                  ),
                 ),
-                darkMode: _darkMode,
-                onToggleTheme: _toggleTheme,
-              ),
-            ),
     );
   }
 }
