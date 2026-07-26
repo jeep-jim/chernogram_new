@@ -20,11 +20,14 @@ def main() -> None:
         if file.exists():
             file.unlink()
 
-    replace(
-        'lib/chat_screen.dart',
-        "import 'internet_core.dart';\n",
-        "import 'internet_core.dart';\nimport 'sound_service.dart';\n",
-    )
+    chat_file = Path('lib/chat_screen.dart')
+    chat_source = chat_file.read_text(encoding='utf-8')
+    if "import 'sound_service.dart';" not in chat_source:
+        replace(
+            'lib/chat_screen.dart',
+            "import 'internet_core.dart';\n",
+            "import 'internet_core.dart';\nimport 'sound_service.dart';\n",
+        )
 
     replace(
         'lib/chat_screen.dart',
@@ -44,7 +47,7 @@ def main() -> None:
     );
   }
 """
-    if '_playIncomingMessageSound' not in Path('lib/chat_screen.dart').read_text(encoding='utf-8'):
+    if 'void _playIncomingMessageSound' not in Path('lib/chat_screen.dart').read_text(encoding='utf-8'):
         replace(
             'lib/chat_screen.dart',
             contact_method,
