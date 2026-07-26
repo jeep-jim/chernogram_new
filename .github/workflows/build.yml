@@ -83,6 +83,7 @@ jobs:
           python3 tooling/fix_v07_compile.py
           python3 tooling/fix_v09_media_calls.py
           python3 tooling/fix_v09_compile.py
+          python3 tooling/fix_v091_player_header.py
 
       - name: Validate and build release APK
         id: build_apk
@@ -147,8 +148,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.9: голосовые удержанием микрофона и отменой свайпом, видеокружки, мини-плеер аудио, общая медиатека всех чатов, очистка локальных файлов и шкала памяти, файлы до 20 МБ, восстановленный WebRTC-сигналинг с повтором offer/answer/ICE и восстановлением соединения. Эта версия подписана постоянным ключом, и несовместимый APK больше не публикуется.",
-            "notesEn": "Chernogram 0.9: hold-to-record voice messages, swipe-to-cancel, video circles, inline audio, an all-chat media library, local cleanup and storage meter, files up to 20 MB, and repaired WebRTC signalling with offer/answer/ICE replay and recovery. This line is signed with the permanent key and incompatible APKs are blocked."
+            "notesRu": "Чернограм 0.9.1: значок приватного глаза в шапке заменён на музыкальный плеер. Нажатие сразу открывает раздел музыки; общая папка файлов остаётся рядом. Сборка подписана тем же постоянным сертификатом для проверки обновления поверх 0.9.0.",
+            "notesEn": "Chernogram 0.9.1: the Privacy Lens eye in the header is replaced by a music-player button. It opens the audio section directly while the full media folder remains beside it. The build uses the same permanent certificate to test an in-place update from 0.9.0."
           }
           EOF
 
@@ -166,7 +167,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Голосовые, кружки, встроенный аудиоплеер, общая папка файлов, очистка памяти и восстановленные WebRTC-звонки. Финальный APK принудительно подписан постоянным ключом и проверен перед публикацией." \
+              --notes "Иконка глаза заменена на кнопку музыкального плеера, которая сразу открывает аудиотеку. APK принудительно подписан тем же постоянным ключом и проверен перед публикацией." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -206,7 +207,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.9 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.9.1 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -231,5 +232,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.9 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.9.1 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
