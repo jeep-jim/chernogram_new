@@ -14,7 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+  # This is the certificate of the APK line currently installed by testers.
+  # A build with any other certificate is blocked before publication.
+  EXPECTED_CERT_SHA256: "F8:CB:60:F1:DB:87:B4:D6:46:E2:3A:2A:D4:3D:75:A2:C1:AA:B3:69:EE:BB:BC:2D:D4:44:E9:8C:01:B4:AD:04"
+  SIGNING_CACHE_KEY: chernogram-signing-f8-v1
 
 jobs:
   build:
@@ -32,47 +35,38 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Restore the one permanent signing key
+      - name: Restore the permanent installed-line signing key
         id: signing_cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.android/debug.keystore
-          key: chernogram-stable-signing-v2
+          path: ~/.chernogram/chernogram-update.keystore
+          key: ${{ env.SIGNING_CACHE_KEY }}
           fail-on-cache-miss: false
 
-      - name: Load and lock Android signing identity
+      - name: Restore signing-key secret backup when configured
         shell: bash
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.android"
-
-          # A repository secret is the permanent backup. Until it is configured,
-          # the already-existing immutable Actions cache remains the source.
+          mkdir -p "$HOME/.chernogram"
           if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
-            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.chernogram/chernogram-update.keystore"
+            chmod 600 "$HOME/.chernogram/chernogram-update.keystore"
           fi
 
-          # Never generate a replacement key in CI. Publishing an APK with a new
-          # key would make Android report a package conflict for every user.
-          if [ ! -s "$HOME/.android/debug.keystore" ]; then
-            echo "::error::Permanent Chernogram signing key is unavailable. Build stopped before an incompatible APK could be published."
-            exit 1
-          fi
-
-          keytool -list -v \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android | tee signing-key.txt
-
-          ACTUAL_CERT=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED_CERT=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
-            echo "::error::Signing key fingerprint mismatch. Expected $EXPECTED_CERT_SHA256; refusing to publish an incompatible update."
-            exit 1
+          if [ -s "$HOME/.chernogram/chernogram-update.keystore" ]; then
+            keytool -list -v \
+              -keystore "$HOME/.chernogram/chernogram-update.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android | tee restored-signing-key.txt
+            ACTUAL=$(grep -m1 'SHA256:' restored-signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "::error::Stored signing key is not the key of the currently installed APK line."
+              exit 1
+            fi
           fi
 
       - name: Setup Flutter 3.44.8
@@ -82,9 +76,13 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply Chernogram 0.8 build compatibility fixes
+      - name: Apply Chernogram compatibility fixes
         shell: bash
-        run: python3 tooling/fix_v07_compile.py
+        run: |
+          set -euo pipefail
+          python3 tooling/fix_v07_compile.py
+          python3 tooling/fix_v09_media_calls.py
+          python3 tooling/fix_v09_compile.py
 
       - name: Validate and build release APK
         id: build_apk
@@ -103,25 +101,87 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           exit "$STATUS"
 
-      - name: Verify final APK certificate and prepare update files
+      - name: Sign or adopt the installed APK certificate
+        id: sign_apk
         shell: bash
         run: |
           set -euo pipefail
-          cp build/app/outputs/flutter-apk/app-release.apk chernogram.apk
-
+          mkdir -p "$HOME/.chernogram"
+          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           if [ -z "$APKSIGNER" ]; then
             echo "::error::apksigner was not found"
             exit 1
           fi
+
+          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          STABLE_KEY="$HOME/.chernogram/chernogram-update.keystore"
+
+          if [ -s "$STABLE_KEY" ]; then
+            "$APKSIGNER" sign \
+              --ks "$STABLE_KEY" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram.apk \
+              "$SOURCE_APK"
+          else
+            # First migration run: the current Flutter/Gradle line produces the
+            # certificate already installed by testers. Adopt that exact key once,
+            # then every following build is explicitly signed with the cached key.
+            cp "$SOURCE_APK" chernogram.apk
+          fi
+
           "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
-          APK_CERT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED_CERT=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          if [ -z "$APK_CERT" ] || [ "$APK_CERT" != "$EXPECTED_CERT" ]; then
-            echo "::error::Built APK certificate does not match the permanent Chernogram certificate. Release cancelled."
+          APK_CERT=$(sed -n \
+            -e 's/^Signer #1 certificate SHA-256 digest: //p' \
+            -e 's/^V2 Signer: certificate SHA-256 digest: //p' \
+            apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          if [ -z "$APK_CERT" ] || [ "$APK_CERT" != "$EXPECTED" ]; then
+            echo "::error::APK certificate differs from the currently installed Chernogram line. Publication cancelled before users can receive an incompatible update."
             exit 1
           fi
 
+          if [ ! -s "$STABLE_KEY" ]; then
+            MATCH=""
+            while IFS= read -r -d '' CANDIDATE; do
+              INFO=$(keytool -list -v \
+                -keystore "$CANDIDATE" \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android 2>/dev/null || true)
+              CERT=$(printf '%s\n' "$INFO" | grep -m1 'SHA256:' | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+              if [ "$CERT" = "$EXPECTED" ]; then
+                MATCH="$CANDIDATE"
+                break
+              fi
+            done < <(find "$HOME" "$GITHUB_WORKSPACE" -type f \( -name '*.keystore' -o -name '*.jks' \) -print0 2>/dev/null)
+
+            if [ -z "$MATCH" ]; then
+              echo "::error::The APK has the correct installed certificate, but its private signing key could not be captured. Refusing to publish a release that cannot be updated later."
+              exit 1
+            fi
+            cp "$MATCH" "$STABLE_KEY"
+            chmod 600 "$STABLE_KEY"
+          fi
+
+          keytool -list -v \
+            -keystore "$STABLE_KEY" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android | tee signing-key.txt
+
+      - name: Save the permanent installed-line signing key
+        if: steps.signing_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.chernogram/chernogram-update.keystore
+          key: ${{ env.SIGNING_CACHE_KEY }}
+
+      - name: Prepare update files
+        shell: bash
+        run: |
+          set -euo pipefail
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
           VERSION_NAME=${VERSION_FULL%%+*}
           VERSION_CODE=${VERSION_FULL##*+}
@@ -133,8 +193,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.8.1: жёсткая фиксация единственного сертификата обновлений. Сборка автоматически блокируется до публикации, если ключ или подпись APK отличаются.",
-            "notesEn": "Chernogram 0.8.1: the single Android update certificate is permanently locked. Publication is automatically blocked if the key or APK signature differs."
+            "notesRu": "Чернограм 0.9: голосовые удержанием микрофона и отменой свайпом, видеокружки, мини-плеер аудио, общая медиатека всех чатов, очистка локальных файлов и шкала памяти, файлы до 20 МБ, восстановленный WebRTC-сигналинг с повтором offer/answer/ICE и автоматическим восстановлением соединения. Подпись обновлений закреплена за установленной линией.",
+            "notesEn": "Chernogram 0.9: hold-to-record voice messages with swipe-to-cancel, video circles, inline audio player, all-chat media library, local cleanup and storage meter, files up to 20 MB, and repaired WebRTC signalling with offer/answer/ICE replay and recovery. Updates are locked to the installed certificate line."
           }
           EOF
 
@@ -164,7 +224,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Android-подпись зафиксирована навсегда: публикация автоматически запрещена при любом несовпадении сертификата. Обновления после чистой установки этой линии ставятся поверх приложения." \
+              --notes "Голосовые, кружки, встроенный аудиоплеер, общая папка файлов, очистка памяти и восстановленные прямые WebRTC-звонки. Релиз автоматически блокируется при несовпадении подписи с уже установленным приложением." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -204,7 +264,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.8.1 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.9 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -221,7 +281,7 @@ jobs:
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Version: $(awk '/^version:/ {print $2}' pubspec.yaml)
           Certificate SHA-256: ${EXPECTED_CERT_SHA256}
-          Signature policy: locked; incompatible APK publication is blocked
+          Signature policy: locked to the installed APK line; incompatible publication is blocked
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
           Landing: https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html
           EOF
@@ -229,5 +289,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.8.1 готов и подпись проверена [skip ci]" || true
+          git commit -m "APK 0.9 готов и подпись совпадает [skip ci]" || true
           git push origin HEAD:main || true
