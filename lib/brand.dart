@@ -177,24 +177,19 @@ class ChernogramLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = Image.asset(
-      withPlate
-          ? 'assets/branding/chernogram_logo.png'
-          : 'assets/branding/chernogram_mark.png',
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
-      gaplessPlayback: true,
+    final mark = CustomPaint(
+      size: Size.square(withPlate ? size * .82 : size),
+      painter: const _ChernogramMarkPainter(),
     );
 
-    if (!withPlate) return image;
+    if (!withPlate) return mark;
 
     return Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF080808),
+        color: ChernogramColors.background,
         borderRadius: BorderRadius.circular(size * .23),
         boxShadow: const [
           BoxShadow(
@@ -205,9 +200,21 @@ class ChernogramLogo extends StatelessWidget {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: image,
+      child: mark,
     );
   }
+}
+
+class _ChernogramMarkPainter extends CustomPainter {
+  const _ChernogramMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _paintChernogramMark(canvas, size, progress: 1);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class ChernogramAnimatedIntro extends StatefulWidget {
@@ -316,92 +323,106 @@ class _AnimatedLogoPainter extends CustomPainter {
 
   const _AnimatedLogoPainter({required this.progress});
 
-  double _segment(double start, double end) =>
-      ((progress - start) / (end - start)).clamp(0.0, 1.0);
-
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final center = Offset(w / 2, h / 2);
-
-    final rearProgress = Curves.easeOutBack.transform(_segment(0, .60));
-    final goldProgress = Curves.easeOutBack.transform(_segment(.16, .78));
-    final cutProgress = Curves.easeOut.transform(_segment(.54, .90));
-    final glowProgress = Curves.easeInOut.transform(_segment(.72, 1));
-
-    final orangePaint = Paint()
-      ..color = const Color(0xFFF46B00)
-          .withValues(alpha: rearProgress.clamp(0.0, 1.0));
-    final goldPaint = Paint()
-      ..color = const Color(0xFFD1A246)
-          .withValues(alpha: goldProgress.clamp(0.0, 1.0));
-
-    final rear = Path()
-      ..moveTo(w * .500, h * .180)
-      ..lineTo(w * .252, h * .752)
-      ..lineTo(w * .768, h * .752)
-      ..close();
-
-    canvas.save();
-    canvas.translate(0, -h * .42 * (1 - rearProgress));
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(-.10 * (1 - rearProgress));
-    canvas.translate(-center.dx, -center.dy);
-    canvas.drawPath(rear, orangePaint);
-    canvas.restore();
-
-    final gold = Path()
-      ..moveTo(w * .225, h * .334)
-      ..lineTo(w * .797, h * .334)
-      ..lineTo(w * .520, h * .831)
-      ..lineTo(w * .520, h * .533)
-      ..close();
-
-    canvas.save();
-    canvas.translate(
-      w * .46 * (1 - goldProgress),
-      h * .10 * (1 - goldProgress),
-    );
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(.11 * (1 - goldProgress));
-    canvas.translate(-center.dx, -center.dy);
-    canvas.drawPath(gold, goldPaint);
-    canvas.restore();
-
-    if (cutProgress > 0) {
-      final cutPaint = Paint()
-        ..color = const Color(0xFF080808)
-            .withValues(alpha: cutProgress.clamp(0.0, 1.0))
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w * .026
-        ..strokeCap = StrokeCap.square
-        ..strokeJoin = StrokeJoin.miter;
-      final cut = Path()
-        ..moveTo(w * .225, h * .337)
-        ..lineTo(w * .507, h * .533)
-        ..lineTo(w * .259, h * .727);
-      canvas.drawPath(cut, cutPaint);
-    }
-
-    if (glowProgress > 0) {
-      final highlight = Paint()
-        ..color = ChernogramColors.goldLight.withValues(
-          alpha: .80 * math.sin(glowProgress * math.pi),
-        )
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = w * .007;
-      canvas.drawLine(
-        Offset(w * .225, h * .329),
-        Offset(w * .797, h * .329),
-        highlight,
-      );
-    }
+    _paintChernogramMark(canvas, size, progress: progress);
   }
 
   @override
   bool shouldRepaint(covariant _AnimatedLogoPainter oldDelegate) =>
       oldDelegate.progress != progress;
+}
+
+void _paintChernogramMark(
+  Canvas canvas,
+  Size size, {
+  required double progress,
+}) {
+  final w = size.width;
+  final h = size.height;
+  final center = Offset(w / 2, h / 2);
+
+  double segment(double start, double end) =>
+      ((progress - start) / (end - start)).clamp(0.0, 1.0);
+
+  final rearProgress = Curves.easeOutBack.transform(segment(0, .58));
+  final goldProgress = Curves.easeOutBack.transform(segment(.14, .76));
+  final cutProgress = Curves.easeOutCubic.transform(segment(.42, .88));
+  final glowProgress = Curves.easeInOut.transform(segment(.72, 1));
+
+  final rear = Path()
+    ..moveTo(w * .50, h * .13)
+    ..lineTo(w * .20, h * .84)
+    ..lineTo(w * .82, h * .84)
+    ..close();
+
+  canvas.save();
+  canvas.translate(0, -h * .42 * (1 - rearProgress));
+  canvas.translate(center.dx, center.dy);
+  canvas.rotate(-.10 * (1 - rearProgress));
+  canvas.translate(-center.dx, -center.dy);
+  canvas.drawPath(
+    rear,
+    Paint()
+      ..color = ChernogramColors.orange.withValues(
+        alpha: rearProgress.clamp(0.0, 1.0),
+      ),
+  );
+  canvas.restore();
+
+  final gold = Path()
+    ..moveTo(w * .15, h * .31)
+    ..lineTo(w * .87, h * .31)
+    ..lineTo(w * .54, h * .93)
+    ..lineTo(w * .54, h * .56)
+    ..close();
+
+  canvas.save();
+  canvas.translate(
+    w * .46 * (1 - goldProgress),
+    h * .10 * (1 - goldProgress),
+  );
+  canvas.translate(center.dx, center.dy);
+  canvas.rotate(.11 * (1 - goldProgress));
+  canvas.translate(-center.dx, -center.dy);
+  canvas.drawPath(
+    gold,
+    Paint()
+      ..color = ChernogramColors.gold.withValues(
+        alpha: goldProgress.clamp(0.0, 1.0),
+      ),
+  );
+  canvas.restore();
+
+  if (cutProgress > 0) {
+    final cut = Path()
+      ..moveTo(w * .16, h * .32)
+      ..lineTo(w * .50, h * .54)
+      ..lineTo(w * .20, h * .81);
+    canvas.drawPath(
+      cut,
+      Paint()
+        ..color = ChernogramColors.background.withValues(
+          alpha: cutProgress.clamp(0.0, 1.0),
+        )
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * .066
+        ..strokeCap = StrokeCap.square
+        ..strokeJoin = StrokeJoin.miter,
+    );
+  }
+
+  if (glowProgress > 0) {
+    final pulse = math.sin(glowProgress * math.pi);
+    canvas.drawLine(
+      Offset(w * .155, h * .303),
+      Offset(w * .865, h * .303),
+      Paint()
+        ..color = ChernogramColors.goldLight.withValues(alpha: .75 * pulse)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * .007,
+    );
+  }
 }
 
 class BrandHeader extends StatelessWidget {

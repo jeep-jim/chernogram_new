@@ -33,6 +33,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/branding/chernogram_logo.png
-    - assets/branding/chernogram_mark.png

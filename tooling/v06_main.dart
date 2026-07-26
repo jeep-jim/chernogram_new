@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'brand.dart';
@@ -7,6 +8,14 @@ import 'v06.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: ChernogramColors.background,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: ChernogramColors.background,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const ChernogramApp());
 }
 

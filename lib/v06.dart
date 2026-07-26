@@ -23,7 +23,7 @@ import 'tunnel_extras.dart';
 
 // CHERNOGRAM_061_PATCH
 
-const temporaryLandingBase = 'https://jeep-jim.github.io/chernogram_new/';
+const temporaryLandingBase = 'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
 
 String _randomId([int length = 16]) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
