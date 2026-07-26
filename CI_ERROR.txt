@@ -1,38 +1,6 @@
 GitHub Actions build failed
-Commit: 79b7cadad1b046b0ac94aeafd3f5cb58fced22bd
-Time: 2026-07-26T14:42:44Z
-===== SIGNING KEY =====
-Alias name: androiddebugkey
-Creation date: Jul 26, 2026
-Entry type: PrivateKeyEntry
-Certificate chain length: 1
-Certificate[1]:
-Owner: CN=Chernogram Prototype, O=Chernogram, C=RU
-Issuer: CN=Chernogram Prototype, O=Chernogram, C=RU
-Serial number: 967052ca6b03ab0c
-Valid from: Sun Jul 26 08:31:07 UTC 2026 until: Thu Dec 11 08:31:07 UTC 2053
-Certificate fingerprints:
-	 SHA1: 77:F4:C8:E6:D1:BD:16:77:71:73:2B:9E:D3:2F:6A:16:5F:B0:55:69
-	 SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
-Signature algorithm name: SHA256withRSA
-Subject Public Key Algorithm: 2048-bit RSA key
-Version: 3
-
-Extensions: 
-
-#1: ObjectId: 2.5.29.14 Criticality=false
-SubjectKeyIdentifier [
-KeyIdentifier [
-0000: 5D 0A 01 66 F4 65 7B D0   A3 7E 37 D0 83 15 C4 E2  ]..f.e....7.....
-0010: 5C 63 54 2F                                        \cT/
-]
-]
-
-===== APK SIGNATURE =====
-V2 Signer: certificate DN: C=US, O=Android, CN=Android Debug
-V2 Signer: certificate SHA-256 digest: f8cb60f1db87b4d646e23a2ad43d75a2c1aab369eebbbc2dd444e98c01b4ad04
-V2 Signer: certificate SHA-1 digest: 018165d1ce69e74adfd6ecb5a9f7e85e9d50dfa3
-V2 Signer: certificate MD5 digest: fb00d3e487fd29c3f28609854244f720
+Commit: f86ca028640fd9db550c2ce9da594efe29de034a
+Time: 2026-07-26T15:33:05Z
 ===== BUILD OUTPUT =====
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (3 days ago) • 2026-07-23 10:56:21 -0700
@@ -45,7 +13,13 @@ Downloading packages...
 + app_links_platform_interface 2.0.4
 + app_links_web 1.0.4
 + audio_session 0.2.4
++ camera 0.12.0+2
++ camera_android_camerax 0.7.4+2
++ camera_avfoundation 0.10.2
++ camera_platform_interface 2.13.1
++ camera_web 0.3.5+4
 + cryptography 2.9.0
++ csslib 1.0.2
 + dart_webrtc 1.8.1
 + dbus 0.7.14
 + file_picker 10.3.10 (11.0.2 available)
@@ -55,6 +29,7 @@ Downloading packages...
 + flutter_webrtc 1.5.2
 + gtk 2.2.0
   hooks 2.0.2 (2.1.0 available)
++ html 0.15.6
   http 1.6.0 (from transitive dependency to direct dependency)
 + js 0.7.2
 + just_audio 0.10.6
@@ -65,6 +40,7 @@ Downloading packages...
   matcher 0.12.19 (0.12.20 available)
   meta 1.18.0 (1.19.0 available)
 + mobile_scanner 7.4.0
++ open_filex 4.7.0
 + ota_update 7.1.0
   package_config 2.2.0 (3.0.0 available)
 + package_info_plus 8.3.1 (10.2.1 available)
@@ -85,6 +61,7 @@ Downloading packages...
 + rxdart 0.28.0
 + share_plus 10.1.4 (13.3.0 available)
 + share_plus_platform_interface 5.0.2 (7.2.0 available)
++ stream_transform 2.1.1
   test_api 0.7.11 (0.7.13 available)
 + url_launcher 6.3.2
 + url_launcher_android 6.3.32
@@ -96,6 +73,11 @@ Downloading packages...
 + url_launcher_windows 3.1.5
 + uuid 4.6.0
   vector_math 2.2.0 (2.4.1 available)
++ video_player 2.13.0
++ video_player_android 2.12.0
++ video_player_avfoundation 2.11.0
++ video_player_platform_interface 6.9.0
++ video_player_web 2.4.0
 + webrtc_interface 1.5.1
 + win32 5.15.0 (6.3.0 available)
 + xml 6.6.1 (7.0.1 available)
@@ -117,13 +99,20 @@ These packages are no longer being depended on:
 - sqflite_common 2.5.11
 - sqflite_darwin 2.4.3+1
 - sqflite_platform_interface 2.4.1
-Changed 67 dependencies!
+Changed 81 dependencies!
 26 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Formatted lib/agent_screen.dart
 Formatted lib/app_monitor.dart
 Formatted lib/brand.dart
-Formatted lib/call_service.dart
+Could not format because the source could not be parsed:
+
+line 776, column 1 of lib/call_service.dart: Expected to find '}'.
+    ╷
+776 │  
+    │ ^
+    ╵
+Formatted lib/chat_media.dart
 Formatted lib/chat_screen.dart
 Formatted lib/core_models.dart
 Formatted lib/group_call_service.dart
@@ -137,13 +126,15 @@ Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
 Formatted lib/v07.dart
-Formatted 18 files (17 changed) in 0.31 seconds.
+Formatted 18 files (17 changed) in 0.34 seconds.
 Analyzing chernogram_new...                                     
 
-   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:272:7 • use_build_context_synchronously
-warning • The value of the field '_handledCalls' isn't used. Try removing the field, or using it • lib/chat_screen.dart:48:21 • unused_field
-   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:977:7 • use_build_context_synchronously
-   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1056:7 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:277:7 • use_build_context_synchronously
+  error • Expected to find '}' • lib/call_service.dart:776:1 • expected_token
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_media.dart:5:8 • unnecessary_import
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1035:7 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1109:7 • use_build_context_synchronously
+warning • The declaration '_AttachmentPreview' isn't referenced. Try removing the declaration of '_AttachmentPreview' • lib/chat_screen.dart:1827:7 • unused_element
 warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/group_call_service.dart:8:8 • unused_import
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/main.dart:85:42 • use_build_context_synchronously
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/media_studio.dart:2:8 • unnecessary_import
@@ -158,12 +149,11 @@ warning • Unused import: 'core_models.dart'. Try removing the import directive
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-17 issues found. (ran in 12.6s)
+19 issues found. (ran in 13.0s)
 
 ✅ basic smoke test
 
 🎉 1 test passed.
-Upgrading build.gradle.kts
 Running Gradle task 'assembleRelease'...                        
 WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): file_picker, flutter_contacts, flutter_webrtc, mobile_scanner, package_info_plus, photo_manager, record_android, share_plus
 Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
@@ -180,11 +170,24 @@ Preparing "Install CMake 3.22.1 v.3.22.1".
 Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 11968 bytes (99.3% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Note: Some input files use or override a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-Note: Some input files use unchecked or unsafe operations.
-Note: Recompile with -Xlint:unchecked for details.
-Caught exception: Already watching path: /home/runner/work/chernogram_new/chernogram_new/android
-Running Gradle task 'assembleRelease'...                          468.6s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (106.8MB)
+lib/call_service.dart:745:44: Error: Can't find '}' to match '{'.
+class _CallControl extends StatelessWidget {
+                                           ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command '/opt/hostedtoolcache/flutter/stable-3.44.8-x64/flutter/bin/flutter'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4m 9s
+Running Gradle task 'assembleRelease'...                          250.0s
+Gradle task assembleRelease failed with exit code 1
