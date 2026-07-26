@@ -32,7 +32,17 @@ def main() -> None:
     replace(
         'lib/chat_screen.dart',
         "  String get _inviteUrl =>\n      '$_landingBase?invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';",
-        "  String get _inviteUrl =>\n      '$_landingBase?v=15&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';",
+        "  String get _inviteUrl =>\n      '$_landingBase?v=15&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';\n\n  String get _deepInvite =>\n      'chernogram://join/${Uri.encodeComponent(_tunnel.inviteToken)}';",
+    )
+    replace(
+        'lib/chat_screen.dart',
+        'child: QrImageView(data: _inviteUrl, size: 220),',
+        'child: QrImageView(data: _deepInvite, size: 220),',
+    )
+    replace(
+        'lib/chat_screen.dart',
+        "? 'Присоединяйся к моему туннелю Чернограма: $_inviteUrl'\n                        : 'Join my Chernogram tunnel: $_inviteUrl',",
+        "? 'Открой чат в Чернограме: $_deepInvite\\n\\nЕсли приложение не открылось: $_inviteUrl'\n                        : 'Open the Chernogram chat: $_deepInvite\\n\\nIf the app did not open: $_inviteUrl',",
     )
 
     replace(
