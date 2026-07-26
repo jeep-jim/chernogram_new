@@ -23,16 +23,17 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Apply Chernogram 0.6 source
+      - name: Apply Chernogram 0.6.1 source
         shell: bash
         run: |
           set -e
           python3 tooling/apply_v06.py
+          python3 tooling/apply_v061.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml lib/main.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
+          git add pubspec.yaml lib/main.dart lib/v06.dart lib/brand.dart android/app/src/main/AndroidManifest.xml android/app/src/main/res
           if ! git diff --cached --quiet; then
-            git commit -m "Чернограм 0.6: применить новый продуктовый интерфейс [skip ci]"
+            git commit -m "Чернограм 0.6.1: вернуть приглашения права темы и стоп-слова [skip ci]"
             git push origin HEAD:main
           fi
 
@@ -87,8 +88,8 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
-            "notesRu": "Чернограм 0.6: самостоятельные туннели, любые файлы, QR через временную страницу, публичность после создания, голосовые и основа бесплатных WebRTC-звонков.",
-            "notesEn": "Chernogram 0.6: independent tunnels, any files, temporary landing QR, editable privacy, voice messages and a free WebRTC call foundation."
+            "notesRu": "Чернограм 0.6.1: рабочий лендинг приглашений, светлая тема, контакты, стоп-слова, аватарки и расширенные права туннеля.",
+            "notesEn": "Chernogram 0.6.1: invite landing, light theme, contacts, restricted nicknames, avatars and expanded tunnel permissions."
           }
           EOF
 
@@ -116,7 +117,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Приватные туннели, любые файлы, QR-вход, голосовые и WebRTC-основа звонков." \
+              --notes "Восстановлены приглашения, контакты, права доступа, стоп-слова и переключение темы." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -146,7 +147,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.6 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.6.1 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -169,5 +170,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.6 готов к скачиванию [skip ci]" || true
+          git commit -m "APK 0.6.1 готов к скачиванию [skip ci]" || true
           git push origin HEAD:main || true
