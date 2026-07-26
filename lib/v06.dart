@@ -19,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'call_service.dart';
+import 'network_core.dart';
 import 'tunnel_extras.dart';
 
 // CHERNOGRAM_061_PATCH
@@ -385,7 +386,9 @@ class _ChernogramV06State extends State<ChernogramV06> {
   }
 
   Future<void> _joinToken(String token) async {
-    final tunnel = ChernogramTunnel.fromInviteToken(token);
+    final networkInvite = LanNetworkInvite.tryDecode(token);
+    final baseToken = networkInvite?.baseInviteToken ?? token;
+    final tunnel = ChernogramTunnel.fromInviteToken(baseToken);
     if (tunnel == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -393,6 +396,9 @@ class _ChernogramV06State extends State<ChernogramV06> {
         );
       }
       return;
+    }
+    if (networkInvite != null && networkInvite.endpoint.tunnelId == tunnel.id) {
+      await LanTunnelDirectory.save(networkInvite.endpoint);
     }
     if (_tunnels.any((item) => item.id == tunnel.id)) {
       setState(() => _tab = 0);
@@ -404,8 +410,8 @@ class _ChernogramV06State extends State<ChernogramV06> {
         title: Text(widget.ru ? 'Подключиться к туннелю?' : 'Join this tunnel?'),
         content: Text(
           widget.ru
-              ? '«${tunnel.name}»\n${tunnel.isPublic ? 'Публичный доступ' : 'Владелец должен подтвердить запрос'}'
-              : '“${tunnel.name}”\n${tunnel.isPublic ? 'Public access' : 'The owner must approve your request'}',
+              ? '«${tunnel.name}»\n${networkInvite == null ? 'Приглашение сохранится локально' : 'Прямое подключение по общей Wi-Fi сети'}'
+              : '“${tunnel.name}”\n${networkInvite == null ? 'The invite will be saved locally' : 'Direct connection over the same Wi-Fi network'}',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(widget.ru ? 'Отмена' : 'Cancel')),
@@ -698,11 +704,19 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
   TunnelPermissions _permissions = const TunnelPermissions();
   bool _recording = false;
 
+  // CHERNOGRAM_LAN_CORE
+  LanTunnelSession? _network;
+  StreamSubscription<LanTunnelEvent>? _networkSubscription;
+  bool _networkReady = false;
+  int _onlinePeers = 1;
+  String? _networkError;
+
   @override
   void initState() {
     super.initState();
     _tunnel = widget.tunnel;
     _loadPermissions();
+    _connectNetwork();
   }
 
   Future<void> _persist() async {
@@ -716,9 +730,152 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
     await ChernogramStore.saveTunnels(tunnels);
   }
 
+
+  Future<void> _connectNetwork() async {
+    try {
+      final owner = widget.profile.id == _tunnel.ownerId;
+      late final LanTunnelSession session;
+      if (owner) {
+        session = await LanTunnelNetwork.host(
+          tunnelId: _tunnel.id,
+          secret: _tunnel.inviteSecret,
+          peerId: widget.profile.id,
+          nickname: widget.profile.nickname,
+          history: _tunnel.messages.where((message) => message.attachment == null).map((message) => message.toJson()).toList(),
+        );
+      } else {
+        final endpoint = await LanTunnelDirectory.load(_tunnel.id);
+        if (endpoint == null) {
+          if (mounted) {
+            setState(() {
+              _networkReady = false;
+              _networkError = widget.ru
+                  ? 'Отсканируйте новый QR владельца. Оба телефона должны быть в одной Wi-Fi сети.'
+                  : 'Scan the owner’s new QR. Both phones must be on the same Wi-Fi network.';
+            });
+          }
+          return;
+        }
+        session = await LanTunnelNetwork.join(
+          endpoint: endpoint,
+          peerId: widget.profile.id,
+          nickname: widget.profile.nickname,
+        );
+      }
+      _attachNetwork(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _networkReady = false;
+        _networkError = error.toString();
+      });
+    }
+  }
+
+  void _attachNetwork(LanTunnelSession session) {
+    _networkSubscription?.cancel();
+    _network = session;
+    if (mounted) {
+      setState(() {
+        _networkReady = session.connected;
+        _onlinePeers = session.onlinePeers;
+        _networkError = session.connected
+            ? null
+            : (widget.ru ? 'Ожидание телефона владельца…' : 'Waiting for the owner phone…');
+      });
+    }
+    _networkSubscription = session.events.listen(_onNetworkEvent);
+  }
+
+  void _onNetworkEvent(LanTunnelEvent event) {
+    if (!mounted) return;
+    if (event.type == 'message' && event.data['message'] is Map) {
+      _mergeNetworkMessages([
+        Map<String, dynamic>.from(event.data['message'] as Map),
+      ]);
+      return;
+    }
+    if (event.type == 'history') {
+      final messages = ((event.data['messages'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      _mergeNetworkMessages(messages);
+      return;
+    }
+    if (event.type == 'presence') {
+      setState(() {
+        _onlinePeers = int.tryParse(event.data['peers']?.toString() ?? '') ?? 1;
+        _networkReady = true;
+        _networkError = null;
+      });
+      return;
+    }
+    if (event.type == 'status') {
+      final state = event.data['state']?.toString() ?? '';
+      final active = state == 'hosting' || state == 'connected';
+      setState(() {
+        _networkReady = active;
+        if (active) {
+          _networkError = null;
+        } else if (state == 'queued') {
+          _networkError = widget.ru
+              ? 'Сообщение сохранено. Отправим после переподключения.'
+              : 'Message queued. It will be sent after reconnecting.';
+        } else {
+          _networkError = event.data['error']?.toString() ??
+              (widget.ru ? 'Соединение временно потеряно. Переподключаемся…' : 'Connection lost. Reconnecting…');
+        }
+      });
+    }
+  }
+
+  void _mergeNetworkMessages(List<Map<String, dynamic>> rawMessages) {
+    final byId = <String, ChernogramMessage>{
+      for (final message in _tunnel.messages) message.id: message,
+    };
+    var changed = false;
+    for (final raw in rawMessages) {
+      final message = ChernogramMessage.fromJson(raw);
+      if (message.id.isEmpty || byId.containsKey(message.id)) continue;
+      byId[message.id] = message;
+      changed = true;
+    }
+    if (!changed) return;
+    final messages = byId.values.toList()
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    setState(() => _tunnel = _tunnel.copyWith(messages: messages));
+    unawaited(_persist());
+  }
+
+  String get _networkSubtitle {
+    if (_networkReady) {
+      return widget.ru
+          ? 'LAN-сеть • устройств онлайн: $_onlinePeers'
+          : 'LAN network • devices online: $_onlinePeers';
+    }
+    return widget.ru ? 'Локально • нет соединения' : 'Local • disconnected';
+  }
+
+  String get _networkStatusText {
+    if (_networkReady) {
+      return widget.ru
+          ? 'Сообщения синхронизируются напрямую между телефонами в одной Wi-Fi сети. Онлайн: $_onlinePeers.'
+          : 'Messages sync directly between phones on the same Wi-Fi network. Online: $_onlinePeers.';
+    }
+    return _networkError ??
+        (widget.ru
+            ? 'Подключаем прямой канал между телефонами…'
+            : 'Connecting a direct channel between phones…');
+  }
+
   void _addMessage(ChernogramMessage message) {
+    if (_tunnel.messages.any((item) => item.id == message.id)) return;
     setState(() => _tunnel = _tunnel.copyWith(messages: [..._tunnel.messages, message]));
     unawaited(_persist());
+    if (message.attachment == null) {
+      unawaited(_network?.sendMessage(message.toJson()));
+    }
   }
 
   void _sendText() {
@@ -814,32 +971,63 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
     if (mounted) setState(() => _permissions = value);
   }
 
-  String get _inviteText => widget.ru
-      ? 'Присоединяйся к моему туннелю «${_tunnel.name}» в Чернограме: ${_tunnel.landingUrl}'
-      : 'Join my Chernogram tunnel “${_tunnel.name}”: ${_tunnel.landingUrl}';
+  String _inviteTextFor(String url) => widget.ru
+      ? 'Присоединяйся к моему туннелю «${_tunnel.name}» в Чернограме: $url'
+      : 'Join my Chernogram tunnel “${_tunnel.name}”: $url';
+
+  Future<String> _networkInviteUrl() async {
+    LanTunnelEndpoint? endpoint;
+    if (widget.profile.id == _tunnel.ownerId) {
+      final session = await LanTunnelNetwork.host(
+        tunnelId: _tunnel.id,
+        secret: _tunnel.inviteSecret,
+        peerId: widget.profile.id,
+        nickname: widget.profile.nickname,
+        history: _tunnel.messages.where((message) => message.attachment == null).map((message) => message.toJson()).toList(),
+      );
+      _attachNetwork(session);
+      endpoint = session.endpoint;
+    } else {
+      endpoint = _network?.endpoint ?? await LanTunnelDirectory.load(_tunnel.id);
+    }
+    if (endpoint == null) return _tunnel.landingUrl;
+    final token = LanNetworkInvite(
+      baseInviteToken: _tunnel.inviteToken,
+      endpoint: endpoint,
+    ).encode();
+    return '$temporaryLandingBase?invite=${Uri.encodeQueryComponent(token)}';
+  }
 
   Future<void> _copyInvite() async {
-    await Clipboard.setData(ClipboardData(text: _tunnel.landingUrl));
+    final url = await _networkInviteUrl();
+    await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          widget.ru ? 'Ссылка приглашения скопирована' : 'Invite link copied',
+          widget.ru ? 'Сетевая ссылка приглашения скопирована' : 'Network invite link copied',
         ),
       ),
     );
   }
 
   Future<void> _inviteContacts() async {
+    final url = await _networkInviteUrl();
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => InviteContactsSheetV061(
         ru: widget.ru,
-        inviteText: _inviteText,
+        inviteText: _inviteTextFor(url),
       ),
     );
+  }
+
+  Future<void> _shareInvite() async {
+    final url = await _networkInviteUrl();
+    await Share.share(_inviteTextFor(url));
   }
 
   Future<void> _settings() async {
@@ -1026,31 +1214,33 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
   }
 
   Future<void> _showQr() async {
+    final url = await _networkInviteUrl();
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(widget.ru ? 'QR туннеля' : 'Tunnel QR'),
+        title: Text(widget.ru ? 'QR прямого подключения' : 'Direct connection QR'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               color: Colors.white,
               padding: const EdgeInsets.all(12),
-              child: QrImageView(data: _tunnel.landingUrl, size: 230),
+              child: QrImageView(data: url, size: 230),
             ),
             const SizedBox(height: 10),
             Text(
               widget.ru
-                  ? 'Если Чернограм установлен — страница откроет приложение. Иначе предложит APK для Android.'
-                  : 'If Chernogram is installed, the page opens the app. Otherwise it offers the Android APK.',
+                  ? 'Оба телефона должны быть подключены к одной Wi-Fi сети. После сканирования сообщения появятся на обоих устройствах.'
+                  : 'Both phones must be connected to the same Wi-Fi network. Messages will sync after scanning.',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 12, color: ChernogramColors.textSoft),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: _tunnel.landingUrl)), child: Text(widget.ru ? 'Копировать' : 'Copy')),
-          FilledButton(onPressed: () => Share.share(_tunnel.landingUrl), child: Text(widget.ru ? 'Поделиться' : 'Share')),
+          TextButton(onPressed: () => Clipboard.setData(ClipboardData(text: url)), child: Text(widget.ru ? 'Копировать' : 'Copy')),
+          FilledButton(onPressed: () => Share.share(url), child: Text(widget.ru ? 'Поделиться' : 'Share')),
         ],
       ),
     );
@@ -1065,6 +1255,7 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
 
   @override
   void dispose() {
+    _networkSubscription?.cancel();
     _text.dispose();
     _recorder.dispose();
     super.dispose();
@@ -1092,7 +1283,7 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
             children: [
               Text(_tunnel.name, style: const TextStyle(fontWeight: FontWeight.w900)),
               Text(
-                _tunnel.isPublic ? (widget.ru ? 'Публичный • локальный режим' : 'Public • local mode') : (widget.ru ? 'Приватный • по запросу' : 'Private • approval required'),
+                _networkSubtitle,
                 style: const TextStyle(fontSize: 10, color: Colors.white54),
               ),
             ],
@@ -1153,7 +1344,7 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
                         label: Text(widget.ru ? 'Контакты' : 'Contacts'),
                       ),
                       OutlinedButton.icon(
-                        onPressed: () => Share.share(_inviteText),
+                        onPressed: _shareInvite,
                         icon: const Icon(Icons.share_outlined),
                         label: Text(widget.ru ? 'Поделиться' : 'Share'),
                       ),
@@ -1176,7 +1367,7 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      widget.ru ? 'Контент хранится на устройствах. P2P-синхронизация подключается следующим сетевым этапом.' : 'Content stays on devices. P2P sync is the next network stage.',
+                       _networkStatusText,
                       style: const TextStyle(fontSize: 11, color: ChernogramColors.textSoft),
                     ),
                   ),
@@ -1189,13 +1380,17 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
                 itemCount: _tunnel.messages.length,
                 itemBuilder: (context, index) {
                   final message = _tunnel.messages[index];
+                  final mine = message.author == widget.profile.nickname;
                   return Align(
-                    alignment: Alignment.centerRight,
+                    alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 340),
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(color: const Color(0xFF633013), borderRadius: BorderRadius.circular(17)),
+                       decoration: BoxDecoration(
+                         color: mine ? const Color(0xFF633013) : Theme.of(context).colorScheme.surfaceContainerHighest,
+                         borderRadius: BorderRadius.circular(17),
+                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1226,6 +1421,7 @@ class _TunnelChatV06State extends State<TunnelChatV06> {
                         controller: _text,
                         minLines: 1,
                         maxLines: 5,
+                         onSubmitted: (_) => _sendText(),
                         decoration: InputDecoration(hintText: _recording ? (widget.ru ? 'Запись голосового…' : 'Recording voice…') : (widget.ru ? 'Сообщение…' : 'Message…'), isDense: true),
                       ),
                     ),
