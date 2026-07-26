@@ -84,6 +84,7 @@ jobs:
           python3 tooling/fix_v09_media_calls.py
           python3 tooling/fix_v09_compile.py
           python3 tooling/fix_v091_player_header.py
+          python3 tooling/fix_v010_rtc_circles.py
 
       - name: Validate and build release APK
         id: build_apk
@@ -148,8 +149,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.9.1: значок приватного глаза в шапке заменён на музыкальный плеер. Нажатие сразу открывает раздел музыки; общая папка файлов остаётся рядом. Сборка подписана тем же постоянным сертификатом для проверки обновления поверх 0.9.0.",
-            "notesEn": "Chernogram 0.9.1: the Privacy Lens eye in the header is replaced by a music-player button. It opens the audio section directly while the full media folder remains beside it. The build uses the same permanent certificate to test an in-place update from 0.9.0."
+            "notesRu": "Чернограм 0.10: непрерывное восстановление WebRTC после смены или просадки сети, повтор offer/answer/ICE, расширенный набор STUN/TURN-маршрутов, усиленное эхоподавление, шумоподавление и автогейн. Групповые звонки получили heartbeat, повтор сигналинга, дедупликацию ICE и автоматический ICE-restart. Видеокружок записывается с кольцом оставшегося времени и отображается в чате настоящим круглым видеосообщением.",
+            "notesEn": "Chernogram 0.10: continuous WebRTC recovery after network changes or drops, offer/answer/ICE retries, broader STUN/TURN routing, stronger echo cancellation, noise suppression and automatic gain. Group calls add heartbeat signalling, replay, ICE deduplication and automatic ICE restarts. Video circles now record with a remaining-time ring and render as real circular messages in chat."
           }
           EOF
 
@@ -167,7 +168,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Иконка глаза заменена на кнопку музыкального плеера, которая сразу открывает аудиотеку. APK принудительно подписан тем же постоянным ключом и проверен перед публикацией." \
+              --notes "Усиленный P2P WebRTC: непрерывное восстановление медиаканала, повтор сигналинга, heartbeat групповых комнат, ICE-restart, эхоподавление и профиль качества для звонков до шести участников. Видеокружки получили кольцо времени и круглый вид прямо в чате. APK подписан тем же постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -207,7 +208,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.9.1 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.10 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -232,5 +233,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.9.1 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.10 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
