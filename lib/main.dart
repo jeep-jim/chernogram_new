@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_navigation.dart';
 import 'brand.dart';
 import 'update_service.dart';
 import 'v07.dart';
@@ -29,7 +30,6 @@ class ChernogramApp extends StatefulWidget {
 }
 
 class _ChernogramAppState extends State<ChernogramApp> {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool? _ru;
   bool _darkMode = true;
   bool _introDone = false;
@@ -75,7 +75,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
     _updateScheduled = true;
     Future<void>.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-      final context = _navigatorKey.currentContext;
+      final context = chernogramNavigatorKey.currentContext;
       if (context == null) {
         _updateScheduled = false;
         _scheduleUpdateCheck();
@@ -95,7 +95,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
   Widget build(BuildContext context) {
     final ready = _ru != null;
     return MaterialApp(
-      navigatorKey: _navigatorKey,
+      navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Chernogram',
       theme: chernogramLightTheme(),
