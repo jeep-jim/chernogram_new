@@ -73,7 +73,7 @@ def patch_windows_updater() -> bool:
       closeDialog();
       exit(0);
 """
-        source, count = pattern.subn(launch_block, source, count=1)
+        source, count = pattern.subn(lambda _: launch_block, source, count=1)
         if count != 1:
             raise RuntimeError('Windows helper launch block was not found')
 
