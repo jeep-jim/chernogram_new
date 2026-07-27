@@ -12,11 +12,16 @@ def ringtone_bytes() -> bytes:
     missing = [str(path) for path in PARTS if not path.exists()]
     if missing:
         raise RuntimeError(f'Missing ringtone chunks: {missing}')
-    encoded = ''.join(''.join(path.read_text(encoding='utf-8').split()) for path in PARTS)
+    encoded = ''.join(
+        ''.join(path.read_text(encoding='utf-8').split()) for path in PARTS
+    )
     data = b64decode(encoded, validate=True)
-    if len(data) < 100_000:
+    if len(data) < 10_000:
         raise RuntimeError(f'Ringtone is unexpectedly small: {len(data)} bytes')
-    if not (data.startswith(b'ID3') or data[:2] in (b'\xff\xfb', b'\xff\xf3', b'\xff\xf2')):
+    if not (
+        data.startswith(b'ID3')
+        or data[:2] in (b'\xff\xfb', b'\xff\xf3', b'\xff\xf2')
+    ):
         raise RuntimeError('Ringtone does not look like an MP3 file')
     return data
 
@@ -38,14 +43,17 @@ def main() -> None:
     tools:keep="@raw/chernogram_incoming,@drawable/chernogram_launcher_icon" />
 '''
     KEEP_TARGET.parent.mkdir(parents=True, exist_ok=True)
-    if not KEEP_TARGET.exists() or KEEP_TARGET.read_text(encoding='utf-8') != keep_xml:
+    if (
+        not KEEP_TARGET.exists()
+        or KEEP_TARGET.read_text(encoding='utf-8') != keep_xml
+    ):
         KEEP_TARGET.write_text(keep_xml, encoding='utf-8')
         changed = True
 
     print(
-        f'Materialized Chernogram ringtone: {len(data)} bytes'
+        f'Materialized Chernogram Old to new ringtone: {len(data)} bytes'
         if changed
-        else f'Chernogram ringtone already materialized: {len(data)} bytes'
+        else f'Chernogram Old to new ringtone already materialized: {len(data)} bytes'
     )
 
 
