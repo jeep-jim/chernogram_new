@@ -40,6 +40,7 @@ class InternetTunnelSession {
   final Map<String, String> _peerNames = <String, String>{};
   final Set<String> _seenPackets = <String>{};
   final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> _signalHistory = <Map<String, dynamic>>[];
   final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
   final http.Client _http = http.Client();
   final Map<String, WebSocket> _sockets = <String, WebSocket>{};
@@ -324,11 +325,17 @@ class InternetTunnelSession {
         });
         break;
       case 'signal':
-        _emit('signal', <String, dynamic>{
+        final signal = <String, dynamic>{
           ...data,
           'relaySender': sender,
           'relaySenderName': senderName,
-        });
+          'receivedAt': DateTime.now().toUtc().toIso8601String(),
+        };
+        _signalHistory.add(signal);
+        if (_signalHistory.length > 200) {
+          _signalHistory.removeRange(0, _signalHistory.length - 200);
+        }
+        _emit('signal', signal);
         break;
     }
   }
@@ -344,6 +351,16 @@ class InternetTunnelSession {
 
   Future<void> sendSignal(Map<String, dynamic> signal) async {
     await _sendEnvelope('signal', signal, queueOnFailure: false);
+  }
+
+  List<Map<String, dynamic>> replaySignals(String callId) {
+    if (callId.isEmpty) return const <Map<String, dynamic>>[];
+    final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
+    return _signalHistory.where((signal) {
+      if (signal['callId']?.toString() != callId) return false;
+      final receivedAt = DateTime.tryParse(signal['receivedAt']?.toString() ?? '');
+      return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
+    }).map((signal) => Map<String, dynamic>.from(signal)).toList();
   }
 
   Future<void> sendHistory() async {

@@ -229,6 +229,22 @@ class CgMediaStore {
     return result;
   }
 
+  static Future<void> purgeTunnelFiles(CgTunnel tunnel) async {
+    final root = await rootDirectory();
+    final visited = <String>{};
+    for (final message in tunnel.messages) {
+      final attachment = message.attachment;
+      if (attachment == null) continue;
+      final file = await existingFile(attachment);
+      if (file == null || !visited.add(file.path)) continue;
+      try {
+        if (file.path.startsWith(root.path) && await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
   static Future<List<CgTunnel>> purgeAll(List<CgTunnel> tunnels) async {
     var current = tunnels;
     for (final item in collect(tunnels)) {
