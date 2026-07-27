@@ -90,6 +90,13 @@ class CgNotificationService with WidgetsBindingObserver {
     return value;
   }
 
+  static Future<void> cancelCall(String callId) async {
+    if (callId.isEmpty) return;
+    try {
+      await _plugin.cancel(id: callId.hashCode & 0x7fffffff);
+    } catch (_) {}
+  }
+
   static Future<void> showMessage({
     required String messageId,
     required String tunnelId,
