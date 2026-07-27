@@ -1,6 +1,6 @@
 name: Materialize current source
 
-# Registered in the previous commit; this change starts the one-shot job.
+# One-shot source materialization.
 on:
   push:
     branches: [main]
