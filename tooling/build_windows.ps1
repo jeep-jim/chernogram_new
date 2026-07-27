@@ -39,6 +39,12 @@ try {
   Invoke-LoggedCommand `
     -Name 'PREPARE WINDOWS' `
     -Command 'python tooling/fix_windows_desktop.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.2 RUNTIME' `
+    -Command 'python tooling/fix_v0162_runtime.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.2 BRAND' `
+    -Command 'python tooling/fix_v0162_brand.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
