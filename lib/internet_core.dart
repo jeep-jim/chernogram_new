@@ -67,21 +67,21 @@ class InternetTunnelSession {
   bool get connected => _sockets.isNotEmpty;
   int get onlinePeers => _peers.length + 1;
   List<Map<String, dynamic>> get members => <Map<String, dynamic>>[
-        <String, dynamic>{
-          'id': profileId,
-          'name': nickname,
-          'self': true,
-          'seenAt': DateTime.now().toUtc().toIso8601String(),
-        },
-        ..._peers.entries.map(
-          (entry) => <String, dynamic>{
-            'id': entry.key,
-            'name': _peerNames[entry.key] ?? 'user',
-            'self': false,
-            'seenAt': entry.value.toUtc().toIso8601String(),
-          },
-        ),
-      ];
+    <String, dynamic>{
+      'id': profileId,
+      'name': nickname,
+      'self': true,
+      'seenAt': DateTime.now().toUtc().toIso8601String(),
+    },
+    ..._peers.entries.map(
+      (entry) => <String, dynamic>{
+        'id': entry.key,
+        'name': _peerNames[entry.key] ?? 'user',
+        'self': false,
+        'seenAt': entry.value.toUtc().toIso8601String(),
+      },
+    ),
+  ];
 
   Future<void> connect() async {
     if (_closed || _connecting) return;
@@ -129,9 +129,9 @@ class InternetTunnelSession {
         path: '/${_topic!}/ws',
         queryParameters: const <String, String>{'since': '12h'},
       );
-      final socket = await WebSocket.connect(uri.toString()).timeout(
-        const Duration(seconds: 12),
-      );
+      final socket = await WebSocket.connect(
+        uri.toString(),
+      ).timeout(const Duration(seconds: 12));
       if (_closed) {
         await socket.close();
         return;
@@ -331,14 +331,10 @@ class InternetTunnelSession {
   }
 
   Future<void> _publishPresence() async {
-    await _sendEnvelope(
-      'presence',
-      <String, dynamic>{
-        'online': true,
-        'at': DateTime.now().toUtc().toIso8601String(),
-      },
-      queueOnFailure: false,
-    );
+    await _sendEnvelope('presence', <String, dynamic>{
+      'online': true,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    }, queueOnFailure: false);
   }
 
   Future<void> _sendEnvelope(
@@ -387,8 +383,7 @@ class InternetTunnelSession {
       return;
     }
 
-    final canQueue = queueOnFailure &&
-        (kind == 'message' || kind == 'control');
+    final canQueue = queueOnFailure && (kind == 'message' || kind == 'control');
     if (canQueue) {
       String? uniqueId;
       if (kind == 'message') {
@@ -397,7 +392,8 @@ class InternetTunnelSession {
       } else {
         uniqueId = data['operationId']?.toString();
       }
-      final duplicate = uniqueId != null &&
+      final duplicate =
+          uniqueId != null &&
           _outbox.any((item) {
             if (item.kind != kind) return false;
             if (kind == 'message') {
@@ -593,8 +589,7 @@ class InternetRelay {
   static final Map<String, InternetTunnelSession> _sessions =
       <String, InternetTunnelSession>{};
 
-  static InternetTunnelSession? session(String tunnelId) =>
-      _sessions[tunnelId];
+  static InternetTunnelSession? session(String tunnelId) => _sessions[tunnelId];
 
   static Future<InternetTunnelSession> open({
     required String tunnelId,
@@ -619,7 +614,7 @@ class InternetRelay {
       nickname: nickname,
     )..replaceHistory(history);
     _sessions[tunnelId] = session;
-    await session.connect();
+    unawaited(session.connect());
     return session;
   }
 

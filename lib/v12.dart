@@ -14,8 +14,10 @@ import 'package:zxing2/qrcode.dart';
 
 import 'agent_screen.dart';
 import 'brand.dart';
+import 'chat_media.dart';
 import 'chat_screen.dart';
 import 'core_models.dart';
+import 'music_player.dart';
 import 'internet_core.dart';
 
 String _encodeStoredJson(Object value) => jsonEncode(value);
@@ -221,6 +223,33 @@ class _ChernogramV12State extends State<ChernogramV12> {
     if (token != null) await _joinToken(token);
   }
 
+  Future<void> _openMediaLibrary() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgMediaLibraryScreen(
+          ru: widget.ru,
+          tunnels: _tunnels,
+          onTunnelsChanged: (updated) {
+            _tunnels = List<CgTunnel>.from(updated);
+            if (mounted) setState(() {});
+            final snapshot = List<CgTunnel>.from(_tunnels);
+            unawaited(_saveTunnelsFast(snapshot));
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMusicPlayer() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgMusicPlayerScreen(ru: widget.ru, tunnels: _tunnels),
+      ),
+    );
+  }
+
   Future<void> _createTunnel() async {
     final profile = _profile;
     if (profile == null) return;
@@ -246,8 +275,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
                 Text(
                   widget.ru ? 'Новый чат' : 'New chat',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -257,7 +286,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
                     labelText: widget.ru
                         ? 'Название — необязательно'
                         : 'Name — optional',
-                    hintText: widget.ru ? 'Например: Семья' : 'For example: Family',
+                    hintText: widget.ru
+                        ? 'Например: Семья'
+                        : 'For example: Family',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -276,11 +307,11 @@ class _ChernogramV12State extends State<ChernogramV12> {
                   subtitle: Text(
                     isPrivate
                         ? (widget.ru
-                            ? 'Вход только по секретной ссылке или QR.'
-                            : 'Join only with a secret link or QR.')
+                              ? 'Вход только по секретной ссылке или QR.'
+                              : 'Join only with a secret link or QR.')
                         : (widget.ru
-                            ? 'Ссылку можно свободно пересылать.'
-                            : 'The invite can be freely forwarded.'),
+                              ? 'Ссылку можно свободно пересылать.'
+                              : 'The invite can be freely forwarded.'),
                   ),
                   onChanged: (value) => setSheetState(() => isPrivate = value),
                 ),
@@ -288,10 +319,10 @@ class _ChernogramV12State extends State<ChernogramV12> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(
-                      context,
-                      (name: name.text.trim(), isPrivate: isPrivate),
-                    ),
+                    onPressed: () => Navigator.pop(context, (
+                      name: name.text.trim(),
+                      isPrivate: isPrivate,
+                    )),
                     icon: const Icon(Icons.arrow_forward_rounded),
                     label: Text(
                       widget.ru ? 'Создать и пригласить' : 'Create and invite',
@@ -319,16 +350,13 @@ class _ChernogramV12State extends State<ChernogramV12> {
     await _openTunnel(tunnel, autoInvite: true);
   }
 
-  Future<void> _openTunnel(
-    CgTunnel tunnel, {
-    bool autoInvite = false,
-  }) async {
+  Future<void> _openTunnel(CgTunnel tunnel, {bool autoInvite = false}) async {
     final profile = _profile;
     if (profile == null || !mounted) return;
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => _FastChatHost(
+        builder: (_) => CgChatScreen(
           ru: widget.ru,
           profile: profile,
           tunnel: tunnel,
@@ -481,14 +509,17 @@ class _ChernogramV12State extends State<ChernogramV12> {
         ),
         actions: [
           GlassIconButton(
-            icon: _privacyLens
-                ? Icons.visibility_off_rounded
-                : Icons.visibility_outlined,
-            tooltip: widget.ru ? 'Приватный взгляд' : 'Privacy Lens',
-            active: _privacyLens,
-            onPressed: _togglePrivacy,
+            icon: Icons.folder_copy_outlined,
+            tooltip: widget.ru ? 'Файлы и медиа' : 'Files and media',
+            onPressed: _openMediaLibrary,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 10),
+          GlassIconButton(
+            icon: Icons.queue_music_rounded,
+            tooltip: widget.ru ? 'Музыкальный плеер' : 'Music player',
+            onPressed: _openMusicPlayer,
+          ),
+          const SizedBox(width: 10),
           PopupMenuButton<String>(
             tooltip: widget.ru ? 'Меню' : 'Menu',
             onSelected: (value) {
@@ -552,8 +583,16 @@ class _ChernogramV12State extends State<ChernogramV12> {
             label: widget.ru ? 'Агент' : 'Agent',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person_rounded),
+            icon: _V12ProfileAvatar(
+              nickname: _profile!.nickname,
+              avatarBase64: _profile!.avatarBase64,
+              size: 25,
+            ),
+            selectedIcon: _V12ProfileAvatar(
+              nickname: _profile!.nickname,
+              avatarBase64: _profile!.avatarBase64,
+              size: 29,
+            ),
             label: widget.ru ? 'Профиль' : 'Profile',
           ),
         ],
@@ -693,7 +732,10 @@ class _V12ChatsHome extends StatelessWidget {
             children: [
               Text(
                 ru ? 'Связь без границ' : 'Connection without borders',
-                style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 5),
               Text(
@@ -734,14 +776,15 @@ class _V12ChatsHome extends StatelessWidget {
             Expanded(
               child: Text(
                 ru ? 'Чаты' : 'Chats',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
             Text(
               '${tunnels.length}',
-              style: TextStyle(
-                color: scheme.onSurface.withValues(alpha: .45),
-              ),
+              style: TextStyle(color: scheme.onSurface.withValues(alpha: .45)),
             ),
           ],
         ),
@@ -1029,8 +1072,9 @@ class _V12ProfileScreen extends StatefulWidget {
 }
 
 class _V12ProfileScreenState extends State<_V12ProfileScreen> {
-  late final TextEditingController _nickname =
-      TextEditingController(text: widget.profile.nickname);
+  late final TextEditingController _nickname = TextEditingController(
+    text: widget.profile.nickname,
+  );
   String? _avatarBase64;
   String _version = '';
 
@@ -1071,15 +1115,10 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
       return;
     }
     widget.onSave(
-      widget.profile.copyWith(
-        nickname: nickname,
-        avatarBase64: _avatarBase64,
-      ),
+      widget.profile.copyWith(nickname: nickname, avatarBase64: _avatarBase64),
     );
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(widget.ru ? 'Профиль сохранён' : 'Profile saved'),
-      ),
+      SnackBar(content: Text(widget.ru ? 'Профиль сохранён' : 'Profile saved')),
     );
   }
 
@@ -1091,80 +1130,76 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
 
   @override
   Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
-        children: [
-          Center(
-            child: GestureDetector(
-              onTap: _pickAvatar,
-              child: _V12ProfileAvatar(
-                nickname: _nickname.text,
-                avatarBase64: _avatarBase64,
-                size: 108,
-              ),
+    padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
+    children: [
+      Center(
+        child: GestureDetector(
+          onTap: _pickAvatar,
+          child: _V12ProfileAvatar(
+            nickname: _nickname.text,
+            avatarBase64: _avatarBase64,
+            size: 108,
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      Center(
+        child: Text(
+          '@${widget.profile.nickname}',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+        ),
+      ),
+      Center(
+        child: Text(
+          'ID ${widget.profile.id}',
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: .48),
+          ),
+        ),
+      ),
+      if (_version.isNotEmpty)
+        Center(
+          child: Text(
+            '${widget.ru ? 'Версия' : 'Version'} $_version',
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: .48),
             ),
           ),
-          const SizedBox(height: 14),
-          Center(
-            child: Text(
-              '@${widget.profile.nickname}',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-            ),
-          ),
-          Center(
-            child: Text(
-              'ID ${widget.profile.id}',
-              style: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: .48),
-              ),
-            ),
-          ),
-          if (_version.isNotEmpty)
-            Center(
-              child: Text(
-                '${widget.ru ? 'Версия' : 'Version'} $_version',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: .48),
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _nickname,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: widget.ru ? 'Никнейм' : 'Nickname',
-              prefixText: '@',
-            ),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save_outlined),
-            label: Text(widget.ru ? 'Сохранить профиль' : 'Save profile'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: widget.onCheckUpdates,
-            icon: const Icon(Icons.system_update_alt_rounded),
-            label: Text(
-              widget.ru ? 'Проверить обновления' : 'Check updates',
-            ),
-          ),
-          OutlinedButton.icon(
-            onPressed: widget.onChangeLanguage,
-            icon: const Icon(Icons.language),
-            label: Text(widget.ru ? 'English' : 'Русский'),
-          ),
-        ],
-      );
+        ),
+      const SizedBox(height: 20),
+      TextField(
+        controller: _nickname,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: widget.ru ? 'Никнейм' : 'Nickname',
+          prefixText: '@',
+        ),
+      ),
+      const SizedBox(height: 10),
+      FilledButton.icon(
+        onPressed: _save,
+        icon: const Icon(Icons.save_outlined),
+        label: Text(widget.ru ? 'Сохранить профиль' : 'Save profile'),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: widget.onCheckUpdates,
+        icon: const Icon(Icons.system_update_alt_rounded),
+        label: Text(widget.ru ? 'Проверить обновления' : 'Check updates'),
+      ),
+      OutlinedButton.icon(
+        onPressed: widget.onChangeLanguage,
+        icon: const Icon(Icons.language),
+        label: Text(widget.ru ? 'English' : 'Русский'),
+      ),
+    ],
+  );
 }
 
 class _V12ProfileAvatar extends StatelessWidget {
@@ -1192,8 +1227,9 @@ class _V12ProfileAvatar extends StatelessWidget {
         );
       } catch (_) {}
     }
-    final letter =
-        nickname.trim().isEmpty ? '?' : nickname.trim()[0].toUpperCase();
+    final letter = nickname.trim().isEmpty
+        ? '?'
+        : nickname.trim()[0].toUpperCase();
     return Container(
       width: size,
       height: size,
@@ -1317,9 +1353,7 @@ class _V12QrScannerState extends State<_V12QrScanner> {
   }
 
   void _showError(String value) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(value)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
   }
 
   @override
@@ -1330,87 +1364,84 @@ class _V12QrScannerState extends State<_V12QrScanner> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(widget.ru ? 'Принять приглашение' : 'Accept invite'),
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: _cameraSupported
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        MobileScanner(
-                          controller: _controller,
-                          onDetect: _detect,
-                        ),
-                        Center(
-                          child: Container(
-                            width: 250,
-                            height: 250,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: const Color(0xFF18B8FF),
-                                width: 3,
-                              ),
-                              borderRadius: BorderRadius.circular(32),
-                            ),
+    appBar: AppBar(
+      title: Text(widget.ru ? 'Принять приглашение' : 'Accept invite'),
+    ),
+    body: Column(
+      children: [
+        Expanded(
+          child: _cameraSupported
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    MobileScanner(controller: _controller, onDetect: _detect),
+                    Center(
+                      child: Container(
+                        width: 250,
+                        height: 250,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: const Color(0xFF18B8FF),
+                            width: 3,
                           ),
-                        ),
-                      ],
-                    )
-                  : Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(28),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.qr_code_2_rounded,
-                              size: 92,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(height: 18),
-                            Text(
-                              widget.ru
-                                  ? 'На компьютере загрузите скриншот или фотографию QR-кода.'
-                                  : 'On desktop, upload a screenshot or photo of the QR code.',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
+                          borderRadius: BorderRadius.circular(32),
                         ),
                       ),
                     ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _readingFile ? null : _pickImage,
-                    icon: _readingFile
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.image_outlined),
-                    label: Text(
-                      widget.ru
-                          ? 'Загрузить изображение QR-кода'
-                          : 'Upload QR-code image',
+                  ],
+                )
+              : Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.qr_code_2_rounded,
+                          size: 92,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          widget.ru
+                              ? 'На компьютере загрузите скриншот или фотографию QR-кода.'
+                              : 'On desktop, upload a screenshot or photo of the QR code.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _readingFile ? null : _pickImage,
+                icon: _readingFile
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.image_outlined),
+                label: Text(
+                  widget.ru
+                      ? 'Загрузить изображение QR-кода'
+                      : 'Upload QR-code image',
+                ),
               ),
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }

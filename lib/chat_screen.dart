@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'call_service.dart';
@@ -96,8 +98,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     switch (event.type) {
       case 'message':
         if (event.data['message'] is Map) {
-          final raw =
-              Map<String, dynamic>.from(event.data['message'] as Map);
+          final raw = Map<String, dynamic>.from(event.data['message'] as Map);
           _mergeMessages([raw]);
           _rememberContact(
             raw['authorId']?.toString() ??
@@ -141,8 +142,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         break;
       case 'status':
         setState(() {
-          _networkState =
-              event.data['state']?.toString() ?? 'connecting';
+          _networkState = event.data['state']?.toString() ?? 'connecting';
         });
         break;
       case 'control':
@@ -195,8 +195,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
     switch (action) {
       case 'message_delete':
         final messageId = data['messageId']?.toString() ?? '';
-        final index =
-            _tunnel.messages.indexWhere((message) => message.id == messageId);
+        final index = _tunnel.messages.indexWhere(
+          (message) => message.id == messageId,
+        );
         if (index < 0) return;
         final message = _tunnel.messages[index];
         if (sender != message.authorId) return;
@@ -206,8 +207,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
         final messageId = data['messageId']?.toString() ?? '';
         final emoji = data['emoji']?.toString() ?? '';
         if (messageId.isEmpty || emoji.isEmpty || sender.isEmpty) return;
-        final index =
-            _tunnel.messages.indexWhere((message) => message.id == messageId);
+        final index = _tunnel.messages.indexWhere(
+          (message) => message.id == messageId,
+        );
         if (index < 0) return;
         final message = _tunnel.messages[index];
         final reactions = <String, List<String>>{
@@ -223,8 +225,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         break;
       case 'tunnel_update':
         if (sender != _tunnel.ownerId) return;
-        final revision =
-            int.tryParse(data['revision']?.toString() ?? '') ?? 0;
+        final revision = int.tryParse(data['revision']?.toString() ?? '') ?? 0;
         if (revision < _tunnel.revision) return;
         final nextSecret = data['secret']?.toString() ?? _tunnel.secret;
         final secretChanged = nextSecret != _tunnel.secret;
@@ -248,8 +249,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   void _replaceMessage(CgMessage updated) {
-    final index =
-        _tunnel.messages.indexWhere((message) => message.id == updated.id);
+    final index = _tunnel.messages.indexWhere(
+      (message) => message.id == updated.id,
+    );
     if (index < 0) return;
     final messages = [..._tunnel.messages];
     messages[index] = updated;
@@ -282,9 +284,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   void _appendLocal(CgMessage message) {
     if (_tunnel.messages.any((item) => item.id == message.id)) return;
     setState(() {
-      _tunnel = _tunnel.copyWith(
-        messages: [..._tunnel.messages, message],
-      );
+      _tunnel = _tunnel.copyWith(messages: [..._tunnel.messages, message]);
     });
     _persist();
     _scrollToBottom();
@@ -585,8 +585,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
               Text(
                 widget.ru ? 'Пригласить в туннель' : 'Invite to tunnel',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -595,10 +595,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     : 'The invite works over the internet, across cities and networks.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: .58),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .58),
                 ),
               ),
               const SizedBox(height: 18),
@@ -696,98 +695,99 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final name = TextEditingController(text: _tunnel.name);
     var isPrivate = _tunnel.isPrivate;
     var revoke = false;
-    final result = await showModalBottomSheet<
-        ({String name, bool isPrivate, bool revoke})>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            18,
-            0,
-            18,
-            20 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.ru ? 'Настройки туннеля' : 'Tunnel settings',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+    final result =
+        await showModalBottomSheet<
+          ({String name, bool isPrivate, bool revoke})
+        >(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setSheetState) => Padding(
+              padding: EdgeInsets.fromLTRB(
+                18,
+                0,
+                18,
+                20 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.ru ? 'Настройки туннеля' : 'Tunnel settings',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: name,
-                decoration: InputDecoration(
-                  labelText:
-                      widget.ru ? 'Название — необязательно' : 'Name — optional',
-                ),
-              ),
-              const SizedBox(height: 10),
-              SwitchListTile(
-                value: isPrivate,
-                contentPadding: EdgeInsets.zero,
-                secondary: Icon(
-                  isPrivate ? Icons.visibility_off_outlined : Icons.public,
-                ),
-                title: Text(
-                  isPrivate
-                      ? (widget.ru ? 'Приватный' : 'Private')
-                      : (widget.ru ? 'Открытый' : 'Open'),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  isPrivate
-                      ? (widget.ru
-                          ? 'Вход только по секретной ссылке или QR.'
-                          : 'Join only with the secret invite or QR.')
-                      : (widget.ru
-                          ? 'Ссылку можно свободно пересылать.'
-                          : 'The invite may be freely forwarded.'),
-                ),
-                onChanged: (value) => setSheetState(() => isPrivate = value),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: revoke,
-                onChanged: (value) =>
-                    setSheetState(() => revoke = value ?? false),
-                title: Text(
-                  widget.ru
-                      ? 'Отозвать старую ссылку и QR'
-                      : 'Revoke the old link and QR',
-                ),
-                subtitle: Text(
-                  widget.ru
-                      ? 'Все уже подключённые участники получат новый ключ автоматически.'
-                      : 'Connected members receive the new key automatically.',
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    (
-                      name: name.text.trim(),
-                      isPrivate: isPrivate,
-                      revoke: revoke,
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: name,
+                    decoration: InputDecoration(
+                      labelText: widget.ru
+                          ? 'Название — необязательно'
+                          : 'Name — optional',
                     ),
                   ),
-                  icon: const Icon(Icons.check_rounded),
-                  label: Text(widget.ru ? 'Сохранить' : 'Save'),
-                ),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    value: isPrivate,
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      isPrivate ? Icons.visibility_off_outlined : Icons.public,
+                    ),
+                    title: Text(
+                      isPrivate
+                          ? (widget.ru ? 'Приватный' : 'Private')
+                          : (widget.ru ? 'Открытый' : 'Open'),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(
+                      isPrivate
+                          ? (widget.ru
+                                ? 'Вход только по секретной ссылке или QR.'
+                                : 'Join only with the secret invite or QR.')
+                          : (widget.ru
+                                ? 'Ссылку можно свободно пересылать.'
+                                : 'The invite may be freely forwarded.'),
+                    ),
+                    onChanged: (value) =>
+                        setSheetState(() => isPrivate = value),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: revoke,
+                    onChanged: (value) =>
+                        setSheetState(() => revoke = value ?? false),
+                    title: Text(
+                      widget.ru
+                          ? 'Отозвать старую ссылку и QR'
+                          : 'Revoke the old link and QR',
+                    ),
+                    subtitle: Text(
+                      widget.ru
+                          ? 'Все уже подключённые участники получат новый ключ автоматически.'
+                          : 'Connected members receive the new key automatically.',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context, (
+                        name: name.text.trim(),
+                        isPrivate: isPrivate,
+                        revoke: revoke,
+                      )),
+                      icon: const Icon(Icons.check_rounded),
+                      label: Text(widget.ru ? 'Сохранить' : 'Save'),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
+        );
     name.dispose();
     if (result == null) return;
     final updated = _tunnel.copyWith(
@@ -919,7 +919,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
     if (callId.isEmpty || from.isEmpty || from == widget.profile.id) return;
     if (!_handledCalls.add(callId)) return;
     final video = signal['video'] == true;
-    final fromName = signal['fromName']?.toString() ??
+    final fromName =
+        signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         (widget.ru ? 'Собеседник' : 'Peer');
     _rememberContact(from, fromName);
@@ -937,7 +938,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
     if (callId.isEmpty || from.isEmpty || from == widget.profile.id) return;
     if (!_handledCalls.add(callId)) return;
     final video = signal['video'] != false;
-    final fromName = signal['fromName']?.toString() ??
+    final fromName =
+        signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         (widget.ru ? 'Организатор' : 'Host');
     _rememberContact(from, fromName);
@@ -1040,9 +1042,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         ),
         title: Text(
           video
-              ? (widget.ru
-                  ? 'Групповой видеозвонок'
-                  : 'Group video call')
+              ? (widget.ru ? 'Групповой видеозвонок' : 'Group video call')
               : (widget.ru ? 'Групповой звонок' : 'Group call'),
         ),
         content: Text(
@@ -1085,9 +1085,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   String get _statusText {
     if (_networkState == 'connected') {
-      return widget.ru
-          ? 'Онлайн • $_onlinePeers'
-          : 'Online • $_onlinePeers';
+      return widget.ru ? 'Онлайн • $_onlinePeers' : 'Online • $_onlinePeers';
     }
     if (_networkState == 'queued') {
       return widget.ru ? 'Отправим при подключении' : 'Will send when online';
@@ -1112,10 +1110,20 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final canInvite = _isOwner || !_tunnel.isPrivate;
     return Scaffold(
       appBar: AppBar(
-        leadingWidth: 58,
-        leading: Padding(
-          padding: const EdgeInsets.all(8),
-          child: _TunnelAvatar(tunnel: _tunnel, size: 42),
+        leadingWidth: Navigator.of(context).canPop() ? 106 : 58,
+        leading: Row(
+          children: [
+            if (Navigator.of(context).canPop())
+              IconButton(
+                tooltip: widget.ru ? 'Назад' : 'Back',
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: _TunnelAvatar(tunnel: _tunnel, size: 42),
+            ),
+          ],
         ),
         titleSpacing: 0,
         title: Column(
@@ -1183,9 +1191,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.groups_2_outlined),
                   title: Text(
-                    widget.ru
-                        ? 'Групповое видео до 6'
-                        : 'Group video up to 6',
+                    widget.ru ? 'Групповое видео до 6' : 'Group video up to 6',
                   ),
                 ),
               ),
@@ -1211,9 +1217,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   value: 'avatar',
                   child: ListTile(
                     leading: const Icon(Icons.add_photo_alternate_outlined),
-                    title: Text(
-                      widget.ru ? 'Аватар туннеля' : 'Tunnel avatar',
-                    ),
+                    title: Text(widget.ru ? 'Аватар туннеля' : 'Tunnel avatar'),
                   ),
                 ),
               if (_isOwner)
@@ -1231,36 +1235,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
       ),
       body: Column(
         children: [
-          if (_networkState != 'connected')
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-              child: Material(
-                color: scheme.surfaceContainerHighest.withValues(alpha: .62),
-                borderRadius: BorderRadius.circular(14),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: Text(
-                          _statusText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           Expanded(
             child: _tunnel.messages.isEmpty
                 ? _EmptyChat(
@@ -1273,7 +1247,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     itemCount: _tunnel.messages.length,
                     itemBuilder: (context, index) {
                       final message = _tunnel.messages[index];
-                      final mine = message.authorId == widget.profile.id ||
+                      final mine =
+                          message.authorId == widget.profile.id ||
                           (message.authorId.isEmpty &&
                               message.authorName == widget.profile.nickname);
                       return _MessageBubble(
@@ -1355,40 +1330,32 @@ class _AttachmentAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: .72),
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 31,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+    color: Theme.of(
+      context,
+    ).colorScheme.surfaceContainerHighest.withValues(alpha: .72),
+    borderRadius: BorderRadius.circular(20),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 31, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 7),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
             ),
-          ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _TunnelAvatar extends StatelessWidget {
@@ -1442,47 +1409,130 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ChernogramLogo(size: 82, withPlate: true),
-              const SizedBox(height: 18),
-              Text(
-                ru ? 'Туннель готов' : 'Tunnel is ready',
-                style:
-                    const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                onInvite != null
-                    ? (ru
-                        ? 'Отправьте ссылку человеку — после подключения можно писать, звонить и обмениваться файлами.'
-                        : 'Share the invite to message, call and exchange files.')
-                    : (ru
-                        ? 'Ожидайте сообщения от участников.'
-                        : 'Waiting for messages from members.'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: .55),
-                ),
-              ),
-              if (onInvite != null) ...[
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: onInvite,
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(ru ? 'Пригласить человека' : 'Invite someone'),
-                ),
-              ],
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ChernogramLogo(size: 82, withPlate: true),
+          const SizedBox(height: 18),
+          Text(
+            ru ? 'Туннель готов' : 'Tunnel is ready',
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
           ),
+          const SizedBox(height: 8),
+          Text(
+            onInvite != null
+                ? (ru
+                      ? 'Отправьте ссылку человеку — после подключения можно писать, звонить и обмениваться файлами.'
+                      : 'Share the invite to message, call and exchange files.')
+                : (ru
+                      ? 'Ожидайте сообщения от участников.'
+                      : 'Waiting for messages from members.'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: .55),
+            ),
+          ),
+          if (onInvite != null) ...[
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onInvite,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: Text(ru ? 'Пригласить человека' : 'Invite someone'),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class _LinkifiedMessageText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final Color linkColor;
+
+  const _LinkifiedMessageText({
+    required this.text,
+    required this.style,
+    required this.linkColor,
+  });
+
+  @override
+  State<_LinkifiedMessageText> createState() => _LinkifiedMessageTextState();
+}
+
+class _LinkifiedMessageTextState extends State<_LinkifiedMessageText> {
+  static final RegExp _urlPattern = RegExp(
+    r'((?:https?|chernogram)://[^\s]+|www\.[^\s]+)',
+    caseSensitive: false,
+  );
+  final List<TapGestureRecognizer> _recognizers = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  List<InlineSpan> _spans() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    for (final match in _urlPattern.allMatches(widget.text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: widget.text.substring(cursor, match.start)));
+      }
+      var visible = match.group(0)!;
+      var trailing = '';
+      while (visible.isNotEmpty &&
+          '.,!?;:)]}'.contains(visible[visible.length - 1])) {
+        trailing = visible[visible.length - 1] + trailing;
+        visible = visible.substring(0, visible.length - 1);
+      }
+      final normalized = visible.toLowerCase().startsWith('www.')
+          ? 'https://$visible'
+          : visible;
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () async {
+          final uri = Uri.tryParse(normalized);
+          if (uri == null) return;
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        };
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: visible,
+          style: widget.style.copyWith(
+            color: widget.linkColor,
+            decoration: TextDecoration.underline,
+            decorationColor: widget.linkColor,
+            fontWeight: FontWeight.w700,
+          ),
+          recognizer: recognizer,
         ),
       );
+      if (trailing.isNotEmpty) spans.add(TextSpan(text: trailing));
+      cursor = match.end;
+    }
+    if (cursor < widget.text.length) {
+      spans.add(TextSpan(text: widget.text.substring(cursor)));
+    }
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(TextSpan(style: widget.style, children: _spans()));
+  }
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -1531,9 +1581,7 @@ class _MessageBubble extends StatelessWidget {
               bottomLeft: Radius.circular(mine ? 19 : 5),
               bottomRight: Radius.circular(mine ? 5 : 19),
             ),
-            border: Border.all(
-              color: scheme.onSurface.withValues(alpha: .06),
-            ),
+            border: Border.all(color: scheme.onSurface.withValues(alpha: .06)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1551,8 +1599,7 @@ class _MessageBubble extends StatelessWidget {
                     Text(
                       ru ? 'Сообщение удалено' : 'Message deleted',
                       style: TextStyle(
-                        color:
-                            mine ? Colors.white60 : scheme.onSurfaceVariant,
+                        color: mine ? Colors.white60 : scheme.onSurfaceVariant,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -1566,12 +1613,13 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 if (message.text.isNotEmpty) ...[
                   if (attachment != null) const SizedBox(height: 7),
-                  Text(
-                    privacyLens ? '••••••••••' : message.text,
+                  _LinkifiedMessageText(
+                    text: privacyLens ? '••••••••••' : message.text,
                     style: TextStyle(
                       color: mine ? Colors.white : scheme.onSurface,
                       fontSize: 15,
                     ),
+                    linkColor: mine ? Colors.white : scheme.primary,
                   ),
                 ],
               ],
@@ -1654,14 +1702,15 @@ class _CallMessageCard extends StatelessWidget {
     final successful = status == 'completed';
     final title = group
         ? (video
-            ? (ru ? 'Групповой видеозвонок' : 'Group video call')
-            : (ru ? 'Групповой звонок' : 'Group call'))
+              ? (ru ? 'Групповой видеозвонок' : 'Group video call')
+              : (ru ? 'Групповой звонок' : 'Group call'))
         : (video
-            ? (ru ? 'Видеозвонок' : 'Video call')
-            : (ru ? 'Аудиозвонок' : 'Audio call'));
+              ? (ru ? 'Видеозвонок' : 'Video call')
+              : (ru ? 'Аудиозвонок' : 'Audio call'));
     String subtitle;
     if (successful) {
-      subtitle = '${mine ? (ru ? 'Исходящий' : 'Outgoing') : (ru ? 'Входящий' : 'Incoming')}'
+      subtitle =
+          '${mine ? (ru ? 'Исходящий' : 'Outgoing') : (ru ? 'Входящий' : 'Incoming')}'
           '${group ? ' • $participants' : ''}'
           ' • ${_durationText(seconds, ru)}';
     } else if (status == 'declined') {
@@ -1700,8 +1749,8 @@ class _CallMessageCard extends StatelessWidget {
                   group
                       ? Icons.groups_2_rounded
                       : video
-                          ? Icons.videocam_rounded
-                          : Icons.call_rounded,
+                      ? Icons.videocam_rounded
+                      : Icons.call_rounded,
                   color: successful
                       ? ChernogramColors.success
                       : ChernogramColors.danger,
@@ -1755,10 +1804,7 @@ class _AttachmentPreview extends StatelessWidget {
   final CgAttachment attachment;
   final bool hidden;
 
-  const _AttachmentPreview({
-    required this.attachment,
-    required this.hidden,
-  });
+  const _AttachmentPreview({required this.attachment, required this.hidden});
 
   Uint8List? get _bytes {
     final raw = attachment.dataBase64;
@@ -1781,10 +1827,7 @@ class _AttachmentPreview extends StatelessWidget {
           color: Colors.black26,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Icon(
-          Icons.visibility_off_outlined,
-          color: Colors.white70,
-        ),
+        child: const Icon(Icons.visibility_off_outlined, color: Colors.white70),
       );
     }
     final bytes = _bytes;
@@ -1813,10 +1856,10 @@ class _AttachmentPreview extends StatelessWidget {
             attachment.kind == 'audio'
                 ? Icons.graphic_eq_rounded
                 : attachment.kind == 'video'
-                    ? Icons.movie_outlined
-                    : attachment.kind == 'archive'
-                        ? Icons.folder_zip_outlined
-                        : Icons.description_outlined,
+                ? Icons.movie_outlined
+                : attachment.kind == 'archive'
+                ? Icons.folder_zip_outlined
+                : Icons.description_outlined,
           ),
           const SizedBox(width: 10),
           Expanded(
