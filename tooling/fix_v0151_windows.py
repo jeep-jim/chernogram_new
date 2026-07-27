@@ -17,85 +17,99 @@ def patch_windows_updater() -> bool:
     source = replace_once(
         source,
         """      final executable = File(Platform.resolvedExecutable);
-      final installDirectory = executable.parent.path;
-      final executableName = executable.uri.pathSegments.last;
-      final script = File(
-        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ps1',
-      );
-      await script.writeAsString(_windowsInstallScript, flush: true);
+       final installDirectory = executable.parent.path;
+       final executableName = executable.uri.pathSegments.last;
+       final script = File(
+         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ps1',
+       );
+       await script.writeAsString(_windowsInstallScript, flush: true);
 
-      await Process.start(
-        'powershell.exe',
-        <String>[
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-AppProcessId',
-          pid.toString(),
-          '-ZipPath',
-          zipFile.path,
-          '-InstallDir',
-          installDirectory,
-          '-ExeName',
-          executableName,
-        ],
-        mode: ProcessStartMode.detached,
-        runInShell: false,
-      );
+       await Process.start(
+         'powershell.exe',
+         <String>[
+           '-NoProfile',
+           '-NonInteractive',
+           '-ExecutionPolicy',
+           'Bypass',
+           '-File',
+           script.path,
+           '-AppProcessId',
+           pid.toString(),
+           '-ZipPath',
+           zipFile.path,
+           '-InstallDir',
+           installDirectory,
+           '-ExeName',
+           executableName,
+         ],
+         mode: ProcessStartMode.detached,
+         runInShell: false,
+       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      closeDialog();
-      exit(0);
-""",
+       await Future<void>.delayed(const Duration(milliseconds: 700));
+       closeDialog();
+       exit(0);
+ """,
         """      final executable = File(Platform.resolvedExecutable);
-      final installDirectory = executable.parent.path;
-      final executableName = executable.uri.pathSegments.last;
-      final script = File(
-        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.cmd',
-      );
-      final readyFile = File(
-        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ready',
-      );
-      if (await readyFile.exists()) await readyFile.delete();
-      await script.writeAsString(_windowsInstallScript, flush: true);
+       final installDirectory = executable.parent.path;
+       final executableName = executable.uri.pathSegments.last;
+       final script = File(
+         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.cmd',
+       );
+       final readyFile = File(
+         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ready',
+       );
+       final launcher = File(
+         '${temp.path}${Platform.pathSeparator}chernogram-update-launcher-$safeVersion.vbs',
+       );
+       if (await readyFile.exists()) await readyFile.delete();
+       await script.writeAsString(_windowsInstallScript, flush: true);
 
-      await Process.start(
-        'cmd.exe',
-        <String>[
-          '/d',
-          '/s',
-          '/c',
-          'call',
-          script.path,
-          pid.toString(),
-          zipFile.path,
-          installDirectory,
-          executableName,
-          readyFile.path,
-        ],
-        mode: ProcessStartMode.detached,
-        runInShell: false,
-      );
+       final command = <String>[
+         'cmd.exe',
+         '/d',
+         '/s',
+         '/c',
+         'call',
+         _quoteWindowsArgument(script.path),
+         pid.toString(),
+         _quoteWindowsArgument(zipFile.path),
+         _quoteWindowsArgument(installDirectory),
+         _quoteWindowsArgument(executableName),
+         _quoteWindowsArgument(readyFile.path),
+       ].join(' ');
+       final escapedCommand = command.replaceAll('"', '""');
+       await launcher.writeAsString(
+         'Set shell = CreateObject("WScript.Shell")\\r\\n'
+         'shell.Run "$escapedCommand", 0, False\\r\\n'
+         'CreateObject("Scripting.FileSystemObject").DeleteFile '
+         'WScript.ScriptFullName, True\\r\\n',
+         flush: true,
+       );
 
-      var helperReady = false;
-      for (var attempt = 0; attempt < 50; attempt++) {
-        if (await readyFile.exists()) {
-          helperReady = true;
-          break;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-      if (!helperReady) {
-        throw StateError('Windows updater helper did not start');
-      }
+       await Process.start(
+         'wscript.exe',
+         <String>['//B', '//Nologo', launcher.path],
+         mode: ProcessStartMode.detached,
+         runInShell: false,
+       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      closeDialog();
-      exit(0);
-""",
+       var helperReady = false;
+       for (var attempt = 0; attempt < 50; attempt++) {
+         if (await readyFile.exists()) {
+           helperReady = true;
+           break;
+         }
+         await Future<void>.delayed(const Duration(milliseconds: 100));
+       }
+       if (!helperReady) {
+         throw StateError('Windows updater helper did not start');
+       }
+
+       await Future<void>.delayed(const Duration(milliseconds: 250));
+       closeDialog();
+       exit(0);
+ """,
         'Windows helper launch',
     )
 
@@ -103,6 +117,15 @@ def patch_windows_updater() -> bool:
     marker_index = source.find(marker)
     if marker_index < 0:
         raise RuntimeError('Windows updater script marker was not found')
+
+    if 'static String _quoteWindowsArgument' not in source:
+        helper = """  static String _quoteWindowsArgument(String value) {
+    return '\"${value.replaceAll('\"', r'\\\"')}\"';
+  }
+
+"""
+        source = source[:marker_index] + helper + source[marker_index:]
+        marker_index = source.find(marker)
 
     new_script = r"""  static const String _windowsInstallScript = r'''@echo off
 setlocal EnableExtensions
