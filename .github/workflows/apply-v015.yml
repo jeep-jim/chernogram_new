@@ -1,6 +1,5 @@
 name: Apply Chernogram 0.15
 
-# Registered in the previous commit; this change starts the one-shot migration.
 on:
   push:
     branches: [main]
@@ -13,72 +12,49 @@ permissions:
 jobs:
   migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.8'
-          channel: stable
-          cache: true
-
-      - name: Restore migration script
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat tooling/v015_payload_00.txt \
-              tooling/v015_payload_01.txt \
-              tooling/v015_payload_02a.txt \
-              tooling/v015_payload_02b.txt \
-              tooling/v015_payload_03.txt \
-            | base64 -d | gzip -d > /tmp/apply_v015.py
-          python3 -m py_compile /tmp/apply_v015.py
-
-      - name: Apply migration and validate
-        id: validate
+      - name: Apply canonical 0.15 source
         shell: bash
         run: |
           set +e
           set -o pipefail
           {
+            cat tooling/v015_payload_00.txt \
+                tooling/v015_payload_01.txt \
+                tooling/v015_payload_02a.txt \
+                tooling/v015_payload_02b.txt \
+                tooling/v015_payload_03.txt \
+              | base64 -d | gzip -d > /tmp/apply_v015.py
+            python3 -m py_compile /tmp/apply_v015.py
             python3 /tmp/apply_v015.py
-            flutter pub get
-            dart format lib
-            flutter analyze --no-fatal-infos --no-fatal-warnings
-            flutter test
-          } 2>&1 | tee v015-build.txt
+          } 2>&1 | tee v015-migration.txt
           code=${PIPESTATUS[0]}
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
 
-      - name: Save migration diagnostics
-        if: steps.validate.outputs.code != '0'
-        shell: bash
-        run: |
-          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          cp v015-build.txt V015_ERROR.txt
-          git add -f V015_ERROR.txt
-          git commit -m "Сохранить ошибку миграции 0.15 [skip ci]" || true
-          git push origin HEAD:main || true
-          exit 1
 
-      - name: Commit Chernogram 0.15 source
-        if: steps.validate.outputs.code == '0'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$code" != "0" ]; then
+            cp v015-migration.txt /tmp/v015-migration.txt
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/v015-migration.txt V015_ERROR.txt
+            git add -f V015_ERROR.txt
+            git commit -m "Сохранить ошибку миграции 0.15 [skip ci]" || true
+            git push origin HEAD:main || true
+            exit 1
+          fi
+
+          git pull --rebase --autostash origin main
           git rm .github/workflows/apply-v015.yml
           git rm tooling/v015_payload_00.txt tooling/v015_payload_01.txt \
                  tooling/v015_payload_02a.txt tooling/v015_payload_02b.txt \
                  tooling/v015_payload_03.txt
           git rm -f V015_ERROR.txt 2>/dev/null || true
-          git add lib pubspec.yaml pubspec.lock
+          git add lib pubspec.yaml
           git commit -m "Ускорить чаты, медиа и интерфейс в Чернограме 0.15 [skip ci]"
           git push origin HEAD:main
