@@ -61,9 +61,11 @@ jobs:
             New-Item -ItemType Directory -Path "$package/app" -Force | Out-Null
             Copy-Item "$release/*" "$package/app" -Recurse -Force
 
-            $bootstrapSource = Get-Content 'tooling/windows_bootstrap.cs' -Raw
             $bootstrap = Join-Path $package 'chernogram.exe'
-            Add-Type -TypeDefinition $bootstrapSource -OutputAssembly $bootstrap -OutputType WindowsApplication
+            $csc = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+            if (-not (Test-Path $csc)) { throw 'C# compiler was not found' }
+            & $csc /nologo /target:winexe "/out:$bootstrap" 'tooling/windows_bootstrap.cs'
+            if ($LASTEXITCODE -ne 0) { throw "Bootstrap compilation failed: $LASTEXITCODE" }
             if (-not (Test-Path $bootstrap)) { throw 'Windows bootstrap was not created' }
 
             $readme = @(
@@ -155,7 +157,7 @@ jobs:
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "4189828+github-actions[bot]@users.noreply.github.com"
           $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
           git fetch origin main
           git reset --hard origin/main
