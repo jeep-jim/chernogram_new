@@ -31,6 +31,9 @@ try {
     -Name 'FIX 0.15 COMPILE' `
     -Command 'python tooling/fix_v015_compile.py'
   Invoke-LoggedCommand `
+    -Name 'FIX 0.16 FOUNDATION' `
+    -Command 'python tooling/fix_v016_foundation.py'
+  Invoke-LoggedCommand `
     -Name 'INSTALL PILLOW' `
     -Command 'python -m pip install pillow --disable-pip-version-check --quiet'
   Invoke-LoggedCommand `
