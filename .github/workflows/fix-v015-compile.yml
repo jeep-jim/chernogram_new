@@ -1,0 +1,127 @@
+name: Fix Chernogram 0.15 compile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-v015-compile.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore signal replay and tunnel cache cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          internet = Path('lib/internet_core.dart')
+          source = internet.read_text(encoding='utf-8')
+          old = """  final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+  final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
+"""
+          new = """  final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> _signalHistory = <Map<String, dynamic>>[];
+  final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
+"""
+          if '_signalHistory' not in source:
+              if old not in source:
+                  raise SystemExit('internet signal field marker not found')
+              source = source.replace(old, new, 1)
+
+          old = """      case 'signal':
+        _emit('signal', <String, dynamic>{
+          ...data,
+          'relaySender': sender,
+          'relaySenderName': senderName,
+        });
+        break;
+"""
+          new = """      case 'signal':
+        final signal = <String, dynamic>{
+          ...data,
+          'relaySender': sender,
+          'relaySenderName': senderName,
+          'receivedAt': DateTime.now().toUtc().toIso8601String(),
+        };
+        _signalHistory.add(signal);
+        if (_signalHistory.length > 200) {
+          _signalHistory.removeRange(0, _signalHistory.length - 200);
+        }
+        _emit('signal', signal);
+        break;
+"""
+          if "final signal = <String, dynamic>{" not in source:
+              if old not in source:
+                  raise SystemExit('internet signal case marker not found')
+              source = source.replace(old, new, 1)
+
+          marker = """  Future<void> sendSignal(Map<String, dynamic> signal) async {
+    await _sendEnvelope('signal', signal, queueOnFailure: false);
+  }
+
+"""
+          addition = """  List<Map<String, dynamic>> replaySignals(String callId) {
+    if (callId.isEmpty) return const <Map<String, dynamic>>[];
+    final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
+    return _signalHistory.where((signal) {
+      if (signal['callId']?.toString() != callId) return false;
+      final receivedAt = DateTime.tryParse(signal['receivedAt']?.toString() ?? '');
+      return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
+    }).map((signal) => Map<String, dynamic>.from(signal)).toList();
+  }
+
+"""
+          if 'replaySignals(String callId)' not in source:
+              if marker not in source:
+                  raise SystemExit('sendSignal marker not found')
+              source = source.replace(marker, marker + addition, 1)
+          internet.write_text(source, encoding='utf-8')
+
+          media = Path('lib/chat_media.dart')
+          source = media.read_text(encoding='utf-8')
+          marker = """  static Future<List<CgTunnel>> purgeAll(List<CgTunnel> tunnels) async {
+"""
+          addition = """  static Future<void> purgeTunnelFiles(CgTunnel tunnel) async {
+    final root = await rootDirectory();
+    final visited = <String>{};
+    for (final message in tunnel.messages) {
+      final attachment = message.attachment;
+      if (attachment == null) continue;
+      final file = await existingFile(attachment);
+      if (file == null || !visited.add(file.path)) continue;
+      try {
+        if (file.path.startsWith(root.path) && await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
+"""
+          if 'purgeTunnelFiles(CgTunnel tunnel)' not in source:
+              if marker not in source:
+                  raise SystemExit('purgeAll marker not found')
+              source = source.replace(marker, addition + marker, 1)
+          media.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Commit correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-v015-compile.yml
+          git add lib/internet_core.dart lib/chat_media.dart
+          git commit -m "Восстановить сигналы звонков и очистку кэша 0.15 [skip ci]"
+          git push origin HEAD:main
