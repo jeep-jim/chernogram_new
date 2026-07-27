@@ -16,7 +16,7 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 70
+    timeout-minutes: 80
 
     steps:
       - name: Checkout
@@ -33,12 +33,12 @@ jobs:
         shell: pwsh
         run: ./tooling/build_windows.ps1
 
-      - name: Package migration-safe portable application
+      - name: Package portable application and repair installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $log = 'windows-package.txt'
-          Set-Content -Path $log -Value '===== WINDOWS MIGRATION-SAFE PACKAGE =====' -Encoding UTF8
+          Set-Content -Path $log -Value '===== WINDOWS PACKAGE AND REPAIR INSTALLER =====' -Encoding UTF8
           try {
             $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
             $versionName = ($versionFull -split '\+')[0]
@@ -52,7 +52,7 @@ jobs:
               $source = Join-Path $env:WINDIR "System32/$dll"
               if (Test-Path $source) {
                 Copy-Item $source $release -Force
-                Add-Content $log "Bundled $dll"
+                Add-Content $log "Bundled $dll into app"
               }
             }
 
@@ -68,10 +68,18 @@ jobs:
             if (-not $vsPath) { throw 'Visual Studio C++ tools were not found' }
             $vcvars = Join-Path $vsPath 'VC/Auxiliary/Build/vcvars64.bat'
             if (-not (Test-Path $vcvars)) { throw 'vcvars64.bat was not found' }
-            $compile = "call `"$vcvars`" && cl.exe /nologo /O2 /EHsc /DUNICODE /D_UNICODE tooling\windows_bootstrap.cpp shell32.lib /link /SUBSYSTEM:WINDOWS /OUT:`"$bootstrap`""
+            $compile = "call `"$vcvars`" && cl.exe /nologo /O2 /MT /EHsc /DUNICODE /D_UNICODE tooling\windows_bootstrap.cpp shell32.lib /link /SUBSYSTEM:WINDOWS /OUT:`"$bootstrap`""
             cmd.exe /D /S /C $compile 2>&1 | Tee-Object -FilePath $log -Append
             if ($LASTEXITCODE -ne 0) { throw "Bootstrap compilation failed: $LASTEXITCODE" }
             if (-not (Test-Path $bootstrap)) { throw 'Windows bootstrap was not created' }
+
+            foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+              $source = Join-Path $release $dll
+              if (Test-Path $source) {
+                Copy-Item $source $package -Force
+                Add-Content $log "Bundled $dll beside bootstrap"
+              }
+            }
 
             $readme = @(
               'ЧЕРНОГРАМ ДЛЯ WINDOWS',
@@ -81,7 +89,10 @@ jobs:
               '',
               'Запускайте chernogram.exe из корня распакованной папки.',
               'Папка app содержит основные файлы программы и не должна удаляться.',
-              'Такое размещение позволяет надёжно обновить уже установленную переносимую версию.'
+              '',
+              'Если старая переносимая версия закрывается при обновлении и остаётся прежней,',
+              'один раз запустите Chernogram-Windows-Setup.exe из релиза. После установки',
+              'используйте созданный ярлык «Чернограм» — следующие обновления будут ставиться в установленную папку.'
             )
             Set-Content -Path "$package/README-RU.txt" -Value $readme -Encoding UTF8
 
@@ -90,7 +101,59 @@ jobs:
             Compress-Archive -Path "$package/*" -DestinationPath $zip -CompressionLevel Optimal
             if (-not (Test-Path $zip)) { throw 'Portable ZIP was not created' }
 
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed: $LASTEXITCODE" }
+
+            $iss = @"
+          #define MyAppName "Чернограм"
+          #define MyAppVersion "$versionName"
+          #define MyAppPublisher "Chernogram"
+          #define MyAppExeName "chernogram.exe"
+
+          [Setup]
+          AppId={{B6C33A77-38D4-4CA0-BE3A-B0C431E40F16}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+          DefaultDirName={localappdata}\Programs\Chernogram
+          DefaultGroupName=Чернограм
+          DisableProgramGroupPage=yes
+          DisableDirPage=yes
+          OutputDir=.
+          OutputBaseFilename=Chernogram-Windows-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          PrivilegesRequired=lowest
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          MinVersion=10.0
+          SetupIconFile=windows\runner\resources\app_icon.ico
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          CloseApplications=yes
+          RestartApplications=no
+
+          [Languages]
+          Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Files]
+          Source: "$package\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          Name: "{autodesktop}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Запустить Чернограм"; Flags: nowait runascurrentuser
+          "@
+            Set-Content 'chernogram-windows.iss' -Value $iss -Encoding UTF8
+            & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' 'chernogram-windows.iss' 2>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
+            if (-not (Test-Path 'Chernogram-Windows-Setup.exe')) { throw 'Setup EXE was not created' }
+
             $portableHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+            $installerHash = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLower()
             $manifest = @{
               versionName = $versionName
               versionFull = $versionFull
@@ -98,11 +161,14 @@ jobs:
               minimumWindows = '10'
               portableUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
               portableSha256 = $portableHash
-              packageType = 'portable-zip-bootstrap-v2'
+              installerUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe'
+              installerSha256 = $installerHash
+              packageType = 'portable-zip-bootstrap-v3-with-repair-installer'
             } | ConvertTo-Json
             Set-Content -Path 'windows-update.json' -Value $manifest -Encoding UTF8
             Add-Content $log "Created $zip"
-            Add-Content $log "SHA256: $portableHash"
+            Add-Content $log "Portable SHA256: $portableHash"
+            Add-Content $log "Installer SHA256: $installerHash"
           }
           catch {
             $message = "PACKAGE ERROR: $($_.Exception.Message)"
@@ -121,11 +187,12 @@ jobs:
           $versionName = ($versionFull -split '\+')[0]
           gh release delete latest-windows --cleanup-tag --yes 2>$null
           gh release create latest-windows `
+            'Chernogram-Windows-Setup.exe' `
             'chernogram-windows-portable.zip' `
             'windows-update.json' `
             --target main `
             --title "Чернограм Windows $versionName" `
-            --notes "Исправлено автоматическое обновление Windows: пакет совместим с ранее установленной переносимой версией, обновление заменяет файлы и автоматически запускает приложение снова." `
+            --notes "Исправление только для Windows. Добавлен обычный установщик Chernogram-Windows-Setup.exe для перехода со старой переносимой версии, которая закрывается, но не заменяет файлы. Установщик создаёт новый рабочий ярлык и запускает актуальную версию." `
             --prerelease 2>&1 | Tee-Object -FilePath 'windows-release.txt'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -173,8 +240,9 @@ jobs:
             "Version: $versionFull",
             'Architecture: x64',
             'Supported: Windows 10 and Windows 11',
-            'Package: migration-safe portable ZIP with native bootstrap',
-            'Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+            'Package: portable ZIP plus repair installer',
+            'Installer: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe',
+            'Portable: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
           ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
           git add WINDOWS_BUILD_STATUS.md
           if (git ls-files --error-unmatch WINDOWS_CI_ERROR.txt 2>$null) { git rm -f WINDOWS_CI_ERROR.txt }
