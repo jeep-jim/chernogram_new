@@ -1,13 +1,6 @@
 name: Build iOS foundation
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'lib/**'
-      - 'pubspec.yaml'
-      - 'tooling/**'
-      - '.github/workflows/build-ios.yml'
   workflow_dispatch:
 
 permissions:
