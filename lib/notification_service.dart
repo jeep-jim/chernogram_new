@@ -3,16 +3,20 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'desktop_tray_service.dart';
 
 class CgNotificationService with WidgetsBindingObserver {
   CgNotificationService._();
 
+  static const String foregroundStateKey = 'cg_app_foreground_v1';
   static final CgNotificationService instance = CgNotificationService._();
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   static final StreamController<String> _tunnelClicks =
+      StreamController<String>.broadcast();
+  static final StreamController<String> _callClicks =
       StreamController<String>.broadcast();
   static final Set<String> _shownMessageIds = <String>{};
 
@@ -20,14 +24,17 @@ class CgNotificationService with WidgetsBindingObserver {
   static AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   static String? _activeTunnelId;
   static String? _pendingTunnelId;
+  static String? _pendingCallId;
 
   static Stream<String> get tunnelClicks => _tunnelClicks.stream;
+  static Stream<String> get callClicks => _callClicks.stream;
   static bool get isForeground => _lifecycle == AppLifecycleState.resumed;
 
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
     WidgetsBinding.instance.addObserver(instance);
+    await _writeForegroundState(true);
 
     const android = AndroidInitializationSettings(
       '@drawable/chernogram_launcher_icon',
@@ -57,6 +64,16 @@ class CgNotificationService with WidgetsBindingObserver {
     }
   }
 
+  static Future<void> requestCallPermissions() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await android?.requestNotificationsPermission();
+      await android?.requestFullScreenIntentPermission();
+    } catch (_) {}
+  }
+
   static void setActiveTunnel(String? tunnelId) {
     _activeTunnelId = tunnelId;
   }
@@ -64,6 +81,12 @@ class CgNotificationService with WidgetsBindingObserver {
   static String? consumePendingTunnelId() {
     final value = _pendingTunnelId;
     _pendingTunnelId = null;
+    return value;
+  }
+
+  static String? consumePendingCallId() {
+    final value = _pendingCallId;
+    _pendingCallId = null;
     return value;
   }
 
@@ -92,6 +115,7 @@ class CgNotificationService with WidgetsBindingObserver {
         playSound: true,
         enableVibration: true,
         category: AndroidNotificationCategory.message,
+        visibility: NotificationVisibility.public,
       ),
       windows: WindowsNotificationDetails(),
     );
@@ -115,6 +139,14 @@ class CgNotificationService with WidgetsBindingObserver {
   }
 
   static void _handlePayload(String payload) {
+    if (payload.startsWith('call:')) {
+      final callId = payload.substring('call:'.length);
+      if (callId.isEmpty) return;
+      _pendingCallId = callId;
+      if (Platform.isWindows) unawaited(CgDesktopTray.showWindow());
+      _callClicks.add(callId);
+      return;
+    }
     if (!payload.startsWith('tunnel:')) return;
     final tunnelId = payload.substring('tunnel:'.length);
     if (tunnelId.isEmpty) return;
@@ -123,13 +155,23 @@ class CgNotificationService with WidgetsBindingObserver {
     _tunnelClicks.add(tunnelId);
   }
 
+  static Future<void> _writeForegroundState(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(foregroundStateKey, value);
+    } catch (_) {}
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycle = state;
+    unawaited(_writeForegroundState(state == AppLifecycleState.resumed));
   }
 
   static Future<void> dispose() async {
     WidgetsBinding.instance.removeObserver(instance);
+    await _writeForegroundState(false);
     await _tunnelClicks.close();
+    await _callClicks.close();
   }
 }
