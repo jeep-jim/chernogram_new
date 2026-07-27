@@ -60,6 +60,97 @@ def patch_main() -> None:
     path.write_text(source, encoding='utf-8')
 
 
+def patch_windows_updater() -> None:
+    path = Path('lib/windows_update_service.dart')
+    if not path.exists():
+        return
+    source = path.read_text(encoding='utf-8')
+    original = source
+
+    old_launch = """      await Process.start(
+        'powershell.exe',
+        <String>[
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+          '-AppProcessId',
+          pid.toString(),
+          '-ZipPath',
+          zipFile.path,
+          '-InstallDir',
+          installDirectory,
+          '-ExeName',
+          executableName,
+        ],
+        mode: ProcessStartMode.detached,
+        runInShell: false,
+      );
+"""
+    new_launch = """      final launcher = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-update-launcher-$safeVersion.vbs',
+      );
+      final command = <String>[
+        'powershell.exe',
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        _quoteWindowsArgument(script.path),
+        '-AppProcessId',
+        pid.toString(),
+        '-ZipPath',
+        _quoteWindowsArgument(zipFile.path),
+        '-InstallDir',
+        _quoteWindowsArgument(installDirectory),
+        '-ExeName',
+        _quoteWindowsArgument(executableName),
+      ].join(' ');
+      final escapedCommand = command.replaceAll('"', '""');
+      await launcher.writeAsString(
+        'Set shell = CreateObject("WScript.Shell")\\r\\n'
+        'shell.Run "$escapedCommand", 0, False\\r\\n'
+        'CreateObject("Scripting.FileSystemObject").DeleteFile '
+        'WScript.ScriptFullName, True\\r\\n',
+        flush: true,
+      );
+
+      await Process.start(
+        'wscript.exe',
+        <String>['//B', '//Nologo', launcher.path],
+        mode: ProcessStartMode.detached,
+        runInShell: false,
+      );
+"""
+
+    if old_launch in source:
+        source = source.replace(old_launch, new_launch, 1)
+    elif 'chernogram-update-launcher-' not in source:
+        raise RuntimeError('Windows updater launch block was not found')
+
+    helper_marker = """  static int _compareVersions(String left, String right) {
+"""
+    helper = """  static String _quoteWindowsArgument(String value) {
+    return '\"${value.replaceAll('\"', r'\\\"')}\"';
+  }
+
+  static int _compareVersions(String left, String right) {
+"""
+    if '_quoteWindowsArgument' not in source:
+        if helper_marker not in source:
+            raise RuntimeError('Windows updater helper marker was not found')
+        source = source.replace(helper_marker, helper, 1)
+
+    if source != original:
+        path.write_text(source, encoding='utf-8')
+
+
 def patch_desktop_guards() -> None:
     path = Path('lib/v07.dart')
     source = path.read_text(encoding='utf-8')
@@ -188,6 +279,7 @@ def create_icon() -> None:
 def main() -> None:
     patch_pubspec()
     patch_main()
+    patch_windows_updater()
     patch_desktop_guards()
     patch_cmake()
     patch_runner()
