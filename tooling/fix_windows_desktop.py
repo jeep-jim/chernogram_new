@@ -84,6 +84,24 @@ def patch_desktop_guards() -> None:
     path.write_text(source, encoding='utf-8')
 
 
+def patch_cmake() -> None:
+    path = Path('windows/CMakeLists.txt')
+    if not path.exists():
+        return
+    source = path.read_text(encoding='utf-8')
+    marker = 'project(chernogram LANGUAGES CXX)\n'
+    definition = (
+        'add_compile_definitions('
+        '_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)\n'
+    )
+    if definition not in source:
+        if marker in source:
+            source = source.replace(marker, marker + '\n' + definition, 1)
+        else:
+            source = definition + '\n' + source
+    path.write_text(source, encoding='utf-8')
+
+
 def patch_runner() -> None:
     main_cpp = Path('windows/runner/main.cpp')
     if main_cpp.exists():
@@ -171,6 +189,7 @@ def main() -> None:
     patch_pubspec()
     patch_main()
     patch_desktop_guards()
+    patch_cmake()
     patch_runner()
     create_icon()
     print('Applied Chernogram Windows desktop compatibility')
