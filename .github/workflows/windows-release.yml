@@ -33,18 +33,18 @@ jobs:
         shell: pwsh
         run: ./tooling/build_windows.ps1
 
-      - name: Package portable application
+      - name: Package migration-safe portable application
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $log = 'windows-package.txt'
-          Set-Content -Path $log -Value '===== WINDOWS PORTABLE PACKAGE =====' -Encoding UTF8
+          Set-Content -Path $log -Value '===== WINDOWS MIGRATION-SAFE PACKAGE =====' -Encoding UTF8
           try {
             $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
             $versionName = ($versionFull -split '\+')[0]
             $release = 'build/windows/x64/runner/Release'
-            $exe = Join-Path $release 'chernogram.exe'
-            if (-not (Test-Path $exe)) {
+            $appExe = Join-Path $release 'chernogram.exe'
+            if (-not (Test-Path $appExe)) {
               throw 'chernogram.exe was not produced'
             }
 
@@ -56,24 +56,74 @@ jobs:
               }
             }
 
+            $package = 'windows-package'
+            if (Test-Path $package) { Remove-Item $package -Recurse -Force }
+            New-Item -ItemType Directory -Path "$package/app" -Force | Out-Null
+            Copy-Item "$release/*" "$package/app" -Recurse -Force
+
+            $bootstrapSource = @'
+          using System;
+          using System.Diagnostics;
+          using System.IO;
+          using System.Text;
+
+          public static class Program
+          {
+              [STAThread]
+              public static int Main(string[] args)
+              {
+                  try
+                  {
+                      string root = AppDomain.CurrentDomain.BaseDirectory;
+                      string appDir = Path.Combine(root, "app");
+                      string target = Path.Combine(appDir, "chernogram.exe");
+                      if (!File.Exists(target)) return 2;
+
+                      var commandLine = new StringBuilder();
+                      foreach (string arg in args)
+                      {
+                          if (commandLine.Length > 0) commandLine.Append(' ');
+                          commandLine.Append('"');
+                          commandLine.Append((arg ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\""));
+                          commandLine.Append('"');
+                      }
+
+                      var info = new ProcessStartInfo
+                      {
+                          FileName = target,
+                          WorkingDirectory = appDir,
+                          UseShellExecute = false,
+                          Arguments = commandLine.ToString()
+                      };
+                      Process.Start(info);
+                      return 0;
+                  }
+                  catch
+                  {
+                      return 1;
+                  }
+              }
+          }
+          '@
+            $bootstrap = Join-Path $package 'chernogram.exe'
+            Add-Type -TypeDefinition $bootstrapSource -OutputAssembly $bootstrap -OutputType WindowsApplication
+            if (-not (Test-Path $bootstrap)) { throw 'Windows bootstrap was not created' }
+
             $readme = @(
               'ЧЕРНОГРАМ ДЛЯ WINDOWS',
               '',
               "Версия: $versionFull",
               'Поддержка: Windows 10 и Windows 11, 64-бит.',
               '',
-              '1. Распакуйте ZIP целиком в отдельную папку.',
-              '2. Запустите chernogram.exe.',
-              '3. Не переносите EXE отдельно от папки data и DLL-файлов.',
-              '',
-              'При предупреждении SmartScreen нажмите «Подробнее» → «Выполнить в любом случае».',
-              'Приложение пока не подписано платным сертификатом Windows.'
+              'Запускайте chernogram.exe из корня распакованной папки.',
+              'Папка app содержит основные файлы программы и не должна удаляться.',
+              'Такое размещение позволяет надёжно обновить уже установленную переносимую версию.'
             )
-            Set-Content -Path "$release/README-RU.txt" -Value $readme -Encoding UTF8
+            Set-Content -Path "$package/README-RU.txt" -Value $readme -Encoding UTF8
 
             $zip = 'chernogram-windows-portable.zip'
             if (Test-Path $zip) { Remove-Item $zip -Force }
-            Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
+            Compress-Archive -Path "$package/*" -DestinationPath $zip -CompressionLevel Optimal
             if (-not (Test-Path $zip)) { throw 'Portable ZIP was not created' }
 
             $portableHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
@@ -84,7 +134,7 @@ jobs:
               minimumWindows = '10'
               portableUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
               portableSha256 = $portableHash
-              packageType = 'portable-zip'
+              packageType = 'portable-zip-bootstrap-v2'
             } | ConvertTo-Json
             Set-Content -Path 'windows-update.json' -Value $manifest -Encoding UTF8
             Add-Content $log "Created $zip"
@@ -111,7 +161,7 @@ jobs:
             'windows-update.json' `
             --target main `
             --title "Чернограм Windows $versionName" `
-            --notes "Чернограм для Windows 10/11 x64. Распакуйте ZIP целиком и запустите chernogram.exe. Портативная версия не требует установки и прав администратора." `
+            --notes "Исправлено автоматическое обновление Windows: пакет совместим с ранее установленной переносимой версией, обновление заменяет файлы и автоматически запускает приложение снова." `
             --prerelease 2>&1 | Tee-Object -FilePath 'windows-release.txt'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -159,7 +209,7 @@ jobs:
             "Version: $versionFull",
             'Architecture: x64',
             'Supported: Windows 10 and Windows 11',
-            'Package: portable ZIP, no administrator rights required',
+            'Package: migration-safe portable ZIP with bootstrap',
             'Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
           ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
           git add WINDOWS_BUILD_STATUS.md
