@@ -140,6 +140,26 @@ class CgMediaStore {
     );
   }
 
+  static Future<void> purgeTunnelFiles(CgTunnel tunnel) async {
+    final ids = <String>{
+      for (final message in tunnel.messages)
+        if (message.attachment != null) message.attachment!.id,
+    };
+    if (ids.isEmpty) return;
+    final root = await rootDirectory();
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final name = entity.path.split(Platform.pathSeparator).last;
+      final matches = ids.any(
+        (id) => name.startsWith('${_safeName(id)}_'),
+      );
+      if (!matches) continue;
+      try {
+        await entity.delete();
+      } catch (_) {}
+    }
+  }
+
   static Future<List<CgTunnel>> purgeItem(
     List<CgTunnel> tunnels,
     CgMediaItem item,
@@ -491,6 +511,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
     }
     final attachment = widget.attachment;
     final bytes = _bytes;
+    if (attachment.kind == 'circle') {
+      return _CgInlineCircleAttachment(attachment: attachment);
+    }
     if (attachment.kind == 'image' && bytes != null) {
       return GestureDetector(
         onTap: () => Navigator.push<void>(
@@ -516,7 +539,7 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
         width: 278,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: .14),
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -586,7 +609,7 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
         width: 270,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: .14),
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -631,16 +654,170 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
   }
 }
 
+
+class _CgInlineCircleAttachment extends StatefulWidget {
+  final CgAttachment attachment;
+
+  const _CgInlineCircleAttachment({required this.attachment});
+
+  @override
+  State<_CgInlineCircleAttachment> createState() =>
+      _CgInlineCircleAttachmentState();
+}
+
+class _CgInlineCircleAttachmentState
+    extends State<_CgInlineCircleAttachment> {
+  VideoPlayerController? _controller;
+  File? _file;
+  bool _ready = false;
+  bool _sound = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    final file = await CgMediaStore.ensureFile(widget.attachment);
+    if (file == null || !mounted) return;
+    final controller = VideoPlayerController.file(file);
+    await controller.initialize();
+    await controller.setLooping(true);
+    await controller.setVolume(0);
+    controller.addListener(_refresh);
+    await controller.play();
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+    setState(() {
+      _file = file;
+      _controller = controller;
+      _ready = true;
+    });
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggle() async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (controller.value.isPlaying && _sound) {
+      await controller.pause();
+      return;
+    }
+    _sound = true;
+    await controller.setVolume(1);
+    await controller.play();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _open() async {
+    final file = _file;
+    if (file == null || !mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgVideoPlayerScreen(
+          file: file,
+          circle: true,
+          title: widget.attachment.name,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_refresh);
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final duration = controller?.value.duration ?? Duration.zero;
+    final position = controller?.value.position ?? Duration.zero;
+    final progress = duration.inMilliseconds <= 0
+        ? 0.0
+        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    const size = 224.0;
+    return GestureDetector(
+      onTap: _toggle,
+      onLongPress: _open,
+      child: SizedBox.square(
+        dimension: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ClipOval(
+              child: SizedBox.square(
+                dimension: size - 8,
+                child: !_ready || controller == null
+                    ? Container(
+                        color: Colors.black26,
+                        alignment: Alignment.center,
+                        child: const CircularProgressIndicator(),
+                      )
+                    : FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: controller.value.size.width,
+                          height: controller.value.size.height,
+                          child: VideoPlayer(controller),
+                        ),
+                      ),
+              ),
+            ),
+            Positioned.fill(
+              child: CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 4,
+                backgroundColor: Colors.white24,
+              ),
+            ),
+            if (controller != null && !controller.value.isPlaying)
+              const CircleAvatar(
+                radius: 25,
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.play_arrow_rounded, color: Colors.white),
+              ),
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: CircleAvatar(
+                radius: 15,
+                backgroundColor: Colors.black54,
+                child: Icon(
+                  _sound ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  size: 17,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CgMediaLibraryScreen extends StatefulWidget {
   final bool ru;
   final List<CgTunnel> tunnels;
   final ValueChanged<List<CgTunnel>> onTunnelsChanged;
+  final String initialFilter;
 
   const CgMediaLibraryScreen({
     super.key,
     required this.ru,
     required this.tunnels,
     required this.onTunnelsChanged,
+    this.initialFilter = 'all',
   });
 
   @override
@@ -653,13 +830,14 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
   List<CgMediaItem> _items = const <CgMediaItem>[];
   CgStorageStats? _stats;
   CgMediaItem? _playing;
-  String _filter = 'all';
+  late String _filter;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _tunnels = widget.tunnels;
+    _filter = widget.initialFilter;
     _reload();
   }
 
@@ -808,7 +986,11 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
         : null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.ru ? 'Файлы и медиа' : 'Files and media'),
+        title: Text(
+          widget.initialFilter == 'audio'
+              ? (widget.ru ? 'Музыкальный плеер' : 'Music player')
+              : (widget.ru ? 'Файлы и медиа' : 'Files and media'),
+        ),
         actions: [
           IconButton(
             tooltip: widget.ru ? 'Очистить' : 'Clear',
@@ -1137,8 +1319,8 @@ class _CgVideoPlayerScreenState extends State<CgVideoPlayerScreen> {
                           child: SizedBox.square(
                             dimension: math.min(
                               MediaQuery.sizeOf(context).width - 34,
-                              420,
-                            ),
+                              420.0,
+                            ).toDouble(),
                             child: FittedBox(
                               fit: BoxFit.cover,
                               child: SizedBox(
@@ -1210,7 +1392,6 @@ class _CgCircleRecorderScreenState extends State<CgCircleRecorderScreen>
         _camera!,
         ResolutionPreset.medium,
         enableAudio: true,
-        imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await controller.initialize();
       if (!mounted) {
@@ -1345,14 +1526,57 @@ class _CgCircleRecorderScreenState extends State<CgCircleRecorderScreen>
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        ClipOval(
-                          child: SizedBox.square(
-                            dimension: math.min(
-                              MediaQuery.sizeOf(context).width - 36,
-                              420,
-                            ),
-                            child: CameraPreview(_controller!),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final diameter = math.min(
+                              MediaQuery.sizeOf(context).width - 48,
+                              410.0,
+                            ).toDouble();
+                            final progress = (_elapsed.inMilliseconds / 60000)
+                                .clamp(0.0, 1.0);
+                            return SizedBox.square(
+                              dimension: diameter + 14,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  ClipOval(
+                                    child: SizedBox.square(
+                                      dimension: diameter,
+                                      child: CameraPreview(_controller!),
+                                    ),
+                                  ),
+                                  Positioned.fill(
+                                    child: CircularProgressIndicator(
+                                      value: _recording ? progress : 0,
+                                      strokeWidth: 7,
+                                      backgroundColor: Colors.white24,
+                                    ),
+                                  ),
+                                  if (_recording)
+                                    Positioned(
+                                      bottom: 18,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius: BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          '${60 - _elapsed.inSeconds} сек',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 24),
                         Text(
@@ -1374,7 +1598,7 @@ class _CgCircleRecorderScreenState extends State<CgCircleRecorderScreen>
                               shape: BoxShape.circle,
                               color: _recording
                                   ? ChernogramColors.danger
-                                  : ChernogramColors.purple,
+                                  : Theme.of(context).colorScheme.primary,
                               border: Border.all(color: Colors.white, width: 5),
                             ),
                             child: Icon(

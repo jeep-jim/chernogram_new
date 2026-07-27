@@ -68,7 +68,7 @@ class CgMusicHub {
   }
 
   Future<void> playSingle(CgMusicTrack track) async {
-    if (activeTrackId.value == track.id && player.audioSource != null) {
+    if (activeTrackId.value == track.id && queue.value.isNotEmpty) {
       if (player.playing) {
         await player.pause();
       } else {
@@ -199,7 +199,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
       try {
         final file = await asset.file;
         if (file == null || !await file.exists()) continue;
-        final title = (await asset.titleAsync).trim();
+        final title = ((await asset.titleAsync) ?? '').trim();
         tracks.add(
           CgMusicTrack(
             id: 'device:${asset.id}',

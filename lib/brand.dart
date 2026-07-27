@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ChernogramColors {
   static const background = Color(0xFF070A12);
@@ -75,6 +76,26 @@ ThemeData _themeFromScheme(
     colorScheme: scheme,
     splashFactory: InkSparkle.splashFactory,
     appBarTheme: AppBarTheme(
+      systemOverlayStyle: dark
+          ? const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+              systemNavigationBarColor: ChernogramColors.background,
+              systemNavigationBarIconBrightness: Brightness.light,
+              systemNavigationBarContrastEnforced: false,
+              systemStatusBarContrastEnforced: false,
+            )
+          : const SystemUiOverlayStyle(
+              statusBarColor: Color(0xFFF2F6FF),
+              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.light,
+              systemNavigationBarColor: Color(0xFFF2F6FF),
+              systemNavigationBarIconBrightness: Brightness.dark,
+              systemNavigationBarDividerColor: Color(0xFFDCE4F2),
+              systemNavigationBarContrastEnforced: false,
+              systemStatusBarContrastEnforced: false,
+            ),
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,

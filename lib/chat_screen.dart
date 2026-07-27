@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,11 +10,15 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'app_monitor.dart';
 import 'brand.dart';
+import 'call_avatar.dart';
 import 'call_service.dart';
+import 'chat_media.dart';
 import 'core_models.dart';
 import 'group_call_service.dart';
 import 'internet_core.dart';
+import 'sound_service.dart';
 
 const String _landingBase =
     'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
@@ -25,6 +30,8 @@ class CgChatScreen extends StatefulWidget {
   final bool privacyLens;
   final bool autoInvite;
   final ValueChanged<CgTunnel> onChanged;
+  final Future<void> Function(CgTunnel tunnel)? onDelete;
+  final Future<void> Function(CgMessage message)? onForward;
   final ValueChanged<CgContact>? onContactSeen;
 
   const CgChatScreen({
@@ -34,6 +41,8 @@ class CgChatScreen extends StatefulWidget {
     required this.tunnel,
     required this.privacyLens,
     required this.onChanged,
+    this.onDelete,
+    this.onForward,
     this.onContactSeen,
     this.autoInvite = false,
   });
@@ -45,7 +54,7 @@ class CgChatScreen extends StatefulWidget {
 class _CgChatScreenState extends State<CgChatScreen> {
   final TextEditingController _text = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  final Set<String> _handledCalls = <String>{};
+  final FocusNode _composerFocus = FocusNode(debugLabel: 'chat-composer');
   final Set<String> _announcedPeers = <String>{};
 
   late CgTunnel _tunnel;
@@ -54,6 +63,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
   String _networkState = 'connecting';
   int _onlinePeers = 1;
   bool _sendingFile = false;
+  bool _hasText = false;
+  CgMessage? _replyingTo;
 
   bool get _isOwner => widget.profile.id == _tunnel.ownerId;
 
@@ -61,12 +72,51 @@ class _CgChatScreenState extends State<CgChatScreen> {
   void initState() {
     super.initState();
     _tunnel = widget.tunnel;
+    _text.addListener(_onComposerChanged);
     unawaited(_connect());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusManager.instance.primaryFocus?.unfocus();
+      _composerFocus.unfocus();
+      _scrollToBottom(animate: false);
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (mounted) _scrollToBottom(animate: false);
+      });
+    });
     if (widget.autoInvite) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_showInvite());
       });
     }
+  }
+
+
+  void _onComposerChanged() {
+    final next = _text.text.trim().isNotEmpty;
+    if (next != _hasText && mounted) setState(() => _hasText = next);
+  }
+
+
+  Map<String, dynamic> _replyMeta() {
+    final reply = _replyingTo;
+    if (reply == null) return const <String, dynamic>{};
+    return <String, dynamic>{
+      'replyToId': reply.id,
+      'replyAuthor': reply.authorName,
+      'replyText': reply.text,
+      'replyAttachmentName': reply.attachment?.name,
+    };
+  }
+
+  void _replyTo(CgMessage message) {
+    if (message.deleted) return;
+    setState(() => _replyingTo = message);
+    _composerFocus.requestFocus();
+  }
+
+  Future<void> _forward(CgMessage message) async {
+    if (message.deleted) return;
+    await widget.onForward?.call(message);
   }
 
   Future<void> _connect() async {
@@ -99,6 +149,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
       case 'message':
         if (event.data['message'] is Map) {
           final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+          _playIncomingMessageSound(raw);
           _mergeMessages([raw]);
           _rememberContact(
             raw['authorId']?.toString() ??
@@ -166,24 +217,38 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
   }
 
+  void _playIncomingMessageSound(Map<String, dynamic> raw) {
+    final id = raw['id']?.toString() ?? '';
+    if (!CgMessageSoundRegistry.claim(id)) return;
+    final sentAt = DateTime.tryParse(raw['sentAt']?.toString() ?? '');
+    if (sentAt != null &&
+        DateTime.now().difference(sentAt.toLocal()).inSeconds.abs() > 30) {
+      return;
+    }
+    unawaited(ChernogramSound.playMessage());
+  }
+
   void _mergeMessages(List<Map<String, dynamic>> raw) {
-    final byId = <String, CgMessage>{
-      for (final message in _tunnel.messages) message.id: message,
-    };
+    final messages = <CgMessage>[..._tunnel.messages];
     var changed = false;
     for (final item in raw) {
-      final incoming = CgMessage.fromJson(item);
+      var incoming = CgMessage.fromJson(item);
       if (incoming.id.isEmpty) continue;
-      final existing = byId[incoming.id];
-      if (existing == null ||
-          jsonEncode(existing.toJson()) != jsonEncode(incoming.toJson())) {
-        byId[incoming.id] = incoming;
+      final index = messages.indexWhere((message) => message.id == incoming.id);
+      final existing = index < 0 ? null : messages[index];
+      incoming = CgMediaStore.preserveLocalPurge(existing, incoming);
+      if (index < 0) {
+        messages.add(incoming);
+        changed = true;
+        continue;
+      }
+      if (jsonEncode(messages[index].toJson()) !=
+          jsonEncode(incoming.toJson())) {
+        messages[index] = incoming;
         changed = true;
       }
     }
     if (!changed) return;
-    final messages = byId.values.toList()
-      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
     setState(() => _tunnel = _tunnel.copyWith(messages: messages));
     _persist();
     _scrollToBottom();
@@ -275,8 +340,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
       authorName: widget.profile.nickname,
       text: value,
       sentAt: DateTime.now(),
+      meta: _replyMeta(),
     );
     _text.clear();
+    setState(() => _replyingTo = null);
     _appendLocal(message);
     await _session?.sendMessage(message.toJson());
   }
@@ -358,8 +425,18 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     )
                     .toList(),
               ),
+              const Divider(height: 28),
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(widget.ru ? 'Ответить' : 'Reply'),
+                onTap: () => Navigator.pop(context, '__reply__'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.forward_rounded),
+                title: Text(widget.ru ? 'Переслать' : 'Forward'),
+                onTap: () => Navigator.pop(context, '__forward__'),
+              ),
               if (message.authorId == widget.profile.id) ...[
-                const Divider(height: 28),
                 ListTile(
                   leading: const Icon(
                     Icons.delete_outline_rounded,
@@ -383,6 +460,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
     if (selected == null) return;
     if (selected == '__delete__') {
       await _deleteMessage(message);
+    } else if (selected == '__reply__') {
+      _replyTo(message);
+    } else if (selected == '__forward__') {
+      await _forward(message);
     } else {
       await _toggleReaction(message, selected);
     }
@@ -393,53 +474,100 @@ class _CgChatScreenState extends State<CgChatScreen> {
     List<String>? allowedExtensions,
   }) async {
     final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
+      allowMultiple: true,
       type: type,
       allowedExtensions: allowedExtensions,
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) return;
-    const maxBytes = 8 * 1024 * 1024;
-    if (bytes.length > maxBytes) {
-      if (!mounted) return;
+    const maxBytes = 20 * 1024 * 1024;
+    var skipped = 0;
+    setState(() => _sendingFile = true);
+    try {
+      for (final file in result.files) {
+        final bytes = file.bytes;
+        if (bytes == null || bytes.isEmpty || bytes.length > maxBytes) {
+          skipped++;
+          continue;
+        }
+        final id = CgIds.random(20);
+        final local = await CgMediaStore.persistBytes(
+          attachmentId: id,
+          name: file.name,
+          bytes: bytes,
+        );
+        await _sendAttachment(
+          CgAttachment(
+            id: id,
+            name: file.name,
+            size: bytes.length,
+            kind: _attachmentKind(file.name),
+            dataBase64: base64Encode(bytes),
+            localPath: local.path,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingFile = false);
+    }
+    if (skipped > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             widget.ru
-                ? 'Сейчас можно отправить файл до 8 МБ. Для более крупных файлов готовится прямой P2P-канал.'
-                : 'Files up to 8 MB are supported now. A direct P2P channel is being prepared for larger files.',
+                ? '$skipped файлов пропущено: пустые или больше 20 МБ.'
+                : '$skipped files were skipped: empty or larger than 20 MB.',
           ),
         ),
       );
-      return;
     }
-    setState(() => _sendingFile = true);
-    try {
-      final attachment = CgAttachment(
-        id: CgIds.random(20),
-        name: file.name,
+  }
+
+  Future<void> _sendAttachment(CgAttachment attachment) async {
+    final message = CgMessage(
+      id: CgIds.random(24),
+      authorId: widget.profile.id,
+      authorName: widget.profile.nickname,
+      text: '',
+      sentAt: DateTime.now(),
+      type: 'attachment',
+      attachment: attachment,
+      meta: _replyMeta(),
+    );
+    setState(() => _replyingTo = null);
+    _appendLocal(message);
+    await _session?.sendMessage(message.toJson());
+  }
+
+  Future<void> _sendVoice(File file, Duration duration) async {
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return;
+    final id = CgIds.random(20);
+    final local = await CgMediaStore.persistBytes(
+      attachmentId: id,
+      name: 'voice.m4a',
+      bytes: bytes,
+    );
+    await _sendAttachment(
+      CgAttachment(
+        id: id,
+        name: 'Голосовое ${duration.inSeconds} сек.m4a',
         size: bytes.length,
-        kind: _attachmentKind(file.name),
+        kind: 'voice',
         dataBase64: base64Encode(bytes),
-        localPath: file.path,
-      );
-      final message = CgMessage(
-        id: CgIds.random(24),
-        authorId: widget.profile.id,
-        authorName: widget.profile.nickname,
-        text: '',
-        sentAt: DateTime.now(),
-        type: 'attachment',
-        attachment: attachment,
-      );
-      _appendLocal(message);
-      await _session?.sendMessage(message.toJson());
-    } finally {
-      if (mounted) setState(() => _sendingFile = false);
-    }
+        localPath: local.path,
+      ),
+    );
+  }
+
+  Future<void> _recordCircle() async {
+    final attachment = await Navigator.push<CgAttachment>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgCircleRecorderScreen(ru: widget.ru),
+      ),
+    );
+    if (attachment != null) await _sendAttachment(attachment);
   }
 
   Future<void> _showAttachmentMenu() async {
@@ -482,6 +610,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       _pickAttachment(FileType.video);
+                    },
+                  ),
+
+                  _AttachmentAction(
+                    icon: Icons.radio_button_checked_rounded,
+                    label: widget.ru ? 'Кружок' : 'Circle',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _recordCircle();
                     },
                   ),
                   _AttachmentAction(
@@ -556,11 +693,16 @@ class _CgChatScreenState extends State<CgChatScreen> {
     return 'document';
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
+      final target = _scroll.position.maxScrollExtent;
+      if (!animate) {
+        _scroll.jumpTo(target);
+        return;
+      }
       _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
+        target,
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
       );
@@ -568,7 +710,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   String get _inviteUrl =>
-      '$_landingBase?invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';
+      '$_landingBase?v=15&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';
+
+  String get _deepInvite =>
+      'chernogram://join/${Uri.encodeComponent(_tunnel.inviteToken)}';
 
   Future<void> _showInvite() async {
     if (!mounted) return;
@@ -607,7 +752,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: QrImageView(data: _inviteUrl, size: 220),
+                child: QrImageView(data: _deepInvite, size: 220),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -615,8 +760,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 child: FilledButton.icon(
                   onPressed: () => Share.share(
                     widget.ru
-                        ? 'Присоединяйся к моему туннелю Чернограма: $_inviteUrl'
-                        : 'Join my Chernogram tunnel: $_inviteUrl',
+                        ? 'Открой чат в Чернограме: $_deepInvite\n\nЕсли приложение не открылось: $_inviteUrl'
+                        : 'Open the Chernogram chat: $_deepInvite\n\nIf the app did not open: $_inviteUrl',
                   ),
                   icon: const Icon(Icons.ios_share_rounded),
                   label: Text(widget.ru ? 'Отправить ссылку' : 'Share invite'),
@@ -690,20 +835,76 @@ class _CgChatScreenState extends State<CgChatScreen> {
     await _applyOwnerUpdate(updated);
   }
 
+  Future<void> _leaveAndDeleteChat() async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.delete_forever_rounded,
+          color: ChernogramColors.danger,
+          size: 40,
+        ),
+        title: Text(
+          widget.ru ? 'Выйти и удалить чат?' : 'Leave and delete chat?',
+        ),
+        content: Text(
+          widget.ru
+              ? 'История и все локальные файлы этого чата будут полностью удалены с телефона. У других участников останутся их копии.'
+              : 'The history and all local files for this chat are permanently removed from this phone. Other participants keep their copies.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(widget.ru ? 'Отмена' : 'Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: ChernogramColors.danger,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(widget.ru ? 'Удалить полностью' : 'Delete permanently'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true) return;
+    await _session?.sendControl(<String, dynamic>{
+      'operationId': CgIds.random(24),
+      'action': 'member_left',
+      'memberId': widget.profile.id,
+      'memberName': widget.profile.nickname,
+    });
+    await widget.onDelete?.call(_tunnel);
+    if (mounted) Navigator.of(context).pop();
+  }
+
   Future<void> _showSettings() async {
-    if (!_isOwner) return;
     final name = TextEditingController(text: _tunnel.name);
     var isPrivate = _tunnel.isPrivate;
     var revoke = false;
-    final result =
-        await showModalBottomSheet<
-          ({String name, bool isPrivate, bool revoke})
-        >(
-          context: context,
-          isScrollControlled: true,
-          showDragHandle: true,
-          builder: (context) => StatefulBuilder(
-            builder: (context, setSheetState) => Padding(
+    final fileCount = _tunnel.messages
+        .where((message) => !message.deleted && message.attachment != null)
+        .length;
+    final created = _tunnel.createdAt.toLocal().toString();
+    final createdLabel = created.length >= 16 ? created.substring(0, 16) : created;
+    final secret = _tunnel.secret;
+    final secretLabel = secret.length > 12
+        ? '${secret.substring(0, 6)}…${secret.substring(secret.length - 4)}'
+        : secret;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .90,
+            ),
+            child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                 18,
                 0,
@@ -711,92 +912,201 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 20 + MediaQuery.viewInsetsOf(context).bottom,
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.ru ? 'Настройки туннеля' : 'Tunnel settings',
+                    widget.ru ? 'Настройки чата' : 'Chat settings',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                          fontWeight: FontWeight.w900,
+                        ),
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: name,
+                    readOnly: !_isOwner,
                     decoration: InputDecoration(
-                      labelText: widget.ru
-                          ? 'Название — необязательно'
-                          : 'Name — optional',
+                      labelText: widget.ru ? 'Название чата' : 'Chat name',
+                      suffixIcon: _isOwner
+                          ? const Icon(Icons.edit_outlined)
+                          : const Icon(Icons.lock_outline_rounded),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  SwitchListTile(
-                    value: isPrivate,
-                    contentPadding: EdgeInsets.zero,
-                    secondary: Icon(
-                      isPrivate ? Icons.visibility_off_outlined : Icons.public,
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: .55),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    title: Text(
-                      isPrivate
-                          ? (widget.ru ? 'Приватный' : 'Private')
-                          : (widget.ru ? 'Открытый' : 'Open'),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.fingerprint_rounded),
+                          title: Text(widget.ru ? 'ID чата' : 'Chat ID'),
+                          subtitle: SelectableText(_tunnel.id),
+                        ),
+                        ListTile(
+                          leading: Icon(
+                            isPrivate
+                                ? Icons.lock_outline_rounded
+                                : Icons.public_rounded,
+                          ),
+                          title: Text(widget.ru ? 'Тип' : 'Type'),
+                          subtitle: Text(
+                            isPrivate
+                                ? (widget.ru ? 'Приватный' : 'Private')
+                                : (widget.ru ? 'Открытый' : 'Open'),
+                          ),
+                        ),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.admin_panel_settings_outlined,
+                          ),
+                          title: Text(widget.ru ? 'Ваша роль' : 'Your role'),
+                          subtitle: Text(
+                            _isOwner
+                                ? (widget.ru ? 'Владелец' : 'Owner')
+                                : (widget.ru ? 'Участник' : 'Member'),
+                          ),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.people_outline_rounded),
+                          title: Text(widget.ru ? 'Сейчас онлайн' : 'Online now'),
+                          trailing: Text('$_onlinePeers'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.forum_outlined),
+                          title: Text(widget.ru ? 'Сообщений' : 'Messages'),
+                          trailing: Text('${_tunnel.messages.length}'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.folder_copy_outlined),
+                          title: Text(
+                            widget.ru ? 'Файлов и медиа' : 'Files and media',
+                          ),
+                          trailing: Text('$fileCount'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.calendar_today_outlined),
+                          title: Text(widget.ru ? 'Создан' : 'Created'),
+                          subtitle: Text(createdLabel),
+                        ),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.enhanced_encryption_outlined,
+                          ),
+                          title: Text(widget.ru ? 'Шифрование' : 'Encryption'),
+                          subtitle: const Text('AES-256-GCM'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.key_outlined),
+                          title: Text(
+                            widget.ru ? 'Ключ туннеля' : 'Tunnel key',
+                          ),
+                          subtitle: SelectableText(secretLabel),
+                          trailing: Text('v${_tunnel.revision}'),
+                        ),
+                      ],
                     ),
-                    subtitle: Text(
-                      isPrivate
-                          ? (widget.ru
+                  ),
+                  if (_isOwner) ...[
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      value: isPrivate,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: Icon(
+                        isPrivate
+                            ? Icons.visibility_off_outlined
+                            : Icons.public,
+                      ),
+                      title: Text(
+                        isPrivate
+                            ? (widget.ru ? 'Приватный чат' : 'Private chat')
+                            : (widget.ru ? 'Открытый чат' : 'Open chat'),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        isPrivate
+                            ? (widget.ru
                                 ? 'Вход только по секретной ссылке или QR.'
                                 : 'Join only with the secret invite or QR.')
-                          : (widget.ru
+                            : (widget.ru
                                 ? 'Ссылку можно свободно пересылать.'
                                 : 'The invite may be freely forwarded.'),
+                      ),
+                      onChanged: (value) =>
+                          setSheetState(() => isPrivate = value),
                     ),
-                    onChanged: (value) =>
-                        setSheetState(() => isPrivate = value),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: revoke,
-                    onChanged: (value) =>
-                        setSheetState(() => revoke = value ?? false),
-                    title: Text(
-                      widget.ru
-                          ? 'Отозвать старую ссылку и QR'
-                          : 'Revoke the old link and QR',
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: revoke,
+                      onChanged: (value) =>
+                          setSheetState(() => revoke = value ?? false),
+                      title: Text(
+                        widget.ru
+                            ? 'Отозвать старую ссылку и QR'
+                            : 'Revoke the old link and QR',
+                      ),
+                      subtitle: Text(
+                        widget.ru
+                            ? 'Подключённые участники автоматически получат новый ключ.'
+                            : 'Connected members automatically receive the new key.',
+                      ),
                     ),
-                    subtitle: Text(
-                      widget.ru
-                          ? 'Все уже подключённые участники получат новый ключ автоматически.'
-                          : 'Connected members receive the new key automatically.',
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(context, 'save'),
+                        icon: const Icon(Icons.check_rounded),
+                        label: Text(
+                          widget.ru ? 'Сохранить изменения' : 'Save changes',
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.pop(context, (
-                        name: name.text.trim(),
-                        isPrivate: isPrivate,
-                        revoke: revoke,
-                      )),
-                      icon: const Icon(Icons.check_rounded),
-                      label: Text(widget.ru ? 'Сохранить' : 'Save'),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: ChernogramColors.danger,
+                        side: BorderSide(
+                          color: ChernogramColors.danger.withValues(alpha: .45),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(context, 'delete'),
+                      icon: const Icon(Icons.delete_forever_rounded),
+                      label: Text(
+                        widget.ru
+                            ? 'Выйти и удалить чат полностью'
+                            : 'Leave and delete chat permanently',
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        );
-    name.dispose();
-    if (result == null) return;
-    final updated = _tunnel.copyWith(
-      name: result.name,
-      isPrivate: result.isPrivate,
-      secret: result.revoke ? CgIds.random(42) : _tunnel.secret,
-      revision: _tunnel.revision + 1,
+        ),
+      ),
     );
-    await _applyOwnerUpdate(updated);
+
+    if (action == 'save' && _isOwner) {
+      final updated = _tunnel.copyWith(
+        name: name.text.trim(),
+        isPrivate: isPrivate,
+        secret: revoke ? CgIds.random(42) : _tunnel.secret,
+        revision: _tunnel.revision + 1,
+      );
+      name.dispose();
+      await _applyOwnerUpdate(updated);
+      return;
+    }
+    name.dispose();
+    if (action == 'delete' && mounted) await _leaveAndDeleteChat();
   }
 
   Future<void> _startCall(bool video) async {
@@ -814,6 +1124,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
           secret: _tunnel.secret,
           profileId: widget.profile.id,
           nickname: widget.profile.nickname,
+          peerAvatarBase64: _tunnel.avatarBase64,
+          myAvatarBase64: widget.profile.avatarBase64,
           callId: callId,
           isCaller: true,
           video: video,
@@ -851,6 +1163,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
           isHost: true,
           video: video,
           ru: widget.ru,
+          myAvatarBase64: widget.profile.avatarBase64,
         ),
       ),
     );
@@ -917,7 +1230,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final from =
         signal['from']?.toString() ?? signal['relaySender']?.toString() ?? '';
     if (callId.isEmpty || from.isEmpty || from == widget.profile.id) return;
-    if (!_handledCalls.add(callId)) return;
+    if (!CgSignalRegistry.claim(callId)) return;
     final video = signal['video'] == true;
     final fromName =
         signal['fromName']?.toString() ??
@@ -926,7 +1239,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     _rememberContact(from, fromName);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_showIncomingCall(callId, from, fromName, video));
+        unawaited(_showIncomingCall(callId, from, fromName, callerAvatar, video));
       }
     });
   }
@@ -936,7 +1249,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final from =
         signal['from']?.toString() ?? signal['relaySender']?.toString() ?? '';
     if (callId.isEmpty || from.isEmpty || from == widget.profile.id) return;
-    if (!_handledCalls.add(callId)) return;
+    if (!CgSignalRegistry.claim(callId)) return;
     final video = signal['video'] != false;
     final fromName =
         signal['fromName']?.toString() ??
@@ -945,7 +1258,12 @@ class _CgChatScreenState extends State<CgChatScreen> {
     _rememberContact(from, fromName);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_showIncomingGroupCall(callId, fromName, video));
+        unawaited(_showIncomingGroupCall(
+          callId,
+          fromName,
+          signal['avatarBase64']?.toString(),
+          video,
+        ));
       }
     });
   }
@@ -954,15 +1272,19 @@ class _CgChatScreenState extends State<CgChatScreen> {
     String callId,
     String fromId,
     String fromName,
+    String? callerAvatar,
     bool video,
   ) async {
+    await ChernogramSound.startIncomingCall(video: video);
     final accepted = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        icon: Icon(
-          video ? Icons.videocam_rounded : Icons.call_rounded,
-          size: 38,
+        icon: CgCallAvatar(
+          avatarBase64: callerAvatar,
+          name: fromName,
+          size: 78,
+          fallbackIcon: video ? Icons.videocam_rounded : Icons.call_rounded,
         ),
         title: Text(
           video
@@ -982,7 +1304,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
             onPressed: () => Navigator.pop(context, false),
             icon: const Icon(Icons.call_end),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 10),
           IconButton.filled(
             style: IconButton.styleFrom(
               backgroundColor: ChernogramColors.success,
@@ -993,6 +1315,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         ],
       ),
     );
+    await ChernogramSound.stopIncomingCall();
     if (accepted != true) {
       await _session?.sendSignal({
         'action': 'call_decline',
@@ -1002,12 +1325,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
       });
       return;
     }
-    await _session?.sendSignal({
-      'action': 'call_accept',
-      'callId': callId,
-      'from': widget.profile.id,
-      'target': fromId,
-    });
     if (!mounted) return;
     await Navigator.push<CgCallOutcome>(
       context,
@@ -1018,7 +1335,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
           secret: _tunnel.secret,
           profileId: widget.profile.id,
           nickname: widget.profile.nickname,
+          peerId: fromId,
           peerName: fromName,
+          peerAvatarBase64: callerAvatar,
+          myAvatarBase64: widget.profile.avatarBase64,
           callId: callId,
           isCaller: false,
           video: video,
@@ -1031,14 +1351,19 @@ class _CgChatScreenState extends State<CgChatScreen> {
   Future<void> _showIncomingGroupCall(
     String callId,
     String fromName,
+    String? callerAvatar,
     bool video,
   ) async {
+    await ChernogramSound.startIncomingCall(video: video);
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: Icon(
-          video ? Icons.groups_2_rounded : Icons.group_rounded,
-          size: 40,
+        icon: CgCallAvatar(
+          avatarBase64: callerAvatar,
+          name: fromName,
+          size: 78,
+          fallbackIcon:
+              video ? Icons.groups_2_rounded : Icons.group_rounded,
         ),
         title: Text(
           video
@@ -1064,6 +1389,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         ],
       ),
     );
+    await ChernogramSound.stopIncomingCall();
     if (accepted != true || !mounted) return;
     await Navigator.push<CgCallOutcome>(
       context,
@@ -1078,6 +1404,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
           isHost: false,
           video: video,
           ru: widget.ru,
+          myAvatarBase64: widget.profile.avatarBase64,
         ),
       ),
     );
@@ -1098,7 +1425,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   @override
   void dispose() {
+    unawaited(ChernogramSound.stopIncomingCall());
     unawaited(_subscription?.cancel());
+    _text.removeListener(_onComposerChanged);
+    _composerFocus.dispose();
     _text.dispose();
     _scroll.dispose();
     super.dispose();
@@ -1220,14 +1550,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     title: Text(widget.ru ? 'Аватар туннеля' : 'Tunnel avatar'),
                   ),
                 ),
-              if (_isOwner)
-                PopupMenuItem(
-                  value: 'settings',
-                  child: ListTile(
-                    leading: const Icon(Icons.tune_rounded),
-                    title: Text(widget.ru ? 'Настройки' : 'Settings'),
+              PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: const Icon(Icons.tune_rounded),
+                  title: Text(
+                    widget.ru ? 'Настройки чата' : 'Chat settings',
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(width: 6),
@@ -1243,6 +1574,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   )
                 : ListView.builder(
                     controller: _scroll,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
                     itemCount: _tunnel.messages.length,
                     itemBuilder: (context, index) {
@@ -1251,12 +1584,36 @@ class _CgChatScreenState extends State<CgChatScreen> {
                           message.authorId == widget.profile.id ||
                           (message.authorId.isEmpty &&
                               message.authorName == widget.profile.nickname);
-                      return _MessageBubble(
-                        message: message,
-                        mine: mine,
-                        privacyLens: widget.privacyLens,
-                        ru: widget.ru,
-                        onLongPress: () => _showMessageActions(message),
+                      return Dismissible(
+                        key: ValueKey('swipe-${message.id}'),
+                        direction: message.deleted
+                            ? DismissDirection.none
+                            : DismissDirection.horizontal,
+                        confirmDismiss: (direction) async {
+                          if (direction == DismissDirection.startToEnd) {
+                            _replyTo(message);
+                          } else {
+                            await _forward(message);
+                          }
+                          return false;
+                        },
+                        background: _SwipeActionBackground(
+                          alignment: Alignment.centerLeft,
+                          icon: Icons.reply_rounded,
+                          label: widget.ru ? 'Ответить' : 'Reply',
+                        ),
+                        secondaryBackground: _SwipeActionBackground(
+                          alignment: Alignment.centerRight,
+                          icon: Icons.forward_rounded,
+                          label: widget.ru ? 'Переслать' : 'Forward',
+                        ),
+                        child: _MessageBubble(
+                          message: message,
+                          mine: mine,
+                          privacyLens: widget.privacyLens,
+                          ru: widget.ru,
+                          onLongPress: () => _showMessageActions(message),
+                        ),
                       );
                     },
                   ),
@@ -1265,49 +1622,121 @@ class _CgChatScreenState extends State<CgChatScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-              child: GlassPanel(
-                padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-                borderRadius: BorderRadius.circular(22),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      tooltip: widget.ru ? 'Добавить' : 'Add',
-                      onPressed: _sendingFile ? null : _showAttachmentMenu,
-                      icon: _sendingFile
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add_rounded),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _text,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        onSubmitted: (_) => _sendText(),
-                        decoration: InputDecoration(
-                          hintText: widget.ru ? 'Сообщение' : 'Message',
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 10,
-                          ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_replyingTo != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(
+                          alpha: .92,
                         ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.reply_rounded, color: scheme.primary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _replyingTo!.authorName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                Text(
+                                  _replyingTo!.text.isNotEmpty
+                                      ? _replyingTo!.text
+                                      : (_replyingTo!.attachment?.name ?? ''),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          IconButton(
+                            onPressed: () =>
+                                setState(() => _replyingTo = null),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
                       ),
                     ),
-                    IconButton.filled(
-                      onPressed: _sendText,
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                    ),
                   ],
-                ),
+                  GlassPanel(
+                    padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                    borderRadius: BorderRadius.circular(22),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          tooltip: widget.ru ? 'Добавить' : 'Add',
+                          onPressed:
+                              _sendingFile ? null : _showAttachmentMenu,
+                          icon: _sendingFile
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.add_rounded),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _text,
+                            focusNode: _composerFocus,
+                            autofocus: false,
+                            onTapOutside: (_) => _composerFocus.unfocus(),
+                            minLines: 1,
+                            maxLines: 5,
+                            textCapitalization: TextCapitalization.sentences,
+                            onSubmitted: (_) => _sendText(),
+                            decoration: InputDecoration(
+                              hintText:
+                                  widget.ru ? 'Сообщение' : 'Message',
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: _hasText
+                              ? IconButton.filled(
+                                  key: const ValueKey('send'),
+                                  onPressed: _sendText,
+                                  icon: const Icon(
+                                    Icons.arrow_upward_rounded,
+                                  ),
+                                )
+                              : CgVoiceRecordButton(
+                                  key: const ValueKey('voice'),
+                                  ru: widget.ru,
+                                  enabled: _networkState == 'connected',
+                                  onRecorded: _sendVoice,
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1315,6 +1744,38 @@ class _CgChatScreenState extends State<CgChatScreen> {
       ),
     );
   }
+}
+
+
+class _SwipeActionBackground extends StatelessWidget {
+  final Alignment alignment;
+  final IconData icon;
+  final String label;
+
+  const _SwipeActionBackground({
+    required this.alignment,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        alignment: alignment,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .14),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 10),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+          ],
+        ),
+      );
 }
 
 class _AttachmentAction extends StatelessWidget {
@@ -1563,6 +2024,10 @@ class _MessageBubble extends StatelessWidget {
     }
     final scheme = Theme.of(context).colorScheme;
     final attachment = message.attachment;
+    final transparentMedia = !message.deleted &&
+        message.text.isEmpty &&
+        attachment != null &&
+        <String>{'voice', 'audio', 'circle'}.contains(attachment.kind);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
@@ -1606,8 +2071,61 @@ class _MessageBubble extends StatelessWidget {
                   ],
                 )
               else ...[
+                if (message.meta['forwardedFrom'] != null) ...[
+                  Text(
+                    '${ru ? 'Переслано от' : 'Forwarded from'} ${message.meta['forwardedFrom']}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: mine
+                          ? Colors.white70
+                          : scheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                if (message.meta['replyToId'] != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: .13),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border(
+                        left: BorderSide(color: scheme.primary, width: 3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          message.meta['replyAuthor']?.toString() ?? '',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: mine ? Colors.white : scheme.primary,
+                          ),
+                        ),
+                        Text(
+                          (message.meta['replyText']?.toString().isNotEmpty == true)
+                              ? message.meta['replyText'].toString()
+                              : (message.meta['replyAttachmentName']?.toString() ?? ''),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: mine
+                                ? Colors.white70
+                                : scheme.onSurface.withValues(alpha: .65),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                ],
                 if (attachment != null)
-                  _AttachmentPreview(
+                  CgInlineAttachment(
                     attachment: attachment,
                     hidden: privacyLens,
                   ),
@@ -1658,9 +2176,11 @@ class _MessageBubble extends StatelessWidget {
                 '${privacyLens ? '••••' : message.authorName} • ${_formatTime(message.sentAt)}',
                 style: TextStyle(
                   fontSize: 9,
-                  color: mine
-                      ? Colors.white60
-                      : scheme.onSurface.withValues(alpha: .42),
+                  color: transparentMedia
+                      ? scheme.onSurface.withValues(alpha: .46)
+                      : mine
+                          ? Colors.white60
+                          : scheme.onSurface.withValues(alpha: .42),
                 ),
               ),
             ],
@@ -1718,7 +2238,9 @@ class _CallMessageCard extends StatelessWidget {
           ? (ru ? 'Звонок отклонён' : 'Call declined')
           : (ru ? 'Отклонённый звонок' : 'Declined call');
     } else if (status == 'cancelled') {
-      subtitle = ru ? 'Звонок отменён' : 'Call cancelled';
+      subtitle = mine
+          ? (ru ? 'Звонок отменён' : 'Call cancelled')
+          : (ru ? 'Пропущенный звонок' : 'Missed call');
     } else {
       subtitle = mine
           ? (ru ? 'Нет ответа' : 'No answer')

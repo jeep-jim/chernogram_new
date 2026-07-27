@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import 'app_navigation.dart';
 import 'brand.dart';
+import 'call_avatar.dart';
 import 'call_service.dart';
+import 'chat_media.dart';
 import 'core_models.dart';
 import 'group_call_service.dart';
 import 'internet_core.dart';
@@ -140,11 +142,15 @@ class ChernogramAppMonitor {
     final profile = _profile;
     final tunnel = _tunnels[tunnelId];
     if (profile == null || tunnel == null) return;
-    final message = CgMessage.fromJson(raw);
+    var message = CgMessage.fromJson(raw);
     if (message.id.isEmpty) return;
 
     final messages = <CgMessage>[...tunnel.messages];
     final index = messages.indexWhere((item) => item.id == message.id);
+    message = CgMediaStore.preserveLocalPurge(
+      index < 0 ? null : messages[index],
+      message,
+    );
     var changed = false;
     if (index < 0) {
       messages.add(message);
@@ -265,6 +271,7 @@ class ChernogramAppMonitor {
         (_ru ? 'Собеседник' : 'Peer');
     final video = signal['video'] == true;
     final group = action == 'group_call_invite';
+    final callerAvatar = signal['avatarBase64']?.toString();
     _rememberContact(tunnelId, from, fromName);
 
     final context = chernogramNavigatorKey.currentContext;
@@ -275,13 +282,15 @@ class ChernogramAppMonitor {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        icon: Icon(
-          group
+        icon: CgCallAvatar(
+          avatarBase64: callerAvatar,
+          name: fromName,
+          size: 78,
+          fallbackIcon: group
               ? Icons.groups_2_rounded
               : video
                   ? Icons.videocam_rounded
                   : Icons.call_rounded,
-          size: 40,
         ),
         title: Text(
           group
@@ -346,14 +355,6 @@ class ChernogramAppMonitor {
       return;
     }
 
-    if (!group) {
-      await session?.sendSignal(<String, dynamic>{
-        'action': 'call_accept',
-        'callId': callId,
-        'from': profile.id,
-        'target': from,
-      });
-    }
     final navigator = chernogramNavigatorKey.currentState;
     if (navigator == null) return;
     final outcome = await navigator.push<CgCallOutcome>(
@@ -369,6 +370,7 @@ class ChernogramAppMonitor {
                 isHost: false,
                 video: video,
                 ru: _ru,
+                myAvatarBase64: profile.avatarBase64,
               )
             : ChernogramCallScreen(
                 tunnelName: tunnel.displayName,
@@ -376,7 +378,10 @@ class ChernogramAppMonitor {
                 secret: tunnel.secret,
                 profileId: profile.id,
                 nickname: profile.nickname,
+                peerId: from,
                 peerName: fromName,
+                peerAvatarBase64: callerAvatar,
+                myAvatarBase64: profile.avatarBase64,
                 callId: callId,
                 isCaller: false,
                 video: video,

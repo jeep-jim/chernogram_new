@@ -18,6 +18,7 @@ class ChernogramGroupCallScreen extends StatefulWidget {
   final bool isHost;
   final bool video;
   final bool ru;
+  final String? myAvatarBase64;
 
   const ChernogramGroupCallScreen({
     super.key,
@@ -30,6 +31,7 @@ class ChernogramGroupCallScreen extends StatefulWidget {
     required this.isHost,
     required this.video,
     required this.ru,
+    this.myAvatarBase64,
   });
 
   @override
@@ -46,6 +48,12 @@ class _GroupPeer {
   bool remoteDescriptionSet = false;
   bool offerSent = false;
   bool connected = false;
+  bool recovering = false;
+  DateTime lastSeenAt = DateTime.now();
+  DateTime lastOfferAt = DateTime.fromMillisecondsSinceEpoch(0);
+  RTCSessionDescription? localOffer;
+  RTCSessionDescription? localAnswer;
+  final Set<String> seenCandidates = <String>{};
 
   _GroupPeer({
     required this.id,
@@ -70,6 +78,8 @@ class _ChernogramGroupCallScreenState
   StreamSubscription<InternetEvent>? _subscription;
   MediaStream? _localStream;
   Timer? _durationTimer;
+  Timer? _heartbeatTimer;
+  Timer? _recoveryTimer;
   DateTime? _connectedAt;
   int _elapsedSeconds = 0;
   bool _muted = false;
@@ -92,13 +102,25 @@ class _ChernogramGroupCallScreenState
     try {
       await _localRenderer.initialize();
       final stream = await navigator.mediaDevices.getUserMedia({
-        'audio': true,
+        'audio': <String, dynamic>{
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+          'googEchoCancellation': true,
+          'googEchoCancellation2': true,
+          'googNoiseSuppression': true,
+          'googNoiseSuppression2': true,
+          'googAutoGainControl': true,
+          'googHighpassFilter': true,
+          'channelCount': 1,
+          'sampleRate': 48000,
+        },
         'video': widget.video
-            ? {
+            ? <String, dynamic>{
                 'facingMode': 'user',
-                'width': {'ideal': 960},
-                'height': {'ideal': 540},
-                'frameRate': {'ideal': 24},
+                'width': <String, dynamic>{'ideal': 640, 'max': 960},
+                'height': <String, dynamic>{'ideal': 360, 'max': 540},
+                'frameRate': <String, dynamic>{'ideal': 20, 'max': 24},
               }
             : false,
       });
@@ -115,11 +137,15 @@ class _ChernogramGroupCallScreenState
           );
       _session = session;
       _subscription = session.events.listen(_onRelayEvent);
+      for (final signal in session.replaySignals(widget.callId)) {
+        _onRelayEvent(InternetEvent('signal', signal));
+      }
 
       if (widget.isHost) {
         await _send({
           'action': 'group_call_invite',
           'fromName': widget.nickname,
+          'avatarBase64': widget.myAvatarBase64,
           'video': widget.video,
           'maxParticipants': 6,
         });
@@ -128,6 +154,17 @@ class _ChernogramGroupCallScreenState
         'action': 'group_join',
         'fromName': widget.nickname,
         'video': widget.video,
+      });
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+        if (_ended) return;
+        unawaited(_send({
+          'action': 'group_join',
+          'fromName': widget.nickname,
+          'video': widget.video,
+        }));
+      });
+      _recoveryTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+        if (!_ended) unawaited(_recoverPeers());
       });
 
       if (mounted) {
@@ -164,6 +201,8 @@ class _ChernogramGroupCallScreenState
         data['relaySenderName']?.toString() ??
         'user';
     final action = data['action']?.toString() ?? '';
+    final knownPeer = _peers[remoteId];
+    if (knownPeer != null) knownPeer.lastSeenAt = DateTime.now();
 
     switch (action) {
       case 'group_join':
@@ -223,6 +262,7 @@ class _ChernogramGroupCallScreenState
     final existing = _peers[id];
     if (existing != null) {
       existing.name = name;
+      existing.lastSeenAt = DateTime.now();
       return existing;
     }
 
@@ -230,24 +270,32 @@ class _ChernogramGroupCallScreenState
     await renderer.initialize();
     final connection = await createPeerConnection({
       'iceServers': <Map<String, dynamic>>[
-        {
+        <String, dynamic>{
           'urls': <String>[
             'stun:stun.l.google.com:19302',
             'stun:stun1.l.google.com:19302',
+            'stun:stun.cloudflare.com:3478',
             'stun:openrelay.metered.ca:80',
           ],
         },
-        {
+        <String, dynamic>{
           'urls': <String>[
             'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:80?transport=tcp',
             'turn:openrelay.metered.ca:443',
             'turn:openrelay.metered.ca:443?transport=tcp',
+            'turns:openrelay.metered.ca:443?transport=tcp',
           ],
           'username': 'openrelayproject',
           'credential': 'openrelayproject',
         },
       ],
       'sdpSemantics': 'unified-plan',
+      'bundlePolicy': 'max-bundle',
+      'rtcpMuxPolicy': 'require',
+      'iceTransportPolicy': 'all',
+      'iceCandidatePoolSize': 6,
+      'continualGatheringPolicy': 'gather_continually',
     });
     final peer = _GroupPeer(
       id: id,
@@ -279,11 +327,16 @@ class _ChernogramGroupCallScreenState
       if (!mounted) return;
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         peer.connected = true;
+        peer.recovering = false;
+        peer.lastSeenAt = DateTime.now();
         _markConnected();
       } else if (state ==
               RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        peer.connected = false;
+        unawaited(_recoverPeer(peer));
+      } else if (state ==
+          RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         peer.connected = false;
       }
       setState(() {});
@@ -299,16 +352,37 @@ class _ChernogramGroupCallScreenState
     return peer;
   }
 
-  Future<void> _maybeOffer(String remoteId) async {
+  Future<void> _maybeOffer(
+    String remoteId, {
+    bool iceRestart = false,
+  }) async {
     final peer = _peers[remoteId];
-    if (peer == null || peer.offerSent) return;
+    if (peer == null) return;
     if (widget.profileId.compareTo(remoteId) >= 0) return;
+    final now = DateTime.now();
+    if (!iceRestart &&
+        peer.offerSent &&
+        now.difference(peer.lastOfferAt) < const Duration(seconds: 3)) {
+      final cached = peer.localOffer;
+      if (cached != null) {
+        await _send({
+          'action': 'group_offer',
+          'target': remoteId,
+          'sdp': cached.sdp,
+          'sdpType': cached.type,
+        });
+      }
+      return;
+    }
     peer.offerSent = true;
+    peer.lastOfferAt = now;
     final offer = await peer.connection.createOffer(<String, dynamic>{
       'offerToReceiveAudio': true,
       'offerToReceiveVideo': widget.video,
+      'iceRestart': iceRestart,
     });
     await peer.connection.setLocalDescription(offer);
+    peer.localOffer = offer;
     await _send({
       'action': 'group_offer',
       'target': remoteId,
@@ -325,16 +399,24 @@ class _ChernogramGroupCallScreenState
     final peer = await _ensurePeer(remoteId, remoteName);
     final sdp = data['sdp']?.toString();
     if (sdp == null || sdp.isEmpty) return;
-    await peer.connection.setRemoteDescription(
-      RTCSessionDescription(sdp, data['sdpType']?.toString() ?? 'offer'),
-    );
-    peer.remoteDescriptionSet = true;
-    await _flushCandidates(peer);
-    final answer = await peer.connection.createAnswer(<String, dynamic>{
-      'offerToReceiveAudio': true,
-      'offerToReceiveVideo': widget.video,
-    });
-    await peer.connection.setLocalDescription(answer);
+    final current = await peer.connection.getRemoteDescription();
+    if (current?.sdp != sdp) {
+      await peer.connection.setRemoteDescription(
+        RTCSessionDescription(sdp, data['sdpType']?.toString() ?? 'offer'),
+      );
+      peer.remoteDescriptionSet = true;
+      peer.localAnswer = null;
+      await _flushCandidates(peer);
+    }
+    var answer = peer.localAnswer;
+    if (answer == null) {
+      answer = await peer.connection.createAnswer(<String, dynamic>{
+        'offerToReceiveAudio': true,
+        'offerToReceiveVideo': widget.video,
+      });
+      await peer.connection.setLocalDescription(answer);
+      peer.localAnswer = answer;
+    }
     await _send({
       'action': 'group_answer',
       'target': remoteId,
@@ -351,10 +433,13 @@ class _ChernogramGroupCallScreenState
     final peer = await _ensurePeer(remoteId, remoteName);
     final sdp = data['sdp']?.toString();
     if (sdp == null || sdp.isEmpty) return;
+    final current = await peer.connection.getRemoteDescription();
+    if (current?.sdp == sdp) return;
     await peer.connection.setRemoteDescription(
       RTCSessionDescription(sdp, data['sdpType']?.toString() ?? 'answer'),
     );
     peer.remoteDescriptionSet = true;
+    peer.recovering = false;
     await _flushCandidates(peer);
   }
 
@@ -366,6 +451,9 @@ class _ChernogramGroupCallScreenState
     final peer = await _ensurePeer(remoteId, remoteName);
     final value = data['candidate']?.toString();
     if (value == null || value.isEmpty) return;
+    final signature =
+        '$value|${data['sdpMid']}|${data['sdpMLineIndex']}';
+    if (!peer.seenCandidates.add(signature)) return;
     final candidate = RTCIceCandidate(
       value,
       data['sdpMid']?.toString(),
@@ -375,14 +463,49 @@ class _ChernogramGroupCallScreenState
       peer.queuedCandidates.add(candidate);
       return;
     }
-    await peer.connection.addCandidate(candidate);
+    try {
+      await peer.connection.addCandidate(candidate);
+    } catch (_) {
+      peer.queuedCandidates.add(candidate);
+    }
   }
 
   Future<void> _flushCandidates(_GroupPeer peer) async {
     for (final candidate in peer.queuedCandidates.toList()) {
-      await peer.connection.addCandidate(candidate);
+      try {
+        await peer.connection.addCandidate(candidate);
+        peer.queuedCandidates.remove(candidate);
+      } catch (_) {}
     }
-    peer.queuedCandidates.clear();
+  }
+
+  Future<void> _recoverPeer(_GroupPeer peer) async {
+    if (_ended || peer.recovering) return;
+    peer.recovering = true;
+    try {
+      await _send({
+        'action': 'group_hello',
+        'target': peer.id,
+        'fromName': widget.nickname,
+      });
+      if (widget.profileId.compareTo(peer.id) < 0) {
+        await _maybeOffer(peer.id, iceRestart: true);
+      }
+    } finally {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      peer.recovering = false;
+    }
+  }
+
+  Future<void> _recoverPeers() async {
+    final now = DateTime.now();
+    for (final peer in _peers.values.toList()) {
+      if (now.difference(peer.lastSeenAt) > const Duration(seconds: 35)) {
+        await _removePeer(peer.id);
+        continue;
+      }
+      if (!peer.connected) await _recoverPeer(peer);
+    }
   }
 
   void _markConnected() {
@@ -490,6 +613,8 @@ class _ChernogramGroupCallScreenState
   void dispose() {
     _ended = true;
     _durationTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _recoveryTimer?.cancel();
     unawaited(_subscription?.cancel());
     for (final peer in _peers.values) {
       unawaited(peer.dispose());

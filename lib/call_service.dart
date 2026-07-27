@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'brand.dart';
+import 'call_avatar.dart';
 import 'core_models.dart';
 import 'internet_core.dart';
 
@@ -33,6 +34,8 @@ class ChernogramCallScreen extends StatefulWidget {
   final bool isCaller;
   final String? peerId;
   final String? peerName;
+  final String? peerAvatarBase64;
+  final String? myAvatarBase64;
 
   const ChernogramCallScreen({
     super.key,
@@ -47,6 +50,8 @@ class ChernogramCallScreen extends StatefulWidget {
     this.isCaller = true,
     this.peerId,
     this.peerName,
+    this.peerAvatarBase64,
+    this.myAvatarBase64,
   });
 
   @override
@@ -84,6 +89,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   int _elapsedSeconds = 0;
   late final String _resolvedCallId;
   String? _peerId;
+  bool _transportConnected = false;
+  DateTime _lastRecoveryAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   String get _callId => _resolvedCallId;
   String get _profileId => widget.profileId ?? '';
@@ -130,14 +137,24 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           'echoCancellation': true,
           'noiseSuppression': true,
           'autoGainControl': true,
+          'googEchoCancellation': true,
+          'googEchoCancellation2': true,
+          'googNoiseSuppression': true,
+          'googNoiseSuppression2': true,
+          'googAutoGainControl': true,
+          'googAutoGainControl2': true,
+          'googHighpassFilter': true,
+          'googTypingNoiseDetection': true,
           'channelCount': 1,
+          'sampleRate': 48000,
+          'sampleSize': 16,
         },
         'video': widget.video
             ? <String, dynamic>{
                 'facingMode': 'user',
-                'width': <String, dynamic>{'ideal': 1280},
-                'height': <String, dynamic>{'ideal': 720},
-                'frameRate': <String, dynamic>{'ideal': 30, 'max': 30},
+                'width': <String, dynamic>{'ideal': 960, 'max': 1280},
+                'height': <String, dynamic>{'ideal': 540, 'max': 720},
+                'frameRate': <String, dynamic>{'ideal': 24, 'max': 30},
               }
             : false,
       });
@@ -168,6 +185,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         'bundlePolicy': 'max-bundle',
         'rtcpMuxPolicy': 'require',
         'iceTransportPolicy': 'all',
+        'iceCandidatePoolSize': 8,
+        'continualGatheringPolicy': 'gather_continually',
       });
 
       peer.onIceCandidate = (candidate) {
@@ -200,6 +219,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         setState(() {
           switch (state) {
             case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
+              _transportConnected = true;
               _markConnected();
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
@@ -208,12 +228,14 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                   : 'Establishing direct channel…';
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
+              _transportConnected = false;
               _status = widget.ru
                   ? 'Перезапускаем соединение…'
                   : 'Restarting connection…';
               unawaited(_recoverConnection());
               break;
             case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
+              _transportConnected = false;
               _status = widget.ru
                   ? 'Восстанавливаем связь…'
                   : 'Restoring connection…';
@@ -264,13 +286,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         }
       }
 
-      _watchdog = Timer.periodic(const Duration(seconds: 12), (_) {
-        if (_ended || _connectedAt != null) return;
-        if (widget.isCaller && _peerId != null) {
-          unawaited(_makeOffer(iceRestart: _localOffer != null));
-        } else if (!widget.isCaller) {
-          unawaited(_sendReady());
+      _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (_ended) return;
+        if (_peerId == null || _peerId!.isEmpty) {
+          if (widget.isCaller) {
+            unawaited(_sendInvite());
+          } else {
+            unawaited(_sendReady());
+          }
+          return;
         }
+        if (!_transportConnected) unawaited(_recoverConnection());
       });
     } catch (error) {
       if (mounted) {
@@ -287,12 +313,14 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         'action': 'call_invite',
         'video': widget.video,
         'fromName': widget.nickname,
+        'avatarBase64': widget.myAvatarBase64,
       });
 
   Future<void> _sendReady() => _sendSignal(<String, dynamic>{
         'action': 'call_ready',
         'video': widget.video,
         'fromName': widget.nickname,
+        'avatarBase64': widget.myAvatarBase64,
       });
 
   void _onRelayEvent(InternetEvent event) {
@@ -308,6 +336,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         data['relaySender']?.toString() ??
         '';
     if (sender.isEmpty || sender == _profileId) return;
+    if (_peerId != null && _peerId!.isNotEmpty && _peerId != sender) return;
     _adoptPeer(sender);
     final action = data['action']?.toString() ?? '';
     switch (action) {
@@ -474,7 +503,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   }
 
   Future<void> _recoverConnection() async {
-    if (_ended || _connectedAt == null && _peerId == null) return;
+    if (_ended || _peerId == null || _peerId!.isEmpty) return;
+    final now = DateTime.now();
+    if (now.difference(_lastRecoveryAt) < const Duration(seconds: 3)) return;
+    _lastRecoveryAt = now;
+    if (mounted) {
+      setState(() {
+        _status = widget.ru
+            ? 'Восстанавливаем медиаканал…'
+            : 'Restoring media channel…';
+      });
+    }
     if (widget.isCaller) {
       await _makeOffer(iceRestart: true);
     } else {
@@ -495,6 +534,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   }
 
   void _markConnected() {
+    _transportConnected = true;
     _connectedAt ??= DateTime.now();
     _inviteTimer?.cancel();
     _readyTimer?.cancel();
@@ -622,7 +662,11 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const ChernogramLogo(size: 112, withPlate: true),
+                      CgCallAvatar(
+                        avatarBase64: widget.peerAvatarBase64,
+                        name: remoteLabel,
+                        size: 112,
+                      ),
                       const SizedBox(height: 22),
                       Text(
                         remoteLabel,
@@ -698,8 +742,10 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
               left: 18,
               right: 18,
               bottom: 30 + MediaQuery.paddingOf(context).bottom,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   _CallControl(
                     icon: _muted ? Icons.mic_off_rounded : Icons.mic_rounded,
@@ -772,3 +818,4 @@ class _CallControl extends StatelessWidget {
         onPressed: () => onPressed(),
         icon: Icon(icon),
       );
+}

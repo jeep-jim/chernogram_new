@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigation.dart';
@@ -9,8 +10,13 @@ import 'app_update_service.dart';
 import 'brand.dart';
 import 'v12.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.example.chernogram.audio',
+    androidNotificationChannelName: 'Музыка Чернограма',
+    androidNotificationOngoing: true,
+  );
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -94,6 +100,28 @@ class _ChernogramAppState extends State<ChernogramApp> {
   @override
   Widget build(BuildContext context) {
     final ready = _ru != null;
+    SystemChrome.setSystemUIOverlayStyle(
+      _darkMode
+          ? const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+              systemNavigationBarColor: ChernogramColors.background,
+              systemNavigationBarIconBrightness: Brightness.light,
+              systemNavigationBarContrastEnforced: false,
+              systemStatusBarContrastEnforced: false,
+            )
+          : const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.light,
+              systemNavigationBarColor: Color(0xFFF2F6FF),
+              systemNavigationBarIconBrightness: Brightness.dark,
+              systemNavigationBarDividerColor: Color(0xFFDCE4F2),
+              systemNavigationBarContrastEnforced: false,
+              systemStatusBarContrastEnforced: false,
+            ),
+    );
     return MaterialApp(
       navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,

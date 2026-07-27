@@ -40,6 +40,8 @@ class InternetTunnelSession {
   final Map<String, String> _peerNames = <String, String>{};
   final Set<String> _seenPackets = <String>{};
   final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+  final Map<String, List<Map<String, dynamic>>> _signalBacklog =
+      <String, List<Map<String, dynamic>>>{};
   final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
   final http.Client _http = http.Client();
   final Map<String, WebSocket> _sockets = <String, WebSocket>{};
@@ -83,6 +85,28 @@ class InternetTunnelSession {
     ),
   ];
 
+
+  List<Map<String, dynamic>> replaySignals(String callId) {
+    final signals = _signalBacklog[callId] ?? const <Map<String, dynamic>>[];
+    return signals.map(Map<String, dynamic>.from).toList();
+  }
+
+  void _rememberSignal(Map<String, dynamic> signal) {
+    final callId = signal['callId']?.toString() ?? '';
+    if (callId.isEmpty) return;
+    final list = _signalBacklog.putIfAbsent(
+      callId,
+      () => <Map<String, dynamic>>[],
+    );
+    final signature = "${signal['action']}|${signal['from']}|${signal['sdp']?.hashCode}|${signal['candidate']?.hashCode}";
+    if (list.any((item) => item['_signature'] == signature)) return;
+    list.add(<String, dynamic>{...signal, '_signature': signature});
+    if (list.length > 160) list.removeRange(0, list.length - 160);
+    if (_signalBacklog.length > 80) {
+      _signalBacklog.remove(_signalBacklog.keys.first);
+    }
+  }
+
   Future<void> connect() async {
     if (_closed || _connecting) return;
     _connecting = true;
@@ -92,10 +116,12 @@ class InternetTunnelSession {
     });
     try {
       await _prepareCryptoAndTopic();
-      await Future.wait(
-        relayHosts.map((host) => _connectHost(host)),
-        eagerError: false,
-      );
+      for (final host in relayHosts) {
+        unawaited(_connectHost(host));
+      }
+      for (var attempt = 0; attempt < 20 && !connected; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
       if (connected) {
         _reconnectAttempt = 0;
         _startTimers();
@@ -294,11 +320,13 @@ class InternetTunnelSession {
         });
         break;
       case 'signal':
-        _emit('signal', <String, dynamic>{
+        final signal = <String, dynamic>{
           ...data,
           'relaySender': sender,
           'relaySenderName': senderName,
-        });
+        };
+        _rememberSignal(signal);
+        _emit('signal', signal);
         break;
     }
   }

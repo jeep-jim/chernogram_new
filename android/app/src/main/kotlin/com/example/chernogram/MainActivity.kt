@@ -4,13 +4,15 @@ import android.content.Context
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.Environment
+import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private val channelName = "chernogram/sound"
     private var incomingRingtone: Ringtone? = null
 
@@ -36,6 +38,23 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "chernogram/storage"
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "getStorageStats") {
+                val stat = StatFs(Environment.getDataDirectory().path)
+                result.success(
+                    mapOf(
+                        "freeBytes" to stat.availableBytes,
+                        "totalBytes" to stat.totalBytes
+                    )
+                )
+            } else {
+                result.notImplemented()
             }
         }
     }
