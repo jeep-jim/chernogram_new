@@ -1,11 +1,7 @@
 from pathlib import Path
 
-from fix_v0151_release import (
-    patch_chat_screen,
-    patch_core_models,
-    patch_v12,
-    patch_windows_updater,
-)
+from fix_v0151_features import apply_feature_fixes
+from fix_v0151_windows import apply_windows_fix
 
 
 def replace_once(source: str, old: str, new: str, label: str) -> str:
@@ -118,40 +114,17 @@ def patch_chat_media() -> bool:
     return False
 
 
-def prefer_nested_windows_payload() -> bool:
-    path = Path('lib/windows_update_service.dart')
-    source = path.read_text(encoding='utf-8')
-    original = source
-    old = """set "SOURCE=%STAGE%"
-if exist "%SOURCE%\%EXE_NAME%" goto source_ready
-if exist "%STAGE%\app\%EXE_NAME%" set "SOURCE=%STAGE%\app"
-if exist "%SOURCE%\%EXE_NAME%" goto source_ready
-"""
-    new = """set "SOURCE=%STAGE%\app"
-if exist "%SOURCE%\%EXE_NAME%" goto source_ready
-set "SOURCE=%STAGE%"
-if exist "%SOURCE%\%EXE_NAME%" goto source_ready
-"""
-    if old in source:
-        source = source.replace(old, new, 1)
-    if source != original:
-        path.write_text(source, encoding='utf-8')
-        return True
-    return False
-
-
 def main() -> None:
-    compile_changed = patch_internet_core() | patch_chat_media()
-    release_changed = False
-    release_changed |= patch_core_models()
-    release_changed |= patch_v12()
-    release_changed |= patch_chat_screen()
-    release_changed |= patch_windows_updater()
-    release_changed |= prefer_nested_windows_payload()
-    if compile_changed or release_changed:
-        print('Applied Chernogram 0.15.1 compile and release corrections')
-    else:
-        print('Chernogram 0.15.1 corrections already applied')
+    changed = False
+    changed |= patch_internet_core()
+    changed |= patch_chat_media()
+    changed |= apply_feature_fixes()
+    changed |= apply_windows_fix()
+    print(
+        'Applied Chernogram 0.15.1 compile and release corrections'
+        if changed
+        else 'Chernogram 0.15.1 corrections already applied'
+    )
 
 
 if __name__ == '__main__':
