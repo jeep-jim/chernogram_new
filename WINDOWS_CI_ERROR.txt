@@ -1,0 +1,68 @@
+Windows build failed
+Commit: 125b78f8f57fd884d383c7794cbb11dbc3981d7b
+Time: 2026-07-27T12:22:26Z
+===== windows-build.txt =====
+
+===== FLUTTER =====
+Resolving dependencies...
+Downloading packages...
+Got dependencies.
+Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 058e0af2c2 (4 days ago) • 2026-07-23 10:56:21 -0700
+Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (3 days ago) • 2026-07-23 16:11:34.000Z
+Tools • Dart 3.12.2 • DevTools 2.57.0
+===== ENABLE WINDOWS =====
+Setting "enable-windows-desktop" value to "true".
+
+You may need to restart any open editors for them to read new settings.
+===== CREATE WINDOWS PLATFORM =====
+Recreating project ....
+  .idea\libraries\Dart_SDK.xml (created)
+  .idea\libraries\KotlinJavaRuntime.xml (created)
+  .idea\modules.xml (created)
+  .idea\runConfigurations\main_dart.xml (created)
+  .idea\workspace.xml (created)
+  chernogram.iml (created)
+  windows\.gitignore (created)
+  windows\CMakeLists.txt (created)
+  windows\flutter\CMakeLists.txt (created)
+  windows\runner\CMakeLists.txt (created)
+  windows\runner\flutter_window.cpp (created)
+  windows\runner\flutter_window.h (created)
+  windows\runner\main.cpp (created)
+  windows\runner\resource.h (created)
+  windows\runner\resources\app_icon.ico (created)
+  windows\runner\runner.exe.manifest (created)
+  windows\runner\Runner.rc (created)
+  windows\runner\utils.cpp (created)
+  windows\runner\utils.h (created)
+  windows\runner\win32_window.cpp (created)
+  windows\runner\win32_window.h (created)
+Wrote 21 files.
+
+All done!
+You can find general documentation for Flutter at: https://docs.flutter.dev/
+Detailed API documentation is available at: https://api.flutter.dev/
+If you prefer video documentation, consider: https://www.youtube.com/c/flutterdev
+
+In order to run your application, type:
+
+  $ flutter run
+
+Your application code is in .\lib\main.dart.
+
+===== FIX 0.15 COMPILE =====
+Applied Chernogram 0.15.2 compile and release corrections
+===== FIX 0.16 FOUNDATION =====
+Applied Chernogram 0.16 home, global search and custom ringtone
+===== INSTALL PILLOW =====
+===== PREPARE WINDOWS =====
+Traceback (most recent call last):
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 291, in <module>
+    main()
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 282, in main
+    patch_windows_updater()
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 135, in patch_windows_updater
+    raise RuntimeError('Windows updater launch block was not found')
+RuntimeError: Windows updater launch block was not found
+WINDOWS BUILD ERROR: PREPARE WINDOWS failed with exit code 1
