@@ -98,6 +98,14 @@ jobs:
           set -euo pipefail
           python3 tooling/fix_v016_foundation.py
 
+      - name: Apply the 0.16.2 runtime and brand polish
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install pillow --disable-pip-version-check --quiet
+          python3 tooling/fix_v0162_runtime.py
+          python3 tooling/fix_v0162_brand.py
+
       - name: Validate and build release APK
         id: build_apk
         shell: bash
@@ -161,8 +169,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16: новый главный экран с глобальным поиском по чатам, людям и ID аккаунтов, раскрывающимся описанием проекта и собственной мелодией входящего вызова. Начат фундаментальный этап скорости, локального кэша и защиты от регрессий.",
-            "notesEn": "Version 0.16 adds a new home screen with global search across chats, people and account IDs, an expandable project overview and a custom incoming-call ringtone. It starts the performance, local-cache and regression-protection foundation."
+            "notesRu": "Версия 0.16.2: исправлены вертикальная прокрутка чатов и мгновенное завершение аудиозвонка; обновлены главный экран, профиль и медиатека; добавлены системные уведомления, центр разрешений, новый программный логотип и анимация запуска.",
+            "notesEn": "Version 0.16.2 fixes chat scrolling and immediate audio-call hangup, polishes home, profile and media library, and adds system notifications, a permission center, a new programmatic logo and startup animation."
           }
           EOF
 
@@ -180,7 +188,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Новый главный экран, глобальный поиск по чатам, людям и аккаунтам, раскрывающийся прелендинг проекта и собственная мелодия входящего вызова. APK подписан прежним постоянным ключом." \
+              --notes "Исправлены прокрутка чатов и завершение звонков, обновлены главный экран и медиатека, добавлены системные уведомления, центр доступов и новый анимированный логотип. APK подписан прежним постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -220,7 +228,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.16.2 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -245,5 +253,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.16 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.16.2 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
