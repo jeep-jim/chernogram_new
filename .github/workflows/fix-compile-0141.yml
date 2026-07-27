@@ -1,0 +1,78 @@
+name: Fix 0.14.1 compile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-compile-0141.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix group caller avatar compile patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('tooling/fix_v011_compile.py')
+          text = path.read_text(encoding='utf-8')
+          marker = """    replace(
+        'lib/chat_screen.dart',
+        "unawaited(_showIncomingGroupCall(callId, fromName, video));",
+"""
+          addition = """    replace(
+        'lib/chat_screen.dart',
+        \"\"\"  Future<void> _showIncomingGroupCall(
+    String callId,
+    String fromName,
+    bool video,
+  ) async {
+\"\"\",
+        \"\"\"  Future<void> _showIncomingGroupCall(
+    String callId,
+    String fromName,
+    String? callerAvatar,
+    bool video,
+  ) async {
+\"\"\",
+    )
+"""
+          if "String? callerAvatar,\n    bool video," not in text:
+              if marker not in text:
+                  raise SystemExit('Group call compile marker not found')
+              text = text.replace(marker, addition + marker, 1)
+              path.write_text(text, encoding='utf-8')
+
+          pubspec = Path('pubspec.yaml')
+          source = pubspec.read_text(encoding='utf-8')
+          source, count = re.subn(
+              r'^version:\s*[^\n]+$',
+              'version: 0.14.1+25',
+              source,
+              count=1,
+              flags=re.M,
+          )
+          if count != 1:
+              raise SystemExit('Version line not found')
+          pubspec.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Commit compile correction
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-compile-0141.yml
+          git add tooling/fix_v011_compile.py pubspec.yaml
+          git commit -m "Исправить сборку Чернограма 0.14.1"
+          git push origin HEAD:main
