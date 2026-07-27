@@ -1,6 +1,6 @@
 Windows build failed
-Commit: 125b78f8f57fd884d383c7794cbb11dbc3981d7b
-Time: 2026-07-27T12:22:26Z
+Commit: 8a76b63dd9eb2719db990468eef604c106ac72b6
+Time: 2026-07-27T12:27:28Z
 ===== windows-build.txt =====
 
 ===== FLUTTER =====
@@ -52,17 +52,19 @@ In order to run your application, type:
 Your application code is in .\lib\main.dart.
 
 ===== FIX 0.15 COMPILE =====
-Applied Chernogram 0.15.2 compile and release corrections
-===== FIX 0.16 FOUNDATION =====
-Applied Chernogram 0.16 home, global search and custom ringtone
-===== INSTALL PILLOW =====
-===== PREPARE WINDOWS =====
 Traceback (most recent call last):
-  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 291, in <module>
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v015_compile.py", line 133, in <module>
     main()
-  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 282, in main
-    patch_windows_updater()
-  File "D:\a\chernogram_new\chernogram_new\tooling\fix_windows_desktop.py", line 135, in patch_windows_updater
-    raise RuntimeError('Windows updater launch block was not found')
-RuntimeError: Windows updater launch block was not found
-WINDOWS BUILD ERROR: PREPARE WINDOWS failed with exit code 1
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v015_compile.py", line 124, in main
+    changed |= apply_windows_fix()
+               ^^^^^^^^^^^^^^^^^^^
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v0151_windows.py", line 207, in apply_windows_fix
+    return patch_windows_updater()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v0151_windows.py", line 17, in patch_windows_updater
+    source = replace_once(
+             ^^^^^^^^^^^^^
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v0151_windows.py", line 9, in replace_once
+    raise RuntimeError(f'Expected block was not found: {label}')
+RuntimeError: Expected block was not found: Windows helper launch
+WINDOWS BUILD ERROR: FIX 0.15 COMPILE failed with exit code 1
