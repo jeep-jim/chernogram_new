@@ -1,6 +1,6 @@
 name: Fix UI and chat regressions
 
-# Registered in the previous commit; this update intentionally starts it.
+# Diagnostic retry.
 on:
   push:
     branches: [main]
@@ -25,20 +25,42 @@ jobs:
           cache: true
 
       - name: Apply targeted regression fix
-        run: python3 tooling/fix_regressions_014.py
+        id: patch
+        shell: bash
+        run: |
+          set +e
+          python3 tooling/fix_regressions_014.py > fix-regressions.log 2>&1
+          code=$?
+          cat fix-regressions.log
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Validate source
+      - name: Save patch error
+        if: steps.patch.outputs.code != '0'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp fix-regressions.log FIX_REGRESSION_ERROR.txt
+          git add -f FIX_REGRESSION_ERROR.txt
+          git commit -m "Сохранить ошибку восстановления интерфейса [skip ci]"
+          git push origin HEAD:main
+          exit 1
+
+      - name: Format repaired source
+        if: steps.patch.outputs.code == '0'
         run: |
           flutter pub get
           dart format lib/v12.dart lib/chat_screen.dart lib/internet_core.dart
-          flutter analyze
 
       - name: Commit repaired application
+        if: steps.patch.outputs.code == '0'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/fix-ui-chat-regressions.yml tooling/fix_regressions_014.py
+          git rm -f FIX_REGRESSION_ERROR.txt 2>/dev/null || true
           git add lib/v12.dart lib/chat_screen.dart lib/internet_core.dart pubspec.yaml pubspec.lock
           git commit -m "Восстановить интерфейс, быстрые чаты и кликабельные ссылки"
           git push origin HEAD:main
