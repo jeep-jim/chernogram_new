@@ -27,20 +27,6 @@ try {
       -Command 'flutter create --platforms=windows --project-name chernogram --no-pub .'
   }
 
-  $patches = @(
-    'tooling/fix_v07_compile.py',
-    'tooling/fix_v09_media_calls.py',
-    'tooling/fix_v09_compile.py',
-    'tooling/fix_v091_player_header.py',
-    'tooling/fix_v010_rtc_circles.py',
-    'tooling/fix_v0101_chat_keyboard.py',
-    'tooling/fix_v011_messenger_polish.py',
-    'tooling/fix_v011_compile.py'
-  )
-  foreach ($patch in $patches) {
-    Invoke-LoggedCommand -Name "PATCH $patch" -Command "python $patch"
-  }
-
   Invoke-LoggedCommand `
     -Name 'INSTALL PILLOW' `
     -Command 'python -m pip install pillow --disable-pip-version-check --quiet'
