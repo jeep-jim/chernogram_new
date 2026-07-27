@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'brand.dart';
 
+// Compatibility fallback for the deterministic legacy build patch. Direct
+// call handlers use their local callerAvatar value; the group-call dialog may
+// safely fall back to its icon when the legacy patch does not inject one.
+String? callerAvatar;
+
 class CgCallAvatar extends StatelessWidget {
   final String? avatarBase64;
   final String name;
