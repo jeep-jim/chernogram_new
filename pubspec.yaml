@@ -50,3 +50,9 @@ flutter:
   assets:
     - assets/branding/
     - assets/audio/chernogram_incoming.mp3
+    - assets/audio/incoming_call.part1
+    - assets/audio/incoming_call.part2
+    - assets/audio/incoming_call.part3
+    - assets/audio/incoming_call.part4
+    - assets/audio/incoming_call.part5
+    - assets/audio/incoming_call.part6
