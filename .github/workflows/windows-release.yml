@@ -1,0 +1,205 @@
+name: Windows Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-windows-release
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 70
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter 3.44.8
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Build Windows application
+        shell: pwsh
+        run: ./tooling/build_windows.ps1
+
+      - name: Package portable and installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Start-Transcript -Path 'windows-package.txt' -Force | Out-Null
+          try {
+            $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+            $versionName = ($versionFull -split '\+')[0]
+            $release = 'build/windows/x64/runner/Release'
+            if (-not (Test-Path "$release/chernogram.exe")) {
+              throw 'chernogram.exe was not produced'
+            }
+
+            foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+              $source = Join-Path $env:WINDIR "System32/$dll"
+              if (Test-Path $source) { Copy-Item $source $release -Force }
+            }
+
+            @"
+            ЧЕРНОГРАМ ДЛЯ WINDOWS
+
+            Версия: $versionFull
+            Поддержка: Windows 10 и Windows 11, 64-бит.
+
+            Переносимая версия запускается через chernogram.exe после полной распаковки ZIP.
+            Обычная установка выполняется файлом Chernogram-Windows-Setup.exe.
+            "@ | Set-Content "$release/README-RU.txt" -Encoding UTF8
+
+            Compress-Archive -Path "$release/*" -DestinationPath 'chernogram-windows-portable.zip' -CompressionLevel Optimal -Force
+
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed: $LASTEXITCODE" }
+
+            $iss = @"
+            #define MyAppName "Чернограм"
+            #define MyAppVersion "$versionName"
+            #define MyAppPublisher "Chernogram"
+            #define MyAppExeName "chernogram.exe"
+
+            [Setup]
+            AppId={{B6C33A77-38D4-4CA0-BE3A-B0C431E40F16}
+            AppName={#MyAppName}
+            AppVersion={#MyAppVersion}
+            AppPublisher={#MyAppPublisher}
+            DefaultDirName={localappdata}\Programs\Chernogram
+            DefaultGroupName=Чернограм
+            DisableProgramGroupPage=yes
+            OutputDir=.
+            OutputBaseFilename=Chernogram-Windows-Setup
+            Compression=lzma2
+            SolidCompression=yes
+            WizardStyle=modern
+            PrivilegesRequired=lowest
+            ArchitecturesAllowed=x64compatible
+            ArchitecturesInstallIn64BitMode=x64compatible
+            MinVersion=10.0
+            SetupIconFile=windows\runner\resources\app_icon.ico
+            UninstallDisplayIcon={app}\{#MyAppExeName}
+            CloseApplications=yes
+            RestartApplications=no
+
+            [Languages]
+            Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+            Name: "english"; MessagesFile: "compiler:Default.isl"
+
+            [Tasks]
+            Name: "desktopicon"; Description: "Создать значок на рабочем столе"; GroupDescription: "Дополнительные значки:"; Flags: unchecked
+
+            [Files]
+            Source: "$release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+            [Icons]
+            Name: "{group}\Чернограм"; Filename: "{app}\{#MyAppExeName}"
+            Name: "{autodesktop}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+            [Run]
+            Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Чернограм"; Flags: nowait postinstall skipifsilent
+            "@
+            Set-Content 'chernogram-windows.iss' -Value $iss -Encoding UTF8
+            & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' 'chernogram-windows.iss'
+            if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
+
+            $manifest = @{
+              versionName = $versionName
+              versionFull = $versionFull
+              architecture = 'x64'
+              minimumWindows = '10'
+              installerUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe'
+              portableUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+              installerSha256 = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLower()
+              portableSha256 = (Get-FileHash 'chernogram-windows-portable.zip' -Algorithm SHA256).Hash.ToLower()
+            } | ConvertTo-Json
+            Set-Content 'windows-update.json' -Value $manifest -Encoding UTF8
+            Stop-Transcript | Out-Null
+          }
+          catch {
+            Write-Host "PACKAGE ERROR: $($_.Exception.Message)" -ForegroundColor Red
+            try { Stop-Transcript | Out-Null } catch {}
+            exit 1
+          }
+
+      - name: Publish Windows release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+          $versionName = ($versionFull -split '\+')[0]
+          gh release delete latest-windows --cleanup-tag --yes 2>$null
+          gh release create latest-windows `
+            'Chernogram-Windows-Setup.exe' `
+            'chernogram-windows-portable.zip' `
+            'windows-update.json' `
+            --target main `
+            --title "Чернограм Windows $versionName" `
+            --notes "Чернограм для Windows 10/11 x64. Доступны установщик EXE и переносимая ZIP-версия." `
+            --prerelease 2>&1 | Tee-Object -FilePath 'windows-release.txt'
+          exit $LASTEXITCODE
+
+      - name: Save failure diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          foreach ($name in @('windows-build.txt', 'windows-package.txt', 'windows-release.txt')) {
+            Copy-Item $name "$env:TEMP/$name" -ErrorAction SilentlyContinue
+          }
+          git fetch origin main
+          git reset --hard origin/main
+          $lines = @(
+            'Windows build failed',
+            "Commit: $env:GITHUB_SHA",
+            "Time: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+          )
+          foreach ($name in @('windows-build.txt', 'windows-package.txt', 'windows-release.txt')) {
+            $temp = "$env:TEMP/$name"
+            if (Test-Path $temp) {
+              $lines += "===== $name ====="
+              $lines += Get-Content $temp
+            }
+          }
+          Set-Content 'WINDOWS_CI_ERROR.txt' -Value $lines -Encoding UTF8
+          git add -f WINDOWS_CI_ERROR.txt
+          git commit -m "Сохранить подробную ошибку Windows сборки [skip ci]" 2>$null
+          git push origin HEAD:main
+
+      - name: Mark Windows ready
+        if: success()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+          git fetch origin main
+          git reset --hard origin/main
+          @(
+            'Windows ready',
+            "Commit: $env:GITHUB_SHA",
+            "Time: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))",
+            "Version: $versionFull",
+            'Architecture: x64',
+            'Supported: Windows 10 and Windows 11',
+            'Installer: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe',
+            'Portable: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+          ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
+          git add WINDOWS_BUILD_STATUS.md
+          if (git ls-files --error-unmatch WINDOWS_CI_ERROR.txt 2>$null) { git rm -f WINDOWS_CI_ERROR.txt }
+          git commit -m "Windows версия Чернограма готова [skip ci]" 2>$null
+          git push origin HEAD:main
