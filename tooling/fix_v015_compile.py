@@ -1,5 +1,12 @@
 from pathlib import Path
 
+from fix_v0151_release import (
+    patch_chat_screen,
+    patch_core_models,
+    patch_v12,
+    patch_windows_updater,
+)
+
 
 def replace_once(source: str, old: str, new: str, label: str) -> str:
     if old not in source:
@@ -112,8 +119,16 @@ def patch_chat_media() -> bool:
 
 
 def main() -> None:
-    changed = patch_internet_core() | patch_chat_media()
-    print('Applied Chernogram 0.15 compile correction' if changed else 'Chernogram 0.15 compile correction already applied')
+    compile_changed = patch_internet_core() | patch_chat_media()
+    release_changed = False
+    release_changed |= patch_core_models()
+    release_changed |= patch_v12()
+    release_changed |= patch_chat_screen()
+    release_changed |= patch_windows_updater()
+    if compile_changed or release_changed:
+        print('Applied Chernogram 0.15.1 compile and release corrections')
+    else:
+        print('Chernogram 0.15.1 corrections already applied')
 
 
 if __name__ == '__main__':
