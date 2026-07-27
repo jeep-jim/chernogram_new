@@ -1,8 +1,8 @@
 Windows ready
-Commit: 16dd25f0b98b81f68fd6a931c6ea153374dab320
-Time: 2026-07-27T06:52:29Z
-Version: 0.15.0+26
+Commit: 0e34120b31be8d3ea2b2c9694848e69be9ceea78
+Time: 2026-07-27T08:44:28Z
+Version: 0.15.4+30
 Architecture: x64
 Supported: Windows 10 and Windows 11
-Package: portable ZIP, no administrator rights required
+Package: migration-safe portable ZIP with native bootstrap
 Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip
