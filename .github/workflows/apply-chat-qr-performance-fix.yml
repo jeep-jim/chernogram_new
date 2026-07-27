@@ -1,0 +1,671 @@
+name: Apply chat QR and performance fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-chat-qr-performance-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Apply source changes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:100]!r}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'pubspec.yaml',
+              'version: 0.11.0+21',
+              'version: 0.12.0+22',
+          )
+          replace_once(
+              'pubspec.yaml',
+              '  http: ^1.5.0\n  just_audio: ^0.10.6',
+              '  http: ^1.5.0\n  image: ^4.9.1\n  just_audio: ^0.10.6',
+          )
+          replace_once(
+              'pubspec.yaml',
+              '  video_player: ^2.13.0\n',
+              '  video_player: ^2.13.0\n  zxing2: ^0.2.4\n',
+          )
+
+          qr_decoder = r'''import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
+import 'package:zxing2/qrcode.dart';
+
+Future<String?> decodeQrFromImage(Uint8List bytes) {
+  return compute(_decodeQrInBackground, bytes);
+}
+
+String? _decodeQrInBackground(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+
+  final image = img.bakeOrientation(decoded);
+  for (final order in <img.ChannelOrder>[
+    img.ChannelOrder.rgba,
+    img.ChannelOrder.abgr,
+  ]) {
+    final pixels = image
+        .convert(numChannels: 4)
+        .getBytes(order: order)
+        .buffer
+        .asInt32List();
+    final source = RGBLuminanceSource(image.width, image.height, pixels);
+
+    for (final luminance in <LuminanceSource>[source, source.invert()]) {
+      for (final hybrid in <bool>[true, false]) {
+        try {
+          final bitmap = BinaryBitmap(
+            hybrid
+                ? HybridBinarizer(luminance)
+                : GlobalHistogramBinarizer(luminance),
+          );
+          final value = QRCodeReader().decode(bitmap).text.trim();
+          if (value.isNotEmpty) return value;
+        } catch (_) {
+          // Try the next channel order, inversion or binarizer.
+        }
+      }
+    }
+  }
+  return null;
+}
+'''
+          Path('lib/qr_image_decoder.dart').write_text(qr_decoder, encoding='utf-8')
+
+          v07 = Path('lib/v07.dart')
+          text = v07.read_text(encoding='utf-8')
+          text = text.replace(
+              "import 'package:file_picker/file_picker.dart';\nimport 'package:flutter/material.dart';",
+              "import 'package:file_picker/file_picker.dart';\nimport 'package:flutter/foundation.dart';\nimport 'package:flutter/material.dart';",
+              1,
+          )
+          text = text.replace(
+              "import 'core_models.dart';\n",
+              "import 'core_models.dart';\nimport 'qr_image_decoder.dart';\n",
+              1,
+          )
+          text = text.replace(
+              '  int _tab = 0;\n',
+              '  int _tab = 0;\n  Timer? _saveTunnelsTimer;\n  Timer? _saveContactsTimer;\n',
+              1,
+          )
+          text = text.replace(
+              '    unawaited(CgStore.saveTunnels(_tunnels));\n',
+              '    _scheduleTunnelsSave();\n',
+              1,
+          )
+          text = text.replace(
+              '    unawaited(CgStore.saveContacts(_contacts));\n',
+              '    _scheduleContactsSave();\n',
+              1,
+          )
+          marker = '  Future<void> _saveProfile(CgProfile profile) async {\n'
+          if marker not in text:
+              raise SystemExit('save profile marker not found in lib/v07.dart')
+          scheduling = r'''  void _scheduleTunnelsSave() {
+    _saveTunnelsTimer?.cancel();
+    _saveTunnelsTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(CgStore.saveTunnels(List<CgTunnel>.from(_tunnels)));
+    });
+  }
+
+  void _scheduleContactsSave() {
+    _saveContactsTimer?.cancel();
+    _saveContactsTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(CgStore.saveContacts(List<CgContact>.from(_contacts)));
+    });
+  }
+
+'''
+          text = text.replace(marker, scheduling + marker, 1)
+          text = text.replace(
+              "  void dispose() {\n    unawaited(_linkSubscription?.cancel());\n    super.dispose();\n  }",
+              "  void dispose() {\n    _saveTunnelsTimer?.cancel();\n    _saveContactsTimer?.cancel();\n    unawaited(_linkSubscription?.cancel());\n    super.dispose();\n  }",
+              1,
+          )
+
+          scanner_marker = 'class CgQrScanner extends StatefulWidget {'
+          if scanner_marker not in text:
+              raise SystemExit('QR scanner class not found in lib/v07.dart')
+          text = text.split(scanner_marker, 1)[0] + r'''class CgQrScanner extends StatefulWidget {
+  final bool ru;
+
+  const CgQrScanner({super.key, required this.ru});
+
+  @override
+  State<CgQrScanner> createState() => _CgQrScannerState();
+}
+
+class _CgQrScannerState extends State<CgQrScanner> {
+  bool _handled = false;
+  bool _readingFile = false;
+  MobileScannerController? _controller;
+
+  bool get _cameraSupported =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cameraSupported) {
+      _controller = MobileScannerController();
+    }
+  }
+
+  String? _extract(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri != null) {
+      if (uri.scheme == 'chernogram' &&
+          uri.host == 'join' &&
+          uri.pathSegments.isNotEmpty) {
+        return uri.pathSegments.first;
+      }
+      final invite = uri.queryParameters['invite'];
+      if (invite != null && invite.isNotEmpty) return invite;
+    }
+    if (CgTunnel.fromInviteToken(value) != null) return value;
+    return null;
+  }
+
+  void _finishRaw(String raw) {
+    if (_handled || !mounted) return;
+    final token = _extract(raw);
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.ru
+                ? 'На изображении нет приглашения Чернограма.'
+                : 'The image does not contain a Chernogram invite.',
+          ),
+        ),
+      );
+      return;
+    }
+    _handled = true;
+    Navigator.pop(context, token);
+  }
+
+  void _detect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue;
+      if (raw == null || raw.isEmpty) continue;
+      final token = _extract(raw);
+      if (token == null) continue;
+      _handled = true;
+      Navigator.pop(context, token);
+      return;
+    }
+  }
+
+  Future<void> _pickQrImage() async {
+    if (_readingFile) return;
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.image,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty || !mounted) return;
+    final bytes = result.files.first.bytes;
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.ru
+                ? 'Не удалось прочитать выбранное изображение.'
+                : 'Could not read the selected image.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _readingFile = true);
+    try {
+      final raw = await decodeQrFromImage(bytes);
+      if (!mounted) return;
+      if (raw == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.ru
+                  ? 'QR-код на изображении не найден. Выберите чёткий скриншот без сильного обрезания.'
+                  : 'No QR code was found. Choose a clear, uncropped screenshot.',
+            ),
+          ),
+        );
+        return;
+      }
+      _finishRaw(raw);
+    } finally {
+      if (mounted) setState(() => _readingFile = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.ru ? 'Принять приглашение' : 'Accept invite',
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: _cameraSupported
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        MobileScanner(
+                          controller: _controller,
+                          onDetect: _detect,
+                        ),
+                        Center(
+                          child: Container(
+                            width: 250,
+                            height: 250,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFF18B8FF),
+                                width: 3,
+                              ),
+                              borderRadius: BorderRadius.circular(32),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.qr_code_2_rounded,
+                              size: 92,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: .78),
+                            ),
+                            const SizedBox(height: 18),
+                            Text(
+                              widget.ru
+                                  ? 'На компьютере загрузите скриншот или фотографию QR-кода.'
+                                  : 'On desktop, upload a screenshot or photo of the QR code.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _readingFile ? null : _pickQrImage,
+                    icon: _readingFile
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.image_outlined),
+                    label: Text(
+                      widget.ru
+                          ? 'Загрузить изображение QR-кода'
+                          : 'Upload QR-code image',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+'''
+          v07.write_text(text, encoding='utf-8')
+
+          replace_once(
+              'lib/chat_screen.dart',
+              '''  @override
+  void initState() {
+    super.initState();
+    _tunnel = widget.tunnel;
+    unawaited(_connect());
+    if (widget.autoInvite) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showInvite());
+      });
+    }
+  }
+''',
+              '''  @override
+  void initState() {
+    super.initState();
+    _tunnel = widget.tunnel;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_connect());
+      if (widget.autoInvite) unawaited(_showInvite());
+    });
+  }
+''',
+          )
+
+          replace_once(
+              'lib/chat_screen.dart',
+              '''      final session = await InternetRelay.open(
+        tunnelId: _tunnel.id,
+        secret: _tunnel.secret,
+        profileId: widget.profile.id,
+        nickname: widget.profile.nickname,
+        history: _tunnel.messages.map((message) => message.toJson()).toList(),
+      );
+''',
+              '''      final messages = _tunnel.messages;
+      final first = messages.length > 500 ? messages.length - 500 : 0;
+      final history = <Map<String, dynamic>>[
+        for (var index = first; index < messages.length; index++)
+          messages[index].toJson(),
+      ];
+      final session = await InternetRelay.open(
+        tunnelId: _tunnel.id,
+        secret: _tunnel.secret,
+        profileId: widget.profile.id,
+        nickname: widget.profile.nickname,
+        history: history,
+      );
+''',
+          )
+
+          replace_once(
+              'lib/chat_screen.dart',
+              '''      appBar: AppBar(
+        leadingWidth: 58,
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: _TunnelAvatar(tunnel: _tunnel, size: 42),
+        ),
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.privacyLens ? '••••••••' : _tunnel.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            Text(
+              _statusText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: _networkState == 'connected'
+                    ? ChernogramColors.success
+                    : scheme.onSurface.withValues(alpha: .46),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+''',
+              '''      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: 48,
+        leading: IconButton(
+          tooltip: widget.ru ? 'Назад' : 'Back',
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            _TunnelAvatar(tunnel: _tunnel, size: 38),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.privacyLens ? '••••••••' : _tunnel.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    _statusText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: _networkState == 'connected'
+                          ? ChernogramColors.success
+                          : scheme.onSurface.withValues(alpha: .46),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+''',
+          )
+
+          internet = Path('lib/internet_core.dart')
+          text = internet.read_text(encoding='utf-8')
+          text = text.replace(
+              '  final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];\n',
+              '  final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];\n  final Map<String, int> _historyIndex = <String, int>{};\n',
+              1,
+          )
+          old_history = r'''  void replaceHistory(List<Map<String, dynamic>> messages) {
+    _history.clear();
+    for (final message in messages) {
+      _rememberMessage(message);
+    }
+  }
+'''
+          new_history = r'''  void replaceHistory(List<Map<String, dynamic>> messages) {
+    _history.clear();
+    _historyIndex.clear();
+    final first = messages.length > 500 ? messages.length - 500 : 0;
+    for (var sourceIndex = first; sourceIndex < messages.length; sourceIndex++) {
+      final message = messages[sourceIndex];
+      final id = message['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final copy = Map<String, dynamic>.from(message);
+      final existing = _historyIndex[id];
+      if (existing == null) {
+        _historyIndex[id] = _history.length;
+        _history.add(copy);
+      } else {
+        _history[existing] = copy;
+      }
+    }
+  }
+'''
+          if old_history not in text:
+              raise SystemExit('replaceHistory block not found')
+          text = text.replace(old_history, new_history, 1)
+
+          old_remember = r'''  bool _rememberMessage(Map<String, dynamic> message) {
+    final id = message['id']?.toString() ?? '';
+    if (id.isEmpty) return false;
+    final index = _history.indexWhere((item) => item['id']?.toString() == id);
+    if (index >= 0) {
+      _history[index] = Map<String, dynamic>.from(message);
+      return true;
+    }
+    _history.add(Map<String, dynamic>.from(message));
+    if (_history.length > 500) {
+      _history.removeRange(0, _history.length - 500);
+    }
+    return true;
+  }
+'''
+          new_remember = r'''  bool _rememberMessage(Map<String, dynamic> message) {
+    final id = message['id']?.toString() ?? '';
+    if (id.isEmpty) return false;
+    final copy = Map<String, dynamic>.from(message);
+    final index = _historyIndex[id];
+    if (index != null) {
+      _history[index] = copy;
+      return true;
+    }
+    _historyIndex[id] = _history.length;
+    _history.add(copy);
+    if (_history.length > 500) {
+      _history.removeRange(0, _history.length - 500);
+      _historyIndex.clear();
+      for (var i = 0; i < _history.length; i++) {
+        final historyId = _history[i]['id']?.toString() ?? '';
+        if (historyId.isNotEmpty) _historyIndex[historyId] = i;
+      }
+    }
+    return true;
+  }
+'''
+          if old_remember not in text:
+              raise SystemExit('_rememberMessage block not found')
+          text = text.replace(old_remember, new_remember, 1)
+
+          text = text.replace(
+              '''      existing.replaceHistory(history);
+      unawaited(existing.connect());
+      return existing;
+''',
+              '''      existing.replaceHistory(history);
+      unawaited(existing.connect());
+      return existing;
+''',
+              1,
+          )
+          text = text.replace(
+              '''    _sessions[tunnelId] = session;
+    await session.connect();
+    return session;
+''',
+              '''    _sessions[tunnelId] = session;
+    unawaited(session.connect());
+    return session;
+''',
+              1,
+          )
+          internet.write_text(text, encoding='utf-8')
+
+          core = Path('lib/core_models.dart')
+          text = core.read_text(encoding='utf-8')
+          text = text.replace(
+              "import 'package:shared_preferences/shared_preferences.dart';",
+              "import 'package:flutter/foundation.dart';\nimport 'package:shared_preferences/shared_preferences.dart';",
+              1,
+          )
+          text = text.replace(
+              "class CgIds {",
+              "String _encodeStoredJson(Object value) => jsonEncode(value);\n\nclass CgIds {",
+              1,
+          )
+          text = text.replace(
+              '''  static Future<void> saveTunnels(List<CgTunnel> tunnels) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      tunnelsKey,
+      jsonEncode(tunnels.map((tunnel) => tunnel.toJson()).toList()),
+    );
+  }
+''',
+              '''  static Future<void> saveTunnels(List<CgTunnel> tunnels) async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = tunnels.map((tunnel) => tunnel.toJson()).toList(growable: false);
+    final encoded = await compute(_encodeStoredJson, payload);
+    await prefs.setString(tunnelsKey, encoded);
+  }
+''',
+              1,
+          )
+          text = text.replace(
+              '''  static Future<void> saveContacts(List<CgContact> contacts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      contactsKey,
+      jsonEncode(contacts.map((contact) => contact.toJson()).toList()),
+    );
+  }
+''',
+              '''  static Future<void> saveContacts(List<CgContact> contacts) async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = contacts.map((contact) => contact.toJson()).toList(growable: false);
+    final encoded = await compute(_encodeStoredJson, payload);
+    await prefs.setString(contactsKey, encoded);
+  }
+''',
+              1,
+          )
+          core.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Resolve dependencies and validate
+        shell: bash
+        run: |
+          flutter pub get
+          dart format lib/v07.dart lib/chat_screen.dart lib/internet_core.dart lib/core_models.dart lib/qr_image_decoder.dart
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pubspec.yaml pubspec.lock lib/v07.dart lib/chat_screen.dart lib/internet_core.dart lib/core_models.dart lib/qr_image_decoder.dart
+          git commit -m 'Исправить QR из файла, кнопку назад и мгновенное открытие чатов'
+          git push origin HEAD:main
