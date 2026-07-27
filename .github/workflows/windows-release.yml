@@ -62,9 +62,14 @@ jobs:
             Copy-Item "$release/*" "$package/app" -Recurse -Force
 
             $bootstrap = Join-Path $package 'chernogram.exe'
-            $csc = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-            if (-not (Test-Path $csc)) { throw 'C# compiler was not found' }
-            & $csc /nologo /target:winexe "/out:$bootstrap" 'tooling/windows_bootstrap.cs'
+            $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+            if (-not (Test-Path $vswhere)) { throw 'vswhere.exe was not found' }
+            $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            if (-not $vsPath) { throw 'Visual Studio C++ tools were not found' }
+            $vcvars = Join-Path $vsPath 'VC/Auxiliary/Build/vcvars64.bat'
+            if (-not (Test-Path $vcvars)) { throw 'vcvars64.bat was not found' }
+            $compile = "call `"$vcvars`" && cl.exe /nologo /O2 /EHsc /DUNICODE /D_UNICODE tooling\windows_bootstrap.cpp shell32.lib /link /SUBSYSTEM:WINDOWS /OUT:`"$bootstrap`""
+            cmd.exe /D /S /C $compile 2>&1 | Tee-Object -FilePath $log -Append
             if ($LASTEXITCODE -ne 0) { throw "Bootstrap compilation failed: $LASTEXITCODE" }
             if (-not (Test-Path $bootstrap)) { throw 'Windows bootstrap was not created' }
 
@@ -157,7 +162,7 @@ jobs:
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "4189828+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
           git fetch origin main
           git reset --hard origin/main
@@ -168,7 +173,7 @@ jobs:
             "Version: $versionFull",
             'Architecture: x64',
             'Supported: Windows 10 and Windows 11',
-            'Package: migration-safe portable ZIP with bootstrap',
+            'Package: migration-safe portable ZIP with native bootstrap',
             'Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
           ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
           git add WINDOWS_BUILD_STATUS.md
