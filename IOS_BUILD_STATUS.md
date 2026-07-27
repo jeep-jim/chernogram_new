@@ -1,6 +1,6 @@
 iPhone IPA ready
-Commit: f8db634cb9cb4fbedeef4d70cf3e4a3ca1a4aa5b
-Time: 2026-07-27T03:38:31Z
-Version: 0.12.0+22
+Commit: 69788e182d21f92bc4611eb8cf3c3f153e69eb73
+Time: 2026-07-27T04:15:42Z
+Version: 0.13.0+23
 Signing: unsigned IPA intended for SideStore/AltStore/Xcode Personal Team re-signing
 Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-ios-sideload/chernogram-ios.ipa
