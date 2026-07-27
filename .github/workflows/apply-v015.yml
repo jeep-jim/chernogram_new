@@ -1,5 +1,6 @@
 name: Apply Chernogram 0.15
 
+# Registered in the previous commit; this change starts the one-shot migration.
 on:
   push:
     branches: [main]
