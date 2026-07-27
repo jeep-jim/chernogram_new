@@ -92,6 +92,12 @@ jobs:
             git push origin HEAD:main
           fi
 
+      - name: Apply the 0.16 foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tooling/fix_v016_foundation.py
+
       - name: Validate and build release APK
         id: build_apk
         shell: bash
@@ -155,8 +161,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.15: чаты открываются из локального кэша без загрузки всего медиа; вложения загружаются только по нажатию; соединение и переподключение стали тише и быстрее; добавлены сохранение, общий доступ и удаление контента; на Windows работают Enter для отправки и перетаскивание файлов; музыкальный плеер получил общие папки и анимацию; интерфейс стал компактнее, возвращены права участников, счётчики непрочитанных и проверка кириллических никнеймов.",
-            "notesEn": "Version 0.15 opens chats from local cache without loading all media, downloads attachments only on demand, uses quieter faster reconnects, adds save/share/delete actions, Windows Enter-to-send and drag-and-drop, shared music folders and animated playback, compact chat UI, member permissions, unread badges and Cyrillic nickname validation."
+            "notesRu": "Версия 0.16: новый главный экран с глобальным поиском по чатам, людям и ID аккаунтов, раскрывающимся описанием проекта и собственной мелодией входящего вызова. Начат фундаментальный этап скорости, локального кэша и защиты от регрессий.",
+            "notesEn": "Version 0.16 adds a new home screen with global search across chats, people and account IDs, an expandable project overview and a custom incoming-call ringtone. It starts the performance, local-cache and regression-protection foundation."
           }
           EOF
 
@@ -174,7 +180,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Быстрые кэшированные чаты, ленивое медиа, тихое переподключение, сохранение и общий доступ к файлам, Windows drag-and-drop и Enter, общие музыкальные папки, анимированный плеер, компактный интерфейс и настройки прав участников. APK подписан прежним постоянным ключом." \
+              --notes "Новый главный экран, глобальный поиск по чатам, людям и аккаунтам, раскрывающийся прелендинг проекта и собственная мелодия входящего вызова. APK подписан прежним постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -214,7 +220,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.15 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.16 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -239,5 +245,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.15 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.16 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
