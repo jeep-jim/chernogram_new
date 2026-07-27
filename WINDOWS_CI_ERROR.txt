@@ -1,6 +1,6 @@
 Windows build failed
-Commit: c43caf921c1232c29e581fac8576d0fd52725da9
-Time: 2026-07-27T02:37:16Z
+Commit: 6d3de56f936c7b4904c434c44db0752426fba2e7
+Time: 2026-07-27T02:46:09Z
 ===== windows-build.txt =====
 
 ===== FLUTTER =====
@@ -239,7 +239,7 @@ Formatted lib\tunnels.dart
 Formatted lib\update_service.dart
 Formatted lib\v06.dart
 Formatted lib\v07.dart
-Formatted 22 files (21 changed) in 0.41 seconds.
+Formatted 22 files (21 changed) in 0.43 seconds.
 ===== ANALYZE =====
 Analyzing chernogram_new...                                     
 
@@ -266,7 +266,7 @@ warning - The left operand can't be null, so the right operand is never executed
    info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:1961:9 - curly_braces_in_flow_control_structures
    info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v07.dart:389:11 - curly_braces_in_flow_control_structures
 
-22 issues found. (ran in 13.3s)
+22 issues found. (ran in 15.3s)
 ===== TEST =====
 
 ✅ basic smoke test
@@ -275,8 +275,5 @@ warning - The left operand can't be null, so the right operand is never executed
 ===== BUILD WINDOWS =====
 Building Windows application...                                 
 download: https://github.com/webrtc-sdk/libwebrtc/releases/download/libwebrtc.m144.7559.09/libwebrtc-win-x64-release.zip
-C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are deprecated by Microsoft and will be REMOVED SOON. They are superseded by the C++20 <coroutine> and C++23 <generator> headers. You can define _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS to suppress this error for now.' [D:\a\chernogram_new\chernogram_new\build\windows\x64\plugins\audio_service_win\audio_service_win_plugin.vcxproj]
-C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are deprecated by Microsoft and will be REMOVED SOON. They are superseded by the C++20 <coroutine> and C++23 <generator> headers. You can define _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS to suppress this error for now.' [D:\a\chernogram_new\chernogram_new\build\windows\x64\plugins\just_audio_windows\just_audio_windows_plugin.vcxproj]
-Building Windows application...                                   154.0s
-Build process failed.
-WINDOWS BUILD ERROR: BUILD WINDOWS failed with exit code 1
+Building Windows application...                                   197.2s
+√ Built build\windows\x64\runner\Release\chernogram.exe
