@@ -1,12 +1,5 @@
 from pathlib import Path
-
-
-def replace_once(source: str, old: str, new: str, label: str) -> str:
-    if old in source:
-        return source.replace(old, new, 1)
-    if new in source:
-        return source
-    raise RuntimeError(f'Expected block was not found: {label}')
+import re
 
 
 def patch_windows_updater() -> bool:
@@ -14,104 +7,75 @@ def patch_windows_updater() -> bool:
     source = path.read_text(encoding='utf-8')
     original = source
 
-    source = replace_once(
-        source,
-        """      final executable = File(Platform.resolvedExecutable);
-       final installDirectory = executable.parent.path;
-       final executableName = executable.uri.pathSegments.last;
-       final script = File(
-         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ps1',
-       );
-       await script.writeAsString(_windowsInstallScript, flush: true);
+    if 'chernogram-update-launcher-$safeVersion.vbs' not in source:
+        pattern = re.compile(
+            r"      final executable = File\(Platform\.resolvedExecutable\);.*?"
+            r"      exit\(0\);\n",
+            re.S,
+        )
+        launch_block = """      final executable = File(Platform.resolvedExecutable);
+      final installDirectory = executable.parent.path;
+      final executableName = executable.uri.pathSegments.last;
+      final script = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.cmd',
+      );
+      final readyFile = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ready',
+      );
+      final launcher = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-update-launcher-$safeVersion.vbs',
+      );
+      if (await readyFile.exists()) await readyFile.delete();
+      await script.writeAsString(_windowsInstallScript, flush: true);
 
-       await Process.start(
-         'powershell.exe',
-         <String>[
-           '-NoProfile',
-           '-NonInteractive',
-           '-ExecutionPolicy',
-           'Bypass',
-           '-File',
-           script.path,
-           '-AppProcessId',
-           pid.toString(),
-           '-ZipPath',
-           zipFile.path,
-           '-InstallDir',
-           installDirectory,
-           '-ExeName',
-           executableName,
-         ],
-         mode: ProcessStartMode.detached,
-         runInShell: false,
-       );
+      final command = <String>[
+        'cmd.exe',
+        '/d',
+        '/s',
+        '/c',
+        'call',
+        _quoteWindowsArgument(script.path),
+        pid.toString(),
+        _quoteWindowsArgument(zipFile.path),
+        _quoteWindowsArgument(installDirectory),
+        _quoteWindowsArgument(executableName),
+        _quoteWindowsArgument(readyFile.path),
+      ].join(' ');
+      final escapedCommand = command.replaceAll('"', '""');
+      await launcher.writeAsString(
+        'Set shell = CreateObject("WScript.Shell")\\r\\n'
+        'shell.Run "$escapedCommand", 0, False\\r\\n'
+        'CreateObject("Scripting.FileSystemObject").DeleteFile '
+        'WScript.ScriptFullName, True\\r\\n',
+        flush: true,
+      );
 
-       await Future<void>.delayed(const Duration(milliseconds: 700));
-       closeDialog();
-       exit(0);
- """,
-        """      final executable = File(Platform.resolvedExecutable);
-       final installDirectory = executable.parent.path;
-       final executableName = executable.uri.pathSegments.last;
-       final script = File(
-         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.cmd',
-       );
-       final readyFile = File(
-         '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ready',
-       );
-       final launcher = File(
-         '${temp.path}${Platform.pathSeparator}chernogram-update-launcher-$safeVersion.vbs',
-       );
-       if (await readyFile.exists()) await readyFile.delete();
-       await script.writeAsString(_windowsInstallScript, flush: true);
+      await Process.start(
+        'wscript.exe',
+        <String>['//B', '//Nologo', launcher.path],
+        mode: ProcessStartMode.detached,
+        runInShell: false,
+      );
 
-       final command = <String>[
-         'cmd.exe',
-         '/d',
-         '/s',
-         '/c',
-         'call',
-         _quoteWindowsArgument(script.path),
-         pid.toString(),
-         _quoteWindowsArgument(zipFile.path),
-         _quoteWindowsArgument(installDirectory),
-         _quoteWindowsArgument(executableName),
-         _quoteWindowsArgument(readyFile.path),
-       ].join(' ');
-       final escapedCommand = command.replaceAll('"', '""');
-       await launcher.writeAsString(
-         'Set shell = CreateObject("WScript.Shell")\\r\\n'
-         'shell.Run "$escapedCommand", 0, False\\r\\n'
-         'CreateObject("Scripting.FileSystemObject").DeleteFile '
-         'WScript.ScriptFullName, True\\r\\n',
-         flush: true,
-       );
+      var helperReady = false;
+      for (var attempt = 0; attempt < 50; attempt++) {
+        if (await readyFile.exists()) {
+          helperReady = true;
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (!helperReady) {
+        throw StateError('Windows updater helper did not start');
+      }
 
-       await Process.start(
-         'wscript.exe',
-         <String>['//B', '//Nologo', launcher.path],
-         mode: ProcessStartMode.detached,
-         runInShell: false,
-       );
-
-       var helperReady = false;
-       for (var attempt = 0; attempt < 50; attempt++) {
-         if (await readyFile.exists()) {
-           helperReady = true;
-           break;
-         }
-         await Future<void>.delayed(const Duration(milliseconds: 100));
-       }
-       if (!helperReady) {
-         throw StateError('Windows updater helper did not start');
-       }
-
-       await Future<void>.delayed(const Duration(milliseconds: 250));
-       closeDialog();
-       exit(0);
- """,
-        'Windows helper launch',
-    )
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      closeDialog();
+      exit(0);
+"""
+        source, count = pattern.subn(launch_block, source, count=1)
+        if count != 1:
+            raise RuntimeError('Windows helper launch block was not found')
 
     marker = "  static const String _windowsInstallScript = r'''"
     marker_index = source.find(marker)
