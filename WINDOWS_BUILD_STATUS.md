@@ -1,7 +1,7 @@
 Windows ready
-Commit: ff76001cced000ecca4652261a0b2fb9ad979923
-Time: 2026-07-27T05:49:47Z
-Version: 0.14.1+25
+Commit: 16dd25f0b98b81f68fd6a931c6ea153374dab320
+Time: 2026-07-27T06:52:29Z
+Version: 0.15.0+26
 Architecture: x64
 Supported: Windows 10 and Windows 11
 Package: portable ZIP, no administrator rights required
