@@ -2,24 +2,31 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $logPath = Join-Path $PWD 'windows-build.txt'
 
+function Invoke-LoggedCommand {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $true)][string]$Command
+  )
+  "===== $Name =====" | Tee-Object -FilePath $logPath -Append
+  cmd.exe /D /S /C "$Command 2>&1" | Tee-Object -FilePath $logPath -Append
+  $code = $LASTEXITCODE
+  if ($code -ne 0) {
+    throw "$Name failed with exit code $code"
+  }
+}
+
 try {
-  Start-Transcript -Path $logPath -Force | Out-Null
+  Set-Content -Path $logPath -Value '' -Encoding UTF8
 
-  Write-Host '===== FLUTTER ====='
-  flutter --version
-  if ($LASTEXITCODE -ne 0) { throw "flutter --version failed: $LASTEXITCODE" }
+  Invoke-LoggedCommand -Name 'FLUTTER' -Command 'flutter --version'
+  Invoke-LoggedCommand -Name 'ENABLE WINDOWS' -Command 'flutter config --enable-windows-desktop'
 
-  Write-Host '===== ENABLE WINDOWS ====='
-  flutter config --enable-windows-desktop
-  if ($LASTEXITCODE -ne 0) { throw "flutter config failed: $LASTEXITCODE" }
-
-  Write-Host '===== CREATE WINDOWS PLATFORM ====='
   if (-not (Test-Path 'windows/CMakeLists.txt')) {
-    flutter create --platforms=windows --project-name chernogram --no-pub .
-    if ($LASTEXITCODE -ne 0) { throw "flutter create failed: $LASTEXITCODE" }
+    Invoke-LoggedCommand `
+      -Name 'CREATE WINDOWS PLATFORM' `
+      -Command 'flutter create --platforms=windows --project-name chernogram --no-pub .'
   }
 
-  Write-Host '===== APPLY APPLICATION PATCHES ====='
   $patches = @(
     'tooling/fix_v07_compile.py',
     'tooling/fix_v09_media_calls.py',
@@ -31,42 +38,30 @@ try {
     'tooling/fix_v011_compile.py'
   )
   foreach ($patch in $patches) {
-    Write-Host "--- $patch"
-    python $patch
-    if ($LASTEXITCODE -ne 0) { throw "$patch failed: $LASTEXITCODE" }
+    Invoke-LoggedCommand -Name "PATCH $patch" -Command "python $patch"
   }
 
-  Write-Host '===== PREPARE WINDOWS ====='
-  python -m pip install pillow --disable-pip-version-check --quiet
-  if ($LASTEXITCODE -ne 0) { throw "pip install pillow failed: $LASTEXITCODE" }
-  python tooling/fix_windows_desktop.py
-  if ($LASTEXITCODE -ne 0) { throw "fix_windows_desktop.py failed: $LASTEXITCODE" }
+  Invoke-LoggedCommand `
+    -Name 'INSTALL PILLOW' `
+    -Command 'python -m pip install pillow --disable-pip-version-check --quiet'
+  Invoke-LoggedCommand `
+    -Name 'PREPARE WINDOWS' `
+    -Command 'python tooling/fix_windows_desktop.py'
+  Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
+  Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
+  Invoke-LoggedCommand `
+    -Name 'ANALYZE' `
+    -Command 'flutter analyze --no-fatal-infos --no-fatal-warnings'
+  Invoke-LoggedCommand -Name 'TEST' -Command 'flutter test'
+  Invoke-LoggedCommand `
+    -Name 'BUILD WINDOWS' `
+    -Command 'flutter build windows --release'
 
-  Write-Host '===== PUB GET ====='
-  flutter pub get
-  if ($LASTEXITCODE -ne 0) { throw "flutter pub get failed: $LASTEXITCODE" }
-
-  Write-Host '===== FORMAT ====='
-  dart format lib
-  if ($LASTEXITCODE -ne 0) { throw "dart format failed: $LASTEXITCODE" }
-
-  Write-Host '===== ANALYZE ====='
-  flutter analyze --no-fatal-infos --no-fatal-warnings
-  if ($LASTEXITCODE -ne 0) { throw "flutter analyze failed: $LASTEXITCODE" }
-
-  Write-Host '===== TEST ====='
-  flutter test
-  if ($LASTEXITCODE -ne 0) { throw "flutter test failed: $LASTEXITCODE" }
-
-  Write-Host '===== BUILD WINDOWS ====='
-  flutter build windows --release
-  if ($LASTEXITCODE -ne 0) { throw "flutter build windows failed: $LASTEXITCODE" }
-
-  Stop-Transcript | Out-Null
   exit 0
 }
 catch {
-  Write-Host "WINDOWS BUILD ERROR: $($_.Exception.Message)" -ForegroundColor Red
-  try { Stop-Transcript | Out-Null } catch {}
+  $message = "WINDOWS BUILD ERROR: $($_.Exception.Message)"
+  Write-Host $message -ForegroundColor Red
+  Add-Content -Path $logPath -Value $message -Encoding UTF8
   exit 1
 }
