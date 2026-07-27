@@ -92,9 +92,13 @@ def patch_runner() -> None:
             'Win32Window::Size size(1280, 720);',
             'Win32Window::Size size(520, 900);',
         )
+        title = (
+            'window.Create(L"\\u0427\\u0435\\u0440\\u043d\\u043e'
+            '\\u0433\\u0440\\u0430\\u043c", origin, size)'
+        )
         source = re.sub(
             r'window\.Create\(L"[^"]*", origin, size\)',
-            'window.Create(L"\\u0427\\u0435\\u0440\\u043d\\u043e\\u0433\\u0440\\u0430\\u043c", origin, size)',
+            lambda _: title,
             source,
         )
         main_cpp.write_text(source, encoding='utf-8')
@@ -102,10 +106,14 @@ def patch_runner() -> None:
     rc = Path('windows/runner/Runner.rc')
     if rc.exists():
         source = rc.read_text(encoding='utf-8')
-        source = source.replace('VALUE "FileDescription", "chernogram"',
-                                'VALUE "FileDescription", "Chernogram"')
-        source = source.replace('VALUE "ProductName", "chernogram"',
-                                'VALUE "ProductName", "Chernogram"')
+        source = source.replace(
+            'VALUE "FileDescription", "chernogram"',
+            'VALUE "FileDescription", "Chernogram"',
+        )
+        source = source.replace(
+            'VALUE "ProductName", "chernogram"',
+            'VALUE "ProductName", "Chernogram"',
+        )
         rc.write_text(source, encoding='utf-8')
 
 
@@ -128,14 +136,34 @@ def create_icon() -> None:
         width=5,
     )
     arc_box = (50, 46, 206, 202)
-    draw.arc(arc_box, start=35, end=318, fill=(156, 134, 255, 255), width=25)
-    draw.arc((60, 56, 196, 192), start=42, end=312, fill=(25, 200, 255, 255), width=8)
+    draw.arc(
+        arc_box,
+        start=35,
+        end=318,
+        fill=(156, 134, 255, 255),
+        width=25,
+    )
+    draw.arc(
+        (60, 56, 196, 192),
+        start=42,
+        end=312,
+        fill=(25, 200, 255, 255),
+        width=8,
+    )
     draw.line((132, 128, 204, 128), fill=(9, 13, 24, 255), width=27)
     draw.ellipse((170, 116, 194, 140), fill=(141, 222, 255, 255))
     image.save(
         destination,
         format='ICO',
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+        sizes=[
+            (16, 16),
+            (24, 24),
+            (32, 32),
+            (48, 48),
+            (64, 64),
+            (128, 128),
+            (256, 256),
+        ],
     )
 
 
