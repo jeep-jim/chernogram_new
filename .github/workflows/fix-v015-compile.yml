@@ -1,6 +1,6 @@
 name: Fix Chernogram 0.15 compile
 
-# Registered by the previous commit; this change starts the one-shot correction.
+# Retry with repository synchronization before the correction commit.
 on:
   push:
     branches: [main]
@@ -122,6 +122,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin main
           git rm .github/workflows/fix-v015-compile.yml
           git add lib/internet_core.dart lib/chat_media.dart
           git commit -m "Восстановить сигналы звонков и очистку кэша 0.15 [skip ci]"
