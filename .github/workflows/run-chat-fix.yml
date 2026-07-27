@@ -1,5 +1,6 @@
 name: Run chat fix
 
+# Second commit intentionally starts the registered workflow.
 on:
   push:
     branches: [main]
