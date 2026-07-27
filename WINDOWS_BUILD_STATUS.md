@@ -1,7 +1,7 @@
 Windows ready
-Commit: 42aba1790ecba3a32ce2c9eae259eecad099a356
-Time: 2026-07-27T09:16:04Z
-Version: 0.15.4+30
+Commit: cfa435a375e45b27d68393df16639be1c84b5b10
+Time: 2026-07-27T10:31:16Z
+Version: 0.16.0+31
 Architecture: x64
 Supported: Windows 10 and Windows 11
 Package: portable ZIP plus repair installer
