@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigation.dart';
+import 'app_update_service.dart';
 import 'brand.dart';
-import 'update_service.dart';
 import 'v12.dart';
 
 void main() {
@@ -82,7 +82,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
         return;
       }
       unawaited(
-        ChernogramUpdater.checkAndPrompt(
+        ChernogramAppUpdater.checkAndPrompt(
           context,
           ru: _ru!,
           manual: false,
@@ -120,7 +120,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
                     onChangeLanguage: _toggleLanguage,
                     onCheckUpdates: () {
                       unawaited(
-                        ChernogramUpdater.checkAndPrompt(
+                        ChernogramAppUpdater.checkAndPrompt(
                           context,
                           ru: _ru!,
                           manual: true,
