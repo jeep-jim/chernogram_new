@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_navigation.dart';
 import 'brand.dart';
 import 'update_service.dart';
-import 'v07.dart';
+import 'v12.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,7 +113,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
                   onDone: _finishIntro,
                 )
               : Builder(
-                  builder: (context) => ChernogramV07(
+                  builder: (context) => ChernogramV12(
                     ru: _ru!,
                     darkMode: _darkMode,
                     onToggleTheme: _toggleTheme,
