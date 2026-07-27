@@ -142,7 +142,7 @@ def patch_windows_updater() -> None:
 
   static int _compareVersions(String left, String right) {
 """
-    if '_quoteWindowsArgument' not in source:
+    if 'static String _quoteWindowsArgument' not in source:
         if helper_marker not in source:
             raise RuntimeError('Windows updater helper marker was not found')
         source = source.replace(helper_marker, helper, 1)
