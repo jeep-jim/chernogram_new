@@ -118,6 +118,28 @@ def patch_chat_media() -> bool:
     return False
 
 
+def prefer_nested_windows_payload() -> bool:
+    path = Path('lib/windows_update_service.dart')
+    source = path.read_text(encoding='utf-8')
+    original = source
+    old = """set "SOURCE=%STAGE%"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+if exist "%STAGE%\app\%EXE_NAME%" set "SOURCE=%STAGE%\app"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+"""
+    new = """set "SOURCE=%STAGE%\app"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+set "SOURCE=%STAGE%"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+"""
+    if old in source:
+        source = source.replace(old, new, 1)
+    if source != original:
+        path.write_text(source, encoding='utf-8')
+        return True
+    return False
+
+
 def main() -> None:
     compile_changed = patch_internet_core() | patch_chat_media()
     release_changed = False
@@ -125,6 +147,7 @@ def main() -> None:
     release_changed |= patch_v12()
     release_changed |= patch_chat_screen()
     release_changed |= patch_windows_updater()
+    release_changed |= prefer_nested_windows_payload()
     if compile_changed or release_changed:
         print('Applied Chernogram 0.15.1 compile and release corrections')
     else:
