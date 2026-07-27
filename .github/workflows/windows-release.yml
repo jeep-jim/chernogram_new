@@ -33,104 +33,67 @@ jobs:
         shell: pwsh
         run: ./tooling/build_windows.ps1
 
-      - name: Package portable and installer
+      - name: Package portable application
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Start-Transcript -Path 'windows-package.txt' -Force | Out-Null
+          $log = 'windows-package.txt'
+          Set-Content -Path $log -Value '===== WINDOWS PORTABLE PACKAGE =====' -Encoding UTF8
           try {
             $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
             $versionName = ($versionFull -split '\+')[0]
             $release = 'build/windows/x64/runner/Release'
-            if (-not (Test-Path "$release/chernogram.exe")) {
+            $exe = Join-Path $release 'chernogram.exe'
+            if (-not (Test-Path $exe)) {
               throw 'chernogram.exe was not produced'
             }
 
             foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
               $source = Join-Path $env:WINDIR "System32/$dll"
-              if (Test-Path $source) { Copy-Item $source $release -Force }
+              if (Test-Path $source) {
+                Copy-Item $source $release -Force
+                Add-Content $log "Bundled $dll"
+              }
             }
 
-            @"
-            ЧЕРНОГРАМ ДЛЯ WINDOWS
+            $readme = @(
+              'ЧЕРНОГРАМ ДЛЯ WINDOWS',
+              '',
+              "Версия: $versionFull",
+              'Поддержка: Windows 10 и Windows 11, 64-бит.',
+              '',
+              '1. Распакуйте ZIP целиком в отдельную папку.',
+              '2. Запустите chernogram.exe.',
+              '3. Не переносите EXE отдельно от папки data и DLL-файлов.',
+              '',
+              'При предупреждении SmartScreen нажмите «Подробнее» → «Выполнить в любом случае».',
+              'Приложение пока не подписано платным сертификатом Windows.'
+            )
+            Set-Content -Path "$release/README-RU.txt" -Value $readme -Encoding UTF8
 
-            Версия: $versionFull
-            Поддержка: Windows 10 и Windows 11, 64-бит.
+            $zip = 'chernogram-windows-portable.zip'
+            if (Test-Path $zip) { Remove-Item $zip -Force }
+            Compress-Archive -Path "$release/*" -DestinationPath $zip -CompressionLevel Optimal
+            if (-not (Test-Path $zip)) { throw 'Portable ZIP was not created' }
 
-            Переносимая версия запускается через chernogram.exe после полной распаковки ZIP.
-            Обычная установка выполняется файлом Chernogram-Windows-Setup.exe.
-            "@ | Set-Content "$release/README-RU.txt" -Encoding UTF8
-
-            Compress-Archive -Path "$release/*" -DestinationPath 'chernogram-windows-portable.zip' -CompressionLevel Optimal -Force
-
-            choco install innosetup --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed: $LASTEXITCODE" }
-
-            $iss = @"
-            #define MyAppName "Чернограм"
-            #define MyAppVersion "$versionName"
-            #define MyAppPublisher "Chernogram"
-            #define MyAppExeName "chernogram.exe"
-
-            [Setup]
-            AppId={{B6C33A77-38D4-4CA0-BE3A-B0C431E40F16}
-            AppName={#MyAppName}
-            AppVersion={#MyAppVersion}
-            AppPublisher={#MyAppPublisher}
-            DefaultDirName={localappdata}\Programs\Chernogram
-            DefaultGroupName=Чернограм
-            DisableProgramGroupPage=yes
-            OutputDir=.
-            OutputBaseFilename=Chernogram-Windows-Setup
-            Compression=lzma2
-            SolidCompression=yes
-            WizardStyle=modern
-            PrivilegesRequired=lowest
-            ArchitecturesAllowed=x64compatible
-            ArchitecturesInstallIn64BitMode=x64compatible
-            MinVersion=10.0
-            SetupIconFile=windows\runner\resources\app_icon.ico
-            UninstallDisplayIcon={app}\{#MyAppExeName}
-            CloseApplications=yes
-            RestartApplications=no
-
-            [Languages]
-            Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
-            Name: "english"; MessagesFile: "compiler:Default.isl"
-
-            [Tasks]
-            Name: "desktopicon"; Description: "Создать значок на рабочем столе"; GroupDescription: "Дополнительные значки:"; Flags: unchecked
-
-            [Files]
-            Source: "$release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-            [Icons]
-            Name: "{group}\Чернограм"; Filename: "{app}\{#MyAppExeName}"
-            Name: "{autodesktop}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-
-            [Run]
-            Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Чернограм"; Flags: nowait postinstall skipifsilent
-            "@
-            Set-Content 'chernogram-windows.iss' -Value $iss -Encoding UTF8
-            & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' 'chernogram-windows.iss'
-            if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
-
+            $portableHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
             $manifest = @{
               versionName = $versionName
               versionFull = $versionFull
               architecture = 'x64'
               minimumWindows = '10'
-              installerUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe'
               portableUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
-              installerSha256 = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLower()
-              portableSha256 = (Get-FileHash 'chernogram-windows-portable.zip' -Algorithm SHA256).Hash.ToLower()
+              portableSha256 = $portableHash
+              packageType = 'portable-zip'
             } | ConvertTo-Json
-            Set-Content 'windows-update.json' -Value $manifest -Encoding UTF8
-            Stop-Transcript | Out-Null
+            Set-Content -Path 'windows-update.json' -Value $manifest -Encoding UTF8
+            Add-Content $log "Created $zip"
+            Add-Content $log "SHA256: $portableHash"
           }
           catch {
-            Write-Host "PACKAGE ERROR: $($_.Exception.Message)" -ForegroundColor Red
-            try { Stop-Transcript | Out-Null } catch {}
+            $message = "PACKAGE ERROR: $($_.Exception.Message)"
+            Write-Host $message -ForegroundColor Red
+            Add-Content $log $message
             exit 1
           }
 
@@ -139,18 +102,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
           $versionName = ($versionFull -split '\+')[0]
           gh release delete latest-windows --cleanup-tag --yes 2>$null
           gh release create latest-windows `
-            'Chernogram-Windows-Setup.exe' `
             'chernogram-windows-portable.zip' `
             'windows-update.json' `
             --target main `
             --title "Чернограм Windows $versionName" `
-            --notes "Чернограм для Windows 10/11 x64. Доступны установщик EXE и переносимая ZIP-версия." `
+            --notes "Чернограм для Windows 10/11 x64. Распакуйте ZIP целиком и запустите chernogram.exe. Портативная версия не требует установки и прав администратора." `
             --prerelease 2>&1 | Tee-Object -FilePath 'windows-release.txt'
-          exit $LASTEXITCODE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Save failure diagnostics
         if: failure()
@@ -196,8 +159,8 @@ jobs:
             "Version: $versionFull",
             'Architecture: x64',
             'Supported: Windows 10 and Windows 11',
-            'Installer: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe',
-            'Portable: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+            'Package: portable ZIP, no administrator rights required',
+            'Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
           ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
           git add WINDOWS_BUILD_STATUS.md
           if (git ls-files --error-unmatch WINDOWS_CI_ERROR.txt 2>$null) { git rm -f WINDOWS_CI_ERROR.txt }
