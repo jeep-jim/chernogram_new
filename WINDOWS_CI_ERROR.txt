@@ -1,0 +1,69 @@
+Windows build failed
+Commit: 863c48e9f831da632227961bfffb3d09b4810918
+Time: 2026-07-27T06:19:38Z
+===== windows-build.txt =====
+
+===== FLUTTER =====
+Resolving dependencies...
+Downloading packages...
+Got dependencies.
+Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 058e0af2c2 (4 days ago) • 2026-07-23 10:56:21 -0700
+Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (3 days ago) • 2026-07-23 16:11:34.000Z
+Tools • Dart 3.12.2 • DevTools 2.57.0
+===== ENABLE WINDOWS =====
+Setting "enable-windows-desktop" value to "true".
+
+You may need to restart any open editors for them to read new settings.
+===== CREATE WINDOWS PLATFORM =====
+Recreating project ....
+  .idea\libraries\Dart_SDK.xml (created)
+  .idea\libraries\KotlinJavaRuntime.xml (created)
+  .idea\modules.xml (created)
+  .idea\runConfigurations\main_dart.xml (created)
+  .idea\workspace.xml (created)
+  chernogram.iml (created)
+  windows\.gitignore (created)
+  windows\CMakeLists.txt (created)
+  windows\flutter\CMakeLists.txt (created)
+  windows\runner\CMakeLists.txt (created)
+  windows\runner\flutter_window.cpp (created)
+  windows\runner\flutter_window.h (created)
+  windows\runner\main.cpp (created)
+  windows\runner\resource.h (created)
+  windows\runner\resources\app_icon.ico (created)
+  windows\runner\runner.exe.manifest (created)
+  windows\runner\Runner.rc (created)
+  windows\runner\utils.cpp (created)
+  windows\runner\utils.h (created)
+  windows\runner\win32_window.cpp (created)
+  windows\runner\win32_window.h (created)
+Wrote 21 files.
+
+All done!
+You can find general documentation for Flutter at: https://docs.flutter.dev/
+Detailed API documentation is available at: https://api.flutter.dev/
+If you prefer video documentation, consider: https://www.youtube.com/c/flutterdev
+
+In order to run your application, type:
+
+  $ flutter run
+
+Your application code is in .\lib\main.dart.
+
+===== PATCH tooling/fix_v07_compile.py =====
+Applied Chernogram 0.8 app-wide calls, sounds and message ordering fixes
+===== PATCH tooling/fix_v09_media_calls.py =====
+Applied Chernogram 0.9 media library, voice, circles and WebRTC replay fixes
+===== PATCH tooling/fix_v09_compile.py =====
+Applied Chernogram 0.9 compile safeguards
+===== PATCH tooling/fix_v091_player_header.py =====
+Traceback (most recent call last):
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v091_player_header.py", line 120, in <module>
+    main()
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v091_player_header.py", line 13, in main
+    replace(
+  File "D:\a\chernogram_new\chernogram_new\tooling\fix_v091_player_header.py", line 8, in replace
+    raise RuntimeError(f'Expected block was not found in {path}')
+RuntimeError: Expected block was not found in lib/chat_media.dart
+WINDOWS BUILD ERROR: PATCH tooling/fix_v091_player_header.py failed with exit code 1
