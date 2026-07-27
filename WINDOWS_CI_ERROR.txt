@@ -1,6 +1,6 @@
 Windows build failed
-Commit: 4f606c816203ab67246ac637dbbd42e3b6328e7c
-Time: 2026-07-27T12:33:31Z
+Commit: f85980e98f1db8de79035de7d26817991080c5c3
+Time: 2026-07-27T12:38:14Z
 ===== windows-build.txt =====
 
 ===== FLUTTER =====
@@ -274,5 +274,5 @@ line 340, column 9 of lib\windows_update_service.dart: Expected to find ','.
 340 │         flush: true,
     │         ^^^^^
     ╵
-Formatted 25 files (24 changed) in 0.52 seconds.
+Formatted 25 files (24 changed) in 0.48 seconds.
 WINDOWS BUILD ERROR: FORMAT failed with exit code 65
