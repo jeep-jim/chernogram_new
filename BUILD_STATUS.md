@@ -1,6 +1,6 @@
 APK ready
-Commit: caf0708bd732fb5c8193299fa2fb594b1f62e9d5
-Time: 2026-07-27T04:53:01Z
+Commit: ff76001cced000ecca4652261a0b2fb9ad979923
+Time: 2026-07-27T05:54:07Z
 Version: 0.14.1+25
 Certificate SHA-256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
 Signature policy: final APK is explicitly re-signed and verified; incompatible publication is blocked
