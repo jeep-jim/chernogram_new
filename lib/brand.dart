@@ -131,16 +131,16 @@ ThemeData _themeFromScheme(
       labelStyle: TextStyle(color: scheme.onSurface.withValues(alpha: .64)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: outline),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: outline),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
       ),
     ),
     cardTheme: CardThemeData(
@@ -149,8 +149,7 @@ ThemeData _themeFromScheme(
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: outline),
+        borderRadius: BorderRadius.circular(18),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -210,14 +209,11 @@ class GlassPanel extends StatelessWidget {
           decoration: BoxDecoration(
             color: color ?? scheme.surface.withValues(alpha: dark ? .72 : .80),
             borderRadius: borderRadius,
-            border: Border.all(
-              color: scheme.onSurface.withValues(alpha: dark ? .10 : .08),
-            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: dark ? .18 : .06),
-                blurRadius: 28,
-                offset: const Offset(0, 12),
+                color: Colors.black.withValues(alpha: dark ? .12 : .04),
+                blurRadius: 18,
+                offset: const Offset(0, 7),
               ),
             ],
           ),
@@ -384,13 +380,13 @@ class BrandHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'CHERNOGRAM',
+                  'Чернограм',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -.45,
                   ),
                 ),
                 if (subtitle != null)

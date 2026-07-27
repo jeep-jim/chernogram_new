@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -53,7 +55,7 @@ class CgMediaStore {
 
   static Future<Directory> rootDirectory() async {
     final support = await getApplicationSupportDirectory();
-    final directory = Directory('${support.path}/chernogram_media');
+    final directory = Directory('${support.path}/media_cache');
     if (!await directory.exists()) await directory.create(recursive: true);
     return directory;
   }
@@ -69,28 +71,70 @@ class CgMediaStore {
     required List<int> bytes,
   }) async {
     final root = await rootDirectory();
-    final file = File('${root.path}/${_safeName(attachmentId)}_${_safeName(name)}');
-    await file.writeAsBytes(bytes, flush: true);
+    final file = File(
+      '${root.path}/${_safeName(attachmentId)}_${_safeName(name)}',
+    );
+    if (!await file.exists() || await file.length() != bytes.length) {
+      await file.writeAsBytes(bytes, flush: true);
+    }
     return file;
   }
 
-  static Future<File?> ensureFile(CgAttachment attachment) async {
+  static Future<File?> existingFile(CgAttachment attachment) async {
     final local = attachment.localPath;
     if (local != null && local.isNotEmpty) {
       final file = File(local);
       if (await file.exists()) return file;
     }
+    final root = await rootDirectory();
+    final candidate = File(
+      '${root.path}/${_safeName(attachment.id)}_${_safeName(attachment.name)}',
+    );
+    return await candidate.exists() ? candidate : null;
+  }
+
+  static Future<File?> ensureFile(CgAttachment attachment) async {
+    final existing = await existingFile(attachment);
+    if (existing != null) return existing;
     final raw = attachment.dataBase64;
     if (raw == null || raw.isEmpty) return null;
     try {
+      final bytes = await Isolate.run<List<int>>(() => base64Decode(raw));
       return persistBytes(
         attachmentId: attachment.id,
         name: attachment.name,
-        bytes: base64Decode(raw),
+        bytes: bytes,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  static Future<CgMessage> cacheIncomingMessage(CgMessage message) async {
+    final attachment = message.attachment;
+    if (attachment == null) return message;
+    final existing = await existingFile(attachment);
+    if (existing != null) {
+      return message.copyWith(
+        attachment: attachment.copyWith(
+          localPath: existing.path,
+          clearData: true,
+        ),
+      );
+    }
+    final raw = attachment.dataBase64;
+    if (raw == null || raw.isEmpty) {
+      return message.copyWith(
+        attachment: attachment.copyWith(clearData: true),
+      );
+    }
+    final file = await ensureFile(attachment);
+    return message.copyWith(
+      attachment: attachment.copyWith(
+        localPath: file?.path,
+        clearData: true,
+      ),
+    );
   }
 
   static List<CgMediaItem> collect(List<CgTunnel> tunnels) {
@@ -99,6 +143,7 @@ class CgMediaStore {
       for (final message in tunnel.messages) {
         final attachment = message.attachment;
         if (message.deleted ||
+            message.meta['localHidden'] == true ||
             attachment == null ||
             message.meta['localPurged'] == true) {
           continue;
@@ -140,31 +185,11 @@ class CgMediaStore {
     );
   }
 
-  static Future<void> purgeTunnelFiles(CgTunnel tunnel) async {
-    final ids = <String>{
-      for (final message in tunnel.messages)
-        if (message.attachment != null) message.attachment!.id,
-    };
-    if (ids.isEmpty) return;
-    final root = await rootDirectory();
-    await for (final entity in root.list(recursive: true, followLinks: false)) {
-      if (entity is! File) continue;
-      final name = entity.path.split(Platform.pathSeparator).last;
-      final matches = ids.any(
-        (id) => name.startsWith('${_safeName(id)}_'),
-      );
-      if (!matches) continue;
-      try {
-        await entity.delete();
-      } catch (_) {}
-    }
-  }
-
   static Future<List<CgTunnel>> purgeItem(
     List<CgTunnel> tunnels,
     CgMediaItem item,
   ) async {
-    final file = await ensureFile(item.attachment);
+    final file = await existingFile(item.attachment);
     if (file != null) {
       try {
         final root = await rootDirectory();
@@ -173,7 +198,6 @@ class CgMediaStore {
         }
       } catch (_) {}
     }
-
     final result = <CgTunnel>[];
     for (final tunnel in tunnels) {
       if (tunnel.id != item.tunnelId) {
@@ -272,6 +296,22 @@ class CgMediaStore {
     final file = await ensureFile(attachment);
     if (file != null) {
       await Share.shareXFiles(<XFile>[XFile(file.path)]);
+    }
+  }
+
+  static Future<bool> saveToDevice(CgAttachment attachment) async {
+    final file = await ensureFile(attachment);
+    if (file == null) return false;
+    final target = await FilePicker.platform.saveFile(
+      dialogTitle: 'Сохранить файл',
+      fileName: attachment.name,
+    );
+    if (target == null || target.isEmpty) return false;
+    try {
+      await file.copy(target);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }
@@ -425,11 +465,21 @@ class _CgVoiceRecordButtonState extends State<CgVoiceRecordButton> {
 class CgInlineAttachment extends StatefulWidget {
   final CgAttachment attachment;
   final bool hidden;
+  final bool ru;
+  final Future<File?> Function(CgAttachment attachment)? onEnsure;
+  final Future<void> Function(CgAttachment attachment, File file)? onPlayAudio;
+  final Future<void> Function()? onDelete;
+  final bool canDownload;
 
   const CgInlineAttachment({
     super.key,
     required this.attachment,
     required this.hidden,
+    required this.ru,
+    this.onEnsure,
+    this.onPlayAudio,
+    this.onDelete,
+    this.canDownload = true,
   });
 
   @override
@@ -437,48 +487,44 @@ class CgInlineAttachment extends StatefulWidget {
 }
 
 class _CgInlineAttachmentState extends State<CgInlineAttachment> {
-  final AudioPlayer _audio = AudioPlayer();
   File? _file;
   bool _loading = false;
-
-  @override
-  void dispose() {
-    unawaited(_audio.dispose());
-    super.dispose();
-  }
-
-  Uint8List? get _bytes {
-    final raw = widget.attachment.dataBase64;
-    if (raw == null) return null;
-    try {
-      return base64Decode(raw);
-    } catch (_) {
-      return null;
-    }
-  }
+  bool _revealed = false;
 
   Future<File?> _ensure() async {
     if (_file != null && await _file!.exists()) return _file;
     if (mounted) setState(() => _loading = true);
-    _file = await CgMediaStore.ensureFile(widget.attachment);
+    _file = await CgMediaStore.existingFile(widget.attachment);
+    _file ??= await widget.onEnsure?.call(widget.attachment);
+    _file ??= await CgMediaStore.ensureFile(widget.attachment);
     if (mounted) setState(() => _loading = false);
     return _file;
   }
 
-  Future<void> _playAudio() async {
-    if (_audio.playing) {
-      await _audio.pause();
+  Future<void> _activate() async {
+    final file = await _ensure();
+    if (file == null || !mounted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.ru
+                  ? 'Файл запрошен у отправителя. Он появится после передачи.'
+                  : 'The file was requested from the sender.',
+            ),
+          ),
+        );
+      }
       return;
     }
-    final file = await _ensure();
-    if (file == null) return;
-    if (_audio.audioSource == null) await _audio.setFilePath(file.path);
-    await _audio.play();
-  }
-
-  Future<void> _open() async {
-    final file = await _ensure();
-    if (file == null || !mounted) return;
+    if (CgMediaStore.isAudio(widget.attachment)) {
+      await widget.onPlayAudio?.call(widget.attachment, file);
+      return;
+    }
+    if (widget.attachment.kind == 'image' && !_revealed) {
+      setState(() => _revealed = true);
+      return;
+    }
     if (CgMediaStore.isVideo(widget.attachment)) {
       await Navigator.push<void>(
         context,
@@ -495,311 +541,184 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
     await OpenFilex.open(file.path);
   }
 
+  Future<void> _showImage() async {
+    final file = await _ensure();
+    if (file == null || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(title: Text(widget.attachment.name)),
+          body: InteractiveViewer(
+            minScale: .5,
+            maxScale: 5,
+            child: Center(child: Image.file(file, fit: BoxFit.contain)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _menu(String value) async {
+    if (value == 'open') await _activate();
+    if (value == 'save') {
+      final file = await _ensure();
+      if (file == null) return;
+      final ok = await CgMediaStore.saveToDevice(
+        widget.attachment.copyWith(localPath: file.path, clearData: true),
+      );
+      if (mounted && ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.ru ? 'Файл сохранён' : 'File saved')),
+        );
+      }
+    }
+    if (value == 'share') {
+      final file = await _ensure();
+      if (file != null) {
+        await Share.shareXFiles(<XFile>[XFile(file.path)]);
+      }
+    }
+    if (value == 'delete') await widget.onDelete?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.hidden) {
       return Container(
         width: 250,
-        height: 88,
+        height: 72,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.black26,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: const Icon(Icons.visibility_off_outlined, color: Colors.white70),
+        child: const Icon(Icons.lock_outline_rounded),
       );
     }
     final attachment = widget.attachment;
-    final bytes = _bytes;
-    if (attachment.kind == 'circle') {
-      return _CgInlineCircleAttachment(attachment: attachment);
-    }
-    if (attachment.kind == 'image' && bytes != null) {
+    if (_revealed && attachment.kind == 'image' && _file != null) {
       return GestureDetector(
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => CgImageViewer(bytes: bytes, title: attachment.name),
-          ),
-        ),
+        onTap: _showImage,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: Image.memory(
-            bytes,
-            width: 270,
-            height: 200,
+          child: Image.file(
+            _file!,
+            width: 280,
+            height: 210,
             fit: BoxFit.cover,
             gaplessPlayback: true,
+            cacheWidth: 700,
           ),
         ),
       );
     }
-    if (CgMediaStore.isAudio(attachment)) {
-      return Container(
-        width: 278,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            StreamBuilder<PlayerState>(
-              stream: _audio.playerStateStream,
-              builder: (_, snapshot) => IconButton.filledTonal(
-                onPressed: _loading ? null : _playAudio,
-                icon: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        snapshot.data?.playing == true
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    attachment.kind == 'voice'
-                        ? 'Голосовое сообщение'
-                        : attachment.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  StreamBuilder<Duration>(
-                    stream: _audio.positionStream,
-                    builder: (_, position) => StreamBuilder<Duration?>(
-                      stream: _audio.durationStream,
-                      builder: (_, duration) {
-                        final total = duration.data ?? Duration.zero;
-                        final current = position.data ?? Duration.zero;
-                        final max = math.max(1, total.inMilliseconds).toDouble();
-                        return Slider(
-                          min: 0,
-                          max: max,
-                          value: current.inMilliseconds.clamp(0, max.toInt()).toDouble(),
-                          onChanged: total == Duration.zero
-                              ? null
-                              : (value) => _audio.seek(
-                                    Duration(milliseconds: value.round()),
-                                  ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return InkWell(
-      onTap: _loading ? null : _open,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 270,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            if (attachment.kind == 'circle')
-              const CircleAvatar(
-                radius: 25,
-                child: Icon(Icons.play_arrow_rounded),
-              )
-            else
-              Icon(
-                CgMediaStore.isVideo(attachment)
-                    ? Icons.movie_outlined
-                    : attachment.kind == 'archive'
-                        ? Icons.folder_zip_outlined
-                        : Icons.description_outlined,
-                size: 34,
-              ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    attachment.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    CgMediaStore.fileSize(attachment.size),
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                ],
-              ),
-            ),
-            Icon(_loading ? Icons.hourglass_top_rounded : Icons.open_in_new),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-class _CgInlineCircleAttachment extends StatefulWidget {
-  final CgAttachment attachment;
-
-  const _CgInlineCircleAttachment({required this.attachment});
-
-  @override
-  State<_CgInlineCircleAttachment> createState() =>
-      _CgInlineCircleAttachmentState();
-}
-
-class _CgInlineCircleAttachmentState
-    extends State<_CgInlineCircleAttachment> {
-  VideoPlayerController? _controller;
-  File? _file;
-  bool _ready = false;
-  bool _sound = false;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_initialize());
-  }
-
-  Future<void> _initialize() async {
-    final file = await CgMediaStore.ensureFile(widget.attachment);
-    if (file == null || !mounted) return;
-    final controller = VideoPlayerController.file(file);
-    await controller.initialize();
-    await controller.setLooping(true);
-    await controller.setVolume(0);
-    controller.addListener(_refresh);
-    await controller.play();
-    if (!mounted) {
-      await controller.dispose();
-      return;
-    }
-    setState(() {
-      _file = file;
-      _controller = controller;
-      _ready = true;
-    });
-  }
-
-  void _refresh() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _toggle() async {
-    final controller = _controller;
-    if (controller == null) return;
-    if (controller.value.isPlaying && _sound) {
-      await controller.pause();
-      return;
-    }
-    _sound = true;
-    await controller.setVolume(1);
-    await controller.play();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _open() async {
-    final file = _file;
-    if (file == null || !mounted) return;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CgVideoPlayerScreen(
-          file: file,
-          circle: true,
-          title: widget.attachment.name,
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller?.removeListener(_refresh);
-    unawaited(_controller?.dispose());
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    final duration = controller?.value.duration ?? Duration.zero;
-    final position = controller?.value.position ?? Duration.zero;
-    final progress = duration.inMilliseconds <= 0
-        ? 0.0
-        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-    const size = 224.0;
-    return GestureDetector(
-      onTap: _toggle,
-      onLongPress: _open,
-      child: SizedBox.square(
-        dimension: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            ClipOval(
-              child: SizedBox.square(
-                dimension: size - 8,
-                child: !_ready || controller == null
-                    ? Container(
-                        color: Colors.black26,
-                        alignment: Alignment.center,
-                        child: const CircularProgressIndicator(),
-                      )
-                    : FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: controller.value.size.width,
-                          height: controller.value.size.height,
-                          child: VideoPlayer(controller),
-                        ),
-                      ),
-              ),
-            ),
-            Positioned.fill(
-              child: CircularProgressIndicator(
-                value: progress,
-                strokeWidth: 4,
-                backgroundColor: Colors.white24,
-              ),
-            ),
-            if (controller != null && !controller.value.isPlaying)
-              const CircleAvatar(
-                radius: 25,
-                backgroundColor: Colors.black54,
-                child: Icon(Icons.play_arrow_rounded, color: Colors.white),
-              ),
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: CircleAvatar(
-                radius: 15,
-                backgroundColor: Colors.black54,
-                child: Icon(
-                  _sound ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                  size: 17,
-                  color: Colors.white,
+    final icon = CgMediaStore.isAudio(attachment)
+        ? Icons.headphones_rounded
+        : attachment.kind == 'image'
+            ? Icons.image_outlined
+            : CgMediaStore.isVideo(attachment)
+                ? Icons.play_circle_outline_rounded
+                : attachment.kind == 'archive'
+                    ? Icons.folder_zip_outlined
+                    : Icons.insert_drive_file_outlined;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _loading ? null : _activate,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 230, maxWidth: 300),
+          padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: .45),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 42,
+                height: 42,
+                child: Center(
+                  child: _loading
+                      ? const CircularProgressIndicator(strokeWidth: 2)
+                      : Icon(icon, size: 30),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      attachment.kind == 'voice'
+                          ? (widget.ru ? 'Голосовое сообщение' : 'Voice message')
+                          : attachment.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${CgMediaStore.fileSize(attachment.size)} • ${widget.ru ? 'нажмите, чтобы открыть' : 'tap to open'}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: .56),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: widget.ru ? 'Действия' : 'Actions',
+                onSelected: _menu,
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'open',
+                    child: ListTile(
+                      leading: const Icon(Icons.open_in_new_rounded),
+                      title: Text(widget.ru ? 'Открыть' : 'Open'),
+                    ),
+                  ),
+                  if (widget.canDownload)
+                    PopupMenuItem(
+                      value: 'save',
+                      child: ListTile(
+                        leading: const Icon(Icons.download_rounded),
+                        title: Text(widget.ru ? 'Сохранить' : 'Save'),
+                      ),
+                    ),
+                  PopupMenuItem(
+                    value: 'share',
+                    child: ListTile(
+                      leading: const Icon(Icons.ios_share_rounded),
+                      title: Text(widget.ru ? 'Поделиться' : 'Share'),
+                    ),
+                  ),
+                  if (widget.onDelete != null)
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: ChernogramColors.danger,
+                        ),
+                        title: Text(
+                          widget.ru ? 'Удалить сообщение' : 'Delete message',
+                          style: const TextStyle(color: ChernogramColors.danger),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

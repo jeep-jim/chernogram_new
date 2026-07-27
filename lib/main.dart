@@ -125,7 +125,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
     return MaterialApp(
       navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Chernogram',
+      title: 'Чернограм',
       theme: chernogramLightTheme(),
       darkTheme: chernogramTheme(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,

@@ -4,8 +4,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +20,8 @@ import 'chat_media.dart';
 import 'core_models.dart';
 import 'group_call_service.dart';
 import 'internet_core.dart';
+import 'music_player.dart';
+import 'shared_library.dart';
 import 'sound_service.dart';
 
 const String _landingBase =
@@ -67,6 +71,278 @@ class _CgChatScreenState extends State<CgChatScreen> {
   CgMessage? _replyingTo;
 
   bool get _isOwner => widget.profile.id == _tunnel.ownerId;
+
+  bool get _canWrite => _isOwner || _tunnel.permissions.canWriteMessages;
+  bool get _canSendMedia => _isOwner || _tunnel.permissions.canSendMedia;
+  bool get _canDownload => _isOwner || _tunnel.permissions.canDownload;
+  bool get _canInvite => _isOwner || _tunnel.permissions.canInvite || !_tunnel.isPrivate;
+  bool get _canCall => _isOwner || _tunnel.permissions.canCall;
+
+  Future<void> _sendBytes(String name, List<int> bytes) async {
+    if (!_canSendMedia || bytes.isEmpty || bytes.length > 20 * 1024 * 1024) {
+      return;
+    }
+    final id = CgIds.random(20);
+    final local = await CgMediaStore.persistBytes(
+      attachmentId: id,
+      name: name,
+      bytes: bytes,
+    );
+    await _sendAttachment(
+      CgAttachment(
+        id: id,
+        name: name,
+        size: bytes.length,
+        kind: CgSharedLibraryStore.kindForName(name),
+        dataBase64: base64Encode(bytes),
+        localPath: local.path,
+      ),
+    );
+  }
+
+  Future<void> _sendFilePath(String path, {String? displayName}) async {
+    if (!_canSendMedia) return;
+    final file = File(path);
+    if (!await file.exists()) return;
+    final length = await file.length();
+    if (length <= 0 || length > 20 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.ru
+                  ? 'Можно отправлять файлы до 20 МБ.'
+                  : 'Files up to 20 MB can be sent.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    await _sendBytes(
+      displayName ?? path.split(Platform.pathSeparator).last,
+      await file.readAsBytes(),
+    );
+  }
+
+  Future<void> _handleDropped(DropDoneDetails details) async {
+    if (!_canSendMedia) return;
+    setState(() => _sendingFile = true);
+    try {
+      for (final item in details.files) {
+        if (item is DropItemDirectory) continue;
+        final length = await item.length();
+        if (length <= 0 || length > 20 * 1024 * 1024) continue;
+        await _sendBytes(item.name, await item.readAsBytes());
+      }
+    } finally {
+      if (mounted) setState(() => _sendingFile = false);
+    }
+  }
+
+  Future<File?> _ensureAttachment(CgMessage message) async {
+    final attachment = message.attachment;
+    if (attachment == null) return null;
+    final existing = await CgMediaStore.existingFile(attachment);
+    if (existing != null) return existing;
+    await _session?.sendControl(<String, dynamic>{
+      'operationId': CgIds.random(24),
+      'action': 'attachment_request',
+      'target': message.authorId,
+      'messageId': message.id,
+      'attachmentId': attachment.id,
+    });
+    for (var attempt = 0; attempt < 80; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final currentIndex =
+          _tunnel.messages.indexWhere((item) => item.id == message.id);
+      if (currentIndex < 0) break;
+      final current = _tunnel.messages[currentIndex].attachment;
+      if (current == null) break;
+      final file = await CgMediaStore.existingFile(current);
+      if (file != null) return file;
+    }
+    return null;
+  }
+
+  Future<void> _playAttachment(CgAttachment attachment, File file) async {
+    await CgMusicHub.instance.playFile(
+      id: 'chat:${_tunnel.id}:${attachment.id}',
+      title: attachment.name,
+      subtitle: _tunnel.displayName,
+      path: file.path,
+    );
+  }
+
+  Future<void> _handleAttachmentRequest(
+    Map<String, dynamic> data,
+    String sender,
+  ) async {
+    final target = data['target']?.toString() ?? '';
+    if (target.isNotEmpty && target != widget.profile.id) return;
+    final messageId = data['messageId']?.toString() ?? '';
+    final index = _tunnel.messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) return;
+    final message = _tunnel.messages[index];
+    if (message.authorId != widget.profile.id || message.attachment == null) return;
+    final file = await CgMediaStore.existingFile(message.attachment!);
+    if (file == null || !await file.exists()) return;
+    final bytes = await file.readAsBytes();
+    if (bytes.length > 20 * 1024 * 1024) return;
+    await _session?.sendControl(<String, dynamic>{
+      'operationId': CgIds.random(24),
+      'action': 'attachment_response',
+      'target': sender,
+      'messageId': message.id,
+      'attachment': <String, dynamic>{
+        ...message.attachment!.metadataJson(),
+        'dataBase64': base64Encode(bytes),
+      },
+    });
+  }
+
+  Future<void> _handleAttachmentResponse(Map<String, dynamic> data) async {
+    if (data['target']?.toString() != widget.profile.id) return;
+    final messageId = data['messageId']?.toString() ?? '';
+    final rawAttachment = data['attachment'];
+    if (rawAttachment is! Map) return;
+    final index = _tunnel.messages.indexWhere((item) => item.id == messageId);
+    if (index < 0) return;
+    final incoming = CgAttachment.fromJson(
+      Map<String, dynamic>.from(rawAttachment),
+    );
+    final cached = await CgMediaStore.cacheIncomingMessage(
+      _tunnel.messages[index].copyWith(attachment: incoming),
+    );
+    _replaceMessage(cached);
+  }
+
+  Future<void> _handleShareRequest(
+    Map<String, dynamic> data,
+    String sender,
+  ) async {
+    final target = data['target']?.toString() ?? '';
+    if (target.isNotEmpty && target != widget.profile.id) return;
+    final fileId = data['fileId']?.toString() ?? '';
+    final item = await CgSharedLibraryStore.find(_tunnel.id, fileId);
+    if (item == null) return;
+    await _sendFilePath(item.path, displayName: item.info.name);
+  }
+
+  Future<void> _showSharedLibrary() async {
+    var local = await CgSharedLibraryStore.loadTunnelFiles(_tunnel.id);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .78,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 10, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.ru ? 'Общие файлы' : 'Shared files',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      if (_isOwner && Platform.isWindows)
+                        FilledButton.icon(
+                          onPressed: () async {
+                            local = await CgSharedLibraryStore.chooseFolder(
+                              _tunnel.id,
+                            );
+                            final updated = _tunnel.copyWith(
+                              sharedFiles:
+                                  local.map((item) => item.info).toList(),
+                              revision: _tunnel.revision + 1,
+                            );
+                            await _applyOwnerUpdate(updated);
+                            if (context.mounted) setSheetState(() {});
+                          },
+                          icon: const Icon(Icons.folder_shared_outlined),
+                          label: Text(widget.ru ? 'Выбрать папку' : 'Choose folder'),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _tunnel.sharedFiles.isEmpty
+                      ? Center(
+                          child: Text(
+                            widget.ru
+                                ? 'Общая папка пока не настроена.'
+                                : 'No shared folder yet.',
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 20),
+                          itemCount: _tunnel.sharedFiles.length,
+                          itemBuilder: (context, index) {
+                            final item = _tunnel.sharedFiles[index];
+                            return ListTile(
+                              leading: Icon(
+                                item.kind == 'audio'
+                                    ? Icons.music_note_rounded
+                                    : item.kind == 'image'
+                                        ? Icons.image_outlined
+                                        : item.kind == 'video'
+                                            ? Icons.movie_outlined
+                                            : Icons.insert_drive_file_outlined,
+                              ),
+                              title: Text(
+                                item.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(CgMediaStore.fileSize(item.size)),
+                              trailing: const Icon(Icons.download_rounded),
+                              onTap: () async {
+                                if (_isOwner) {
+                                  final own = await CgSharedLibraryStore.find(
+                                    _tunnel.id,
+                                    item.id,
+                                  );
+                                  if (own != null) {
+                                    await _sendFilePath(
+                                      own.path,
+                                      displayName: item.name,
+                                    );
+                                  }
+                                } else {
+                                  await _session?.sendControl(<String, dynamic>{
+                                    'operationId': CgIds.random(24),
+                                    'action': 'share_request',
+                                    'target': _tunnel.ownerId,
+                                    'requester': widget.profile.id,
+                                    'fileId': item.id,
+                                  });
+                                }
+                                if (sheetContext.mounted) {
+                                  Navigator.pop(sheetContext);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 
   @override
   void initState() {
@@ -126,7 +402,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         secret: _tunnel.secret,
         profileId: widget.profile.id,
         nickname: widget.profile.nickname,
-        history: _tunnel.messages.map((message) => message.toJson()).toList(),
+        history: _tunnel.historyJson(),
       );
       if (!mounted) return;
       await _subscription?.cancel();
@@ -136,7 +412,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
         _networkState = session.connected ? 'connected' : 'connecting';
         _onlinePeers = session.onlinePeers;
       });
-      unawaited(session.sendHistory());
     } catch (_) {
       if (!mounted) return;
       setState(() => _networkState = 'error');
@@ -150,7 +425,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         if (event.data['message'] is Map) {
           final raw = Map<String, dynamic>.from(event.data['message'] as Map);
           _playIncomingMessageSound(raw);
-          _mergeMessages([raw]);
+          unawaited(_mergeMessages([raw]));
           _rememberContact(
             raw['authorId']?.toString() ??
                 event.data['relaySender']?.toString() ??
@@ -166,7 +441,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
-        _mergeMessages(messages);
+        unawaited(_mergeMessages(messages));
         for (final raw in messages) {
           _rememberContact(
             raw['authorId']?.toString() ?? '',
@@ -181,7 +456,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
         final name = event.data['name']?.toString() ?? 'user';
         _rememberContact(id, name);
         if (_announcedPeers.add(id)) {
-          unawaited(_session?.sendHistory());
+          if (_tunnel.permissions.canSeeHistory) {
+            unawaited(_session?.sendHistory());
+          }
           if (_isOwner) unawaited(_sendTunnelSnapshot());
         }
         break;
@@ -228,11 +505,13 @@ class _CgChatScreenState extends State<CgChatScreen> {
     unawaited(ChernogramSound.playMessage());
   }
 
-  void _mergeMessages(List<Map<String, dynamic>> raw) {
+  Future<void> _mergeMessages(List<Map<String, dynamic>> raw) async {
     final messages = <CgMessage>[..._tunnel.messages];
     var changed = false;
     for (final item in raw) {
-      var incoming = CgMessage.fromJson(item);
+      var incoming = await CgMediaStore.cacheIncomingMessage(
+        CgMessage.fromJson(item),
+      );
       if (incoming.id.isEmpty) continue;
       final index = messages.indexWhere((message) => message.id == incoming.id);
       final existing = index < 0 ? null : messages[index];
@@ -242,8 +521,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         changed = true;
         continue;
       }
-      if (jsonEncode(messages[index].toJson()) !=
-          jsonEncode(incoming.toJson())) {
+      if (!messages[index].sameVisibleContent(incoming)) {
         messages[index] = incoming;
         changed = true;
       }
@@ -288,6 +566,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
         if (users.isEmpty) reactions.remove(emoji);
         _replaceMessage(message.copyWith(reactions: reactions));
         break;
+      case 'attachment_request':
+        await _handleAttachmentRequest(data, sender);
+        break;
+      case 'attachment_response':
+        await _handleAttachmentResponse(data);
+        break;
+      case 'share_request':
+        await _handleShareRequest(data, sender);
+        break;
       case 'tunnel_update':
         if (sender != _tunnel.ownerId) return;
         final revision = int.tryParse(data['revision']?.toString() ?? '') ?? 0;
@@ -302,6 +589,17 @@ class _CgChatScreenState extends State<CgChatScreen> {
             secret: nextSecret,
             avatarBase64: nextAvatar ?? _tunnel.avatarBase64,
             revision: revision,
+            permissions: data['permissions'] is Map
+                ? CgPermissions.fromJson(
+                    Map<String, dynamic>.from(data['permissions'] as Map),
+                  )
+                : _tunnel.permissions,
+            sharedFiles: ((data['sharedFiles'] as List?) ?? const <dynamic>[])
+                .whereType<Map>()
+                .map((item) => CgSharedFileInfo.fromJson(
+                      Map<String, dynamic>.from(item),
+                    ))
+                .toList(),
           );
         });
         _persist();
@@ -327,11 +625,12 @@ class _CgChatScreenState extends State<CgChatScreen> {
   void _persist() {
     widget.onChanged(_tunnel);
     _session?.replaceHistory(
-      _tunnel.messages.map((message) => message.toJson()).toList(),
+      _tunnel.historyJson(),
     );
   }
 
   Future<void> _sendText() async {
+    if (!_canWrite) return;
     final value = _text.text.trim();
     if (value.isEmpty) return;
     final message = CgMessage(
@@ -473,53 +772,25 @@ class _CgChatScreenState extends State<CgChatScreen> {
     FileType type, {
     List<String>? allowedExtensions,
   }) async {
+    if (!_canSendMedia) return;
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: type,
       allowedExtensions: allowedExtensions,
-      withData: true,
+      withData: false,
     );
     if (result == null || result.files.isEmpty) return;
-    const maxBytes = 20 * 1024 * 1024;
-    var skipped = 0;
     setState(() => _sendingFile = true);
     try {
       for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty || bytes.length > maxBytes) {
-          skipped++;
-          continue;
+        if (file.path != null) {
+          await _sendFilePath(file.path!, displayName: file.name);
+        } else if (file.bytes != null) {
+          await _sendBytes(file.name, file.bytes!);
         }
-        final id = CgIds.random(20);
-        final local = await CgMediaStore.persistBytes(
-          attachmentId: id,
-          name: file.name,
-          bytes: bytes,
-        );
-        await _sendAttachment(
-          CgAttachment(
-            id: id,
-            name: file.name,
-            size: bytes.length,
-            kind: _attachmentKind(file.name),
-            dataBase64: base64Encode(bytes),
-            localPath: local.path,
-          ),
-        );
       }
     } finally {
       if (mounted) setState(() => _sendingFile = false);
-    }
-    if (skipped > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.ru
-                ? '$skipped файлов пропущено: пустые или больше 20 МБ.'
-                : '$skipped files were skipped: empty or larger than 20 MB.',
-          ),
-        ),
-      );
     }
   }
 
@@ -535,8 +806,11 @@ class _CgChatScreenState extends State<CgChatScreen> {
       meta: _replyMeta(),
     );
     setState(() => _replyingTo = null);
-    _appendLocal(message);
-    await _session?.sendMessage(message.toJson());
+    final localMessage = message.copyWith(
+      attachment: attachment.copyWith(clearData: true),
+    );
+    _appendLocal(localMessage);
+    await _session?.sendMessage(message.toJson(includeLocalPaths: false));
   }
 
   Future<void> _sendVoice(File file, Duration duration) async {
@@ -784,6 +1058,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
       'avatarBase64': _tunnel.avatarBase64,
       'secret': _tunnel.secret,
       'revision': _tunnel.revision,
+      'permissions': _tunnel.permissions.toJson(),
+      'sharedFiles': _tunnel.sharedFiles.map((item) => item.toJson()).toList(),
     });
   }
 
@@ -798,6 +1074,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
       'avatarBase64': updated.avatarBase64,
       'secret': updated.secret,
       'revision': updated.revision,
+      'permissions': updated.permissions.toJson(),
+      'sharedFiles': updated.sharedFiles.map((item) => item.toJson()).toList(),
     });
     setState(() => _tunnel = updated);
     _persist();
@@ -883,16 +1161,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final name = TextEditingController(text: _tunnel.name);
     var isPrivate = _tunnel.isPrivate;
     var revoke = false;
-    final fileCount = _tunnel.messages
-        .where((message) => !message.deleted && message.attachment != null)
-        .length;
-    final created = _tunnel.createdAt.toLocal().toString();
-    final createdLabel = created.length >= 16 ? created.substring(0, 16) : created;
-    final secret = _tunnel.secret;
-    final secretLabel = secret.length > 12
-        ? '${secret.substring(0, 6)}…${secret.substring(secret.length - 4)}'
-        : secret;
-
+    var permissions = _tunnel.permissions;
     final action = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -902,7 +1171,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
           top: false,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * .90,
+              maxHeight: MediaQuery.sizeOf(context).height * .92,
             ),
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
@@ -926,118 +1195,105 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     readOnly: !_isOwner,
                     decoration: InputDecoration(
                       labelText: widget.ru ? 'Название чата' : 'Chat name',
-                      suffixIcon: _isOwner
-                          ? const Icon(Icons.edit_outlined)
-                          : const Icon(Icons.lock_outline_rounded),
+                      prefixIcon: const Icon(Icons.chat_bubble_outline_rounded),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: .55),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.fingerprint_rounded),
-                          title: Text(widget.ru ? 'ID чата' : 'Chat ID'),
-                          subtitle: SelectableText(_tunnel.id),
-                        ),
-                        ListTile(
-                          leading: Icon(
-                            isPrivate
-                                ? Icons.lock_outline_rounded
-                                : Icons.public_rounded,
-                          ),
-                          title: Text(widget.ru ? 'Тип' : 'Type'),
-                          subtitle: Text(
-                            isPrivate
-                                ? (widget.ru ? 'Приватный' : 'Private')
-                                : (widget.ru ? 'Открытый' : 'Open'),
-                          ),
-                        ),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.admin_panel_settings_outlined,
-                          ),
-                          title: Text(widget.ru ? 'Ваша роль' : 'Your role'),
-                          subtitle: Text(
-                            _isOwner
-                                ? (widget.ru ? 'Владелец' : 'Owner')
-                                : (widget.ru ? 'Участник' : 'Member'),
-                          ),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.people_outline_rounded),
-                          title: Text(widget.ru ? 'Сейчас онлайн' : 'Online now'),
-                          trailing: Text('$_onlinePeers'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.forum_outlined),
-                          title: Text(widget.ru ? 'Сообщений' : 'Messages'),
-                          trailing: Text('${_tunnel.messages.length}'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.folder_copy_outlined),
-                          title: Text(
-                            widget.ru ? 'Файлов и медиа' : 'Files and media',
-                          ),
-                          trailing: Text('$fileCount'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.calendar_today_outlined),
-                          title: Text(widget.ru ? 'Создан' : 'Created'),
-                          subtitle: Text(createdLabel),
-                        ),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.enhanced_encryption_outlined,
-                          ),
-                          title: Text(widget.ru ? 'Шифрование' : 'Encryption'),
-                          subtitle: const Text('AES-256-GCM'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.key_outlined),
-                          title: Text(
-                            widget.ru ? 'Ключ туннеля' : 'Tunnel key',
-                          ),
-                          subtitle: SelectableText(secretLabel),
-                          trailing: Text('v${_tunnel.revision}'),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.fingerprint_rounded),
+                    title: Text(widget.ru ? 'ID чата' : 'Chat ID'),
+                    subtitle: SelectableText(_tunnel.id),
+                    trailing: Text('v${_tunnel.revision}'),
                   ),
                   if (_isOwner) ...[
-                    const SizedBox(height: 12),
+                    const Divider(height: 26),
                     SwitchListTile(
-                      value: isPrivate,
                       contentPadding: EdgeInsets.zero,
+                      value: isPrivate,
+                      onChanged: (value) =>
+                          setSheetState(() => isPrivate = value),
                       secondary: Icon(
-                        isPrivate
-                            ? Icons.visibility_off_outlined
-                            : Icons.public,
+                        isPrivate ? Icons.lock_outline_rounded : Icons.public,
                       ),
                       title: Text(
                         isPrivate
                             ? (widget.ru ? 'Приватный чат' : 'Private chat')
                             : (widget.ru ? 'Открытый чат' : 'Open chat'),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
-                      subtitle: Text(
-                        isPrivate
-                            ? (widget.ru
-                                ? 'Вход только по секретной ссылке или QR.'
-                                : 'Join only with the secret invite or QR.')
-                            : (widget.ru
-                                ? 'Ссылку можно свободно пересылать.'
-                                : 'The invite may be freely forwarded.'),
+                    ),
+                    Text(
+                      widget.ru ? 'Права участников' : 'Member permissions',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
                       ),
-                      onChanged: (value) =>
-                          setSheetState(() => isPrivate = value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canWriteMessages,
+                      secondary: const Icon(Icons.chat_outlined),
+                      title: Text(widget.ru ? 'Писать сообщения' : 'Send messages'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canWriteMessages: value,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canSendMedia,
+                      secondary: const Icon(Icons.attach_file_rounded),
+                      title: Text(widget.ru ? 'Отправлять файлы' : 'Send files'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canSendMedia: value,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canDownload,
+                      secondary: const Icon(Icons.download_outlined),
+                      title: Text(widget.ru ? 'Скачивать файлы' : 'Download files'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canDownload: value,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canInvite,
+                      secondary: const Icon(Icons.person_add_alt_1_outlined),
+                      title: Text(widget.ru ? 'Приглашать людей' : 'Invite people'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canInvite: value,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canSeeHistory,
+                      secondary: const Icon(Icons.history_rounded),
+                      title: Text(widget.ru ? 'Видеть историю' : 'See history'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canSeeHistory: value,
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: permissions.canCall,
+                      secondary: const Icon(Icons.call_outlined),
+                      title: Text(widget.ru ? 'Звонить' : 'Make calls'),
+                      onChanged: (value) => setSheetState(
+                        () => permissions = permissions.copyWith(
+                          canCall: value,
+                        ),
+                      ),
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
@@ -1049,40 +1305,31 @@ class _CgChatScreenState extends State<CgChatScreen> {
                             ? 'Отозвать старую ссылку и QR'
                             : 'Revoke the old link and QR',
                       ),
-                      subtitle: Text(
-                        widget.ru
-                            ? 'Подключённые участники автоматически получат новый ключ.'
-                            : 'Connected members automatically receive the new key.',
-                      ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
                         onPressed: () => Navigator.pop(context, 'save'),
                         icon: const Icon(Icons.check_rounded),
-                        label: Text(
-                          widget.ru ? 'Сохранить изменения' : 'Save changes',
-                        ),
+                        label: Text(widget.ru ? 'Сохранить' : 'Save'),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: ChernogramColors.danger,
-                        side: BorderSide(
-                          color: ChernogramColors.danger.withValues(alpha: .45),
-                        ),
-                      ),
+                    child: TextButton.icon(
                       onPressed: () => Navigator.pop(context, 'delete'),
-                      icon: const Icon(Icons.delete_forever_rounded),
+                      icon: const Icon(
+                        Icons.delete_forever_rounded,
+                        color: ChernogramColors.danger,
+                      ),
                       label: Text(
                         widget.ru
-                            ? 'Выйти и удалить чат полностью'
-                            : 'Leave and delete chat permanently',
+                            ? 'Выйти и удалить чат с устройства'
+                            : 'Leave and delete chat from device',
+                        style: const TextStyle(color: ChernogramColors.danger),
                       ),
                     ),
                   ),
@@ -1093,12 +1340,12 @@ class _CgChatScreenState extends State<CgChatScreen> {
         ),
       ),
     );
-
     if (action == 'save' && _isOwner) {
       final updated = _tunnel.copyWith(
         name: name.text.trim(),
         isPrivate: isPrivate,
         secret: revoke ? CgIds.random(42) : _tunnel.secret,
+        permissions: permissions,
         revision: _tunnel.revision + 1,
       );
       name.dispose();
@@ -1110,7 +1357,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _startCall(bool video) async {
-    if (_networkState != 'connected') {
+    if (!_canCall || await _session?.waitUntilConnected() != true) {
       _showNotConnected();
       return;
     }
@@ -1145,7 +1392,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _startGroupCall({required bool video}) async {
-    if (_networkState != 'connected') {
+    if (!_canCall || await _session?.waitUntilConnected() != true) {
       _showNotConnected();
       return;
     }
@@ -1437,7 +1684,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final canInvite = _isOwner || !_tunnel.isPrivate;
+    final canInvite = _canInvite;
     return Scaffold(
       appBar: AppBar(
         leadingWidth: Navigator.of(context).canPop() ? 106 : 58,
@@ -1482,7 +1729,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
           GlassIconButton(
             icon: Icons.call_outlined,
             tooltip: widget.ru ? 'Позвонить' : 'Call',
-            onPressed: () => _startCall(false),
+            onPressed: _canCall ? () => _startCall(false) : null,
           ),
           PopupMenuButton<String>(
             tooltip: widget.ru ? 'Действия' : 'Actions',
@@ -1503,12 +1750,22 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 case 'avatar':
                   _changeAvatar();
                   break;
+                case 'shared':
+                  _showSharedLibrary();
+                  break;
                 case 'settings':
                   _showSettings();
                   break;
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'shared',
+                child: ListTile(
+                  leading: const Icon(Icons.folder_shared_outlined),
+                  title: Text(widget.ru ? 'Общие файлы' : 'Shared files'),
+                ),
+              ),
               PopupMenuItem(
                 value: 'video',
                 child: ListTile(
@@ -1564,7 +1821,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: Column(
+      body: DropTarget(
+        enable: Platform.isWindows || Platform.isLinux || Platform.isMacOS,
+        onDragDone: _handleDropped,
+        child: Column(
         children: [
           Expanded(
             child: _tunnel.messages.isEmpty
@@ -1613,6 +1873,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
                           privacyLens: widget.privacyLens,
                           ru: widget.ru,
                           onLongPress: () => _showMessageActions(message),
+                          onEnsureAttachment: _ensureAttachment,
+                          onPlayAudio: _playAttachment,
+                          onDelete: _deleteMessage,
+                          canDownload: _canDownload,
                         ),
                       );
                     },
@@ -1700,6 +1964,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
                             minLines: 1,
                             maxLines: 5,
                             textCapitalization: TextCapitalization.sentences,
+                            textInputAction: Platform.isWindows
+                                ? TextInputAction.send
+                                : TextInputAction.newline,
+                            enabled: _canWrite,
                             onSubmitted: (_) => _sendText(),
                             decoration: InputDecoration(
                               hintText:
@@ -1729,7 +1997,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                               : CgVoiceRecordButton(
                                   key: const ValueKey('voice'),
                                   ru: widget.ru,
-                                  enabled: _networkState == 'connected',
+                                  enabled: _canSendMedia,
                                   onRecorded: _sendVoice,
                                 ),
                         ),
@@ -1741,6 +2009,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -2002,6 +2271,10 @@ class _MessageBubble extends StatelessWidget {
   final bool privacyLens;
   final bool ru;
   final VoidCallback onLongPress;
+  final Future<File?> Function(CgMessage message) onEnsureAttachment;
+  final Future<void> Function(CgAttachment attachment, File file) onPlayAudio;
+  final Future<void> Function(CgMessage message) onDelete;
+  final bool canDownload;
 
   const _MessageBubble({
     required this.message,
@@ -2009,6 +2282,10 @@ class _MessageBubble extends StatelessWidget {
     required this.privacyLens,
     required this.ru,
     required this.onLongPress,
+    required this.onEnsureAttachment,
+    required this.onPlayAudio,
+    required this.onDelete,
+    required this.canDownload,
   });
 
   @override
@@ -2022,53 +2299,49 @@ class _MessageBubble extends StatelessWidget {
         onLongPress: onLongPress,
       );
     }
+    if (message.meta['localHidden'] == true) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final attachment = message.attachment;
-    final transparentMedia = !message.deleted &&
-        message.text.isEmpty &&
-        attachment != null &&
-        <String>{'voice', 'audio', 'circle'}.contains(attachment.kind);
+    final mediaOnly = attachment != null && message.text.isEmpty;
+    final bubbleColor = mediaOnly
+        ? Colors.transparent
+        : mine
+            ? scheme.primary.withValues(alpha: .92)
+            : scheme.surfaceContainerHighest.withValues(alpha: .74);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onLongPress: onLongPress,
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 350),
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(11),
+          constraints: const BoxConstraints(maxWidth: 370),
+          margin: const EdgeInsets.only(bottom: 7),
+          padding: mediaOnly ? EdgeInsets.zero : const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: mine
-                ? scheme.primary.withValues(alpha: .88)
-                : scheme.surfaceContainerHighest.withValues(alpha: .88),
+            color: bubbleColor,
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(19),
-              topRight: const Radius.circular(19),
-              bottomLeft: Radius.circular(mine ? 19 : 5),
-              bottomRight: Radius.circular(mine ? 5 : 19),
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(mine ? 18 : 5),
+              bottomRight: Radius.circular(mine ? 5 : 18),
             ),
-            border: Border.all(color: scheme.onSurface.withValues(alpha: .06)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (message.deleted)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.block_rounded,
-                      size: 16,
-                      color: mine ? Colors.white60 : scheme.onSurfaceVariant,
+                Padding(
+                  padding: mediaOnly ? const EdgeInsets.all(8) : EdgeInsets.zero,
+                  child: Text(
+                    ru ? 'Сообщение удалено' : 'Message deleted',
+                    style: TextStyle(
+                      color: mediaOnly
+                          ? scheme.onSurfaceVariant
+                          : mine
+                              ? Colors.white60
+                              : scheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
                     ),
-                    const SizedBox(width: 7),
-                    Text(
-                      ru ? 'Сообщение удалено' : 'Message deleted',
-                      style: TextStyle(
-                        color: mine ? Colors.white60 : scheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
+                  ),
                 )
               else ...[
                 if (message.meta['forwardedFrom'] != null) ...[
@@ -2077,60 +2350,42 @@ class _MessageBubble extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: mine
-                          ? Colors.white70
-                          : scheme.primary,
+                      color: mine && !mediaOnly ? Colors.white70 : scheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                 ],
                 if (message.meta['replyToId'] != null) ...[
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+                    padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
                     decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: .13),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border(
-                        left: BorderSide(color: scheme.primary, width: 3),
-                      ),
+                      color: scheme.primary.withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(9),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          message.meta['replyAuthor']?.toString() ?? '',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            color: mine ? Colors.white : scheme.primary,
-                          ),
-                        ),
-                        Text(
-                          (message.meta['replyText']?.toString().isNotEmpty == true)
-                              ? message.meta['replyText'].toString()
-                              : (message.meta['replyAttachmentName']?.toString() ?? ''),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: mine
-                                ? Colors.white70
-                                : scheme.onSurface.withValues(alpha: .65),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      '${message.meta['replyAuthor'] ?? ''}: ${message.meta['replyText']?.toString().isNotEmpty == true ? message.meta['replyText'] : message.meta['replyAttachmentName'] ?? ''}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
                     ),
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                 ],
                 if (attachment != null)
                   CgInlineAttachment(
                     attachment: attachment,
                     hidden: privacyLens,
+                    ru: ru,
+                    onEnsure: (_) => onEnsureAttachment(message),
+                    onPlayAudio: onPlayAudio,
+                    onDelete: message.authorId.isEmpty || message.deleted
+                        ? null
+                        : () => onDelete(message),
+                    canDownload: canDownload,
                   ),
                 if (message.text.isNotEmpty) ...[
-                  if (attachment != null) const SizedBox(height: 7),
+                  if (attachment != null) const SizedBox(height: 6),
                   _LinkifiedMessageText(
                     text: privacyLens ? '••••••••••' : message.text,
                     style: TextStyle(
@@ -2142,7 +2397,7 @@ class _MessageBubble extends StatelessWidget {
                 ],
               ],
               if (!message.deleted && message.reactions.isNotEmpty) ...[
-                const SizedBox(height: 7),
+                const SizedBox(height: 5),
                 Wrap(
                   spacing: 5,
                   runSpacing: 4,
@@ -2155,32 +2410,32 @@ class _MessageBubble extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .13),
+                            color: scheme.surface.withValues(alpha: .22),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             '${entry.key} ${entry.value.length}',
-                            style: TextStyle(
-                              color: mine ? Colors.white : scheme.onSurface,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: const TextStyle(fontSize: 11),
                           ),
                         ),
                       )
                       .toList(),
                 ),
               ],
-              const SizedBox(height: 5),
-              Text(
-                '${privacyLens ? '••••' : message.authorName} • ${_formatTime(message.sentAt)}',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: transparentMedia
-                      ? scheme.onSurface.withValues(alpha: .46)
-                      : mine
-                          ? Colors.white60
-                          : scheme.onSurface.withValues(alpha: .42),
+              Padding(
+                padding: mediaOnly
+                    ? const EdgeInsets.only(left: 6, top: 3)
+                    : const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${privacyLens ? '••••' : message.authorName} • ${_formatTime(message.sentAt)}',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: mediaOnly
+                        ? scheme.onSurface.withValues(alpha: .46)
+                        : mine
+                            ? Colors.white60
+                            : scheme.onSurface.withValues(alpha: .42),
+                  ),
                 ),
               ),
             ],
@@ -2319,98 +2574,5 @@ class _CallMessageCard extends StatelessWidget {
     if (minutes == 0) return '$rest ${ru ? 'сек' : 'sec'}';
     if (rest == 0) return '$minutes ${ru ? 'мин' : 'min'}';
     return '$minutes ${ru ? 'мин' : 'min'} $rest ${ru ? 'сек' : 'sec'}';
-  }
-}
-
-class _AttachmentPreview extends StatelessWidget {
-  final CgAttachment attachment;
-  final bool hidden;
-
-  const _AttachmentPreview({required this.attachment, required this.hidden});
-
-  Uint8List? get _bytes {
-    final raw = attachment.dataBase64;
-    if (raw == null) return null;
-    try {
-      return base64Decode(raw);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (hidden) {
-      return Container(
-        width: 240,
-        height: 88,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Icon(Icons.visibility_off_outlined, color: Colors.white70),
-      );
-    }
-    final bytes = _bytes;
-    if (attachment.kind == 'image' && bytes != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Image.memory(
-          bytes,
-          width: 260,
-          height: 190,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-        ),
-      );
-    }
-    return Container(
-      width: 260,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: .14),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            attachment.kind == 'audio'
-                ? Icons.graphic_eq_rounded
-                : attachment.kind == 'video'
-                ? Icons.movie_outlined
-                : attachment.kind == 'archive'
-                ? Icons.folder_zip_outlined
-                : Icons.description_outlined,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  attachment.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  _fileSize(attachment.size),
-                  style: const TextStyle(fontSize: 10),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _fileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

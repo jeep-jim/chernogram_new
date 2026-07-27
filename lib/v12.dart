@@ -74,6 +74,56 @@ String? _decodeQrImageInBackground(Uint8List bytes) {
   return null;
 }
 
+
+const Set<String> _blockedNicknameRoots = <String>{
+  'admin',
+  'administrator',
+  'support',
+  'moderator',
+  'security',
+  'system',
+  'official',
+  'chernogram',
+  'чернограм',
+  'админ',
+  'администратор',
+  'поддержка',
+  'модератор',
+  'безопасность',
+  'система',
+  'официальный',
+};
+
+String _nicknameKey(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[\s._\-]+'), '')
+    .replaceAll('0', 'о')
+    .replaceAll('1', 'і');
+
+String? _nicknameError(String value, bool ru) {
+  final nickname = value.trim().toLowerCase();
+  if (nickname.length < 3 || nickname.length > 24) {
+    return ru ? 'Никнейм: от 3 до 24 символов.' : 'Use 3 to 24 characters.';
+  }
+  if (RegExp(r'[a-z]', caseSensitive: false).hasMatch(nickname)) {
+    return ru
+        ? 'Латиница в никнеймах запрещена. Используйте кириллицу.'
+        : 'Latin letters are not allowed. Use Cyrillic.';
+  }
+  if (!RegExp(r'^[а-яё0-9_.-]+$', caseSensitive: false).hasMatch(nickname)) {
+    return ru
+        ? 'Допустимы кириллица, цифры, точка, дефис и подчёркивание.'
+        : 'Use Cyrillic, digits, dot, dash or underscore.';
+  }
+  final key = _nicknameKey(nickname);
+  for (final root in _blockedNicknameRoots) {
+    if (key.contains(_nicknameKey(root))) {
+      return ru ? 'Этот никнейм зарезервирован.' : 'This nickname is reserved.';
+    }
+  }
+  return null;
+}
+
 class ChernogramV12 extends StatefulWidget {
   final bool ru;
   final bool darkMode;
@@ -105,6 +155,10 @@ class _ChernogramV12State extends State<ChernogramV12> {
   bool _loading = true;
   bool _privacyLens = false;
   int _tab = 0;
+  String? _activeTunnelId;
+  Map<String, int> _unreadCounts = <String, int>{};
+  final Map<String, StreamSubscription<InternetEvent>> _relaySubscriptions =
+      <String, StreamSubscription<InternetEvent>>{};
 
   @override
   void initState() {
@@ -119,15 +173,201 @@ class _ChernogramV12State extends State<ChernogramV12> {
       CgStore.loadContacts(),
       CgStore.loadPrivacyLens(),
     ]);
+    final prefs = await SharedPreferences.getInstance();
+    final unread = <String, int>{};
+    final unreadRaw = prefs.getString('cg_unread_v2');
+    if (unreadRaw != null) {
+      try {
+        final decoded = jsonDecode(unreadRaw);
+        if (decoded is Map) {
+          for (final entry in decoded.entries) {
+            unread[entry.key.toString()] =
+                int.tryParse(entry.value.toString()) ?? 0;
+          }
+        }
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       _profile = values[0] as CgProfile;
       _tunnels = values[1] as List<CgTunnel>;
       _contacts = values[2] as List<CgContact>;
       _privacyLens = values[3] as bool;
+      _unreadCounts = unread;
       _loading = false;
     });
     await _listenLinks();
+    unawaited(_prewarmAll());
+  }
+
+
+  Future<void> _persistUnread() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('cg_unread_v2', jsonEncode(_unreadCounts));
+  }
+
+  void _markRead(String tunnelId) {
+    if ((_unreadCounts[tunnelId] ?? 0) == 0) return;
+    _unreadCounts[tunnelId] = 0;
+    if (mounted) setState(() {});
+    unawaited(_persistUnread());
+  }
+
+  Future<void> _prewarmAll() async {
+    final profile = _profile;
+    if (profile == null) return;
+    for (final subscription in _relaySubscriptions.values) {
+      await subscription.cancel();
+    }
+    _relaySubscriptions.clear();
+    for (final tunnel in _tunnels) {
+      final session = await InternetRelay.open(
+        tunnelId: tunnel.id,
+        secret: tunnel.secret,
+        profileId: profile.id,
+        nickname: profile.nickname,
+        history: tunnel.historyJson(),
+      );
+      _relaySubscriptions[tunnel.id] = session.events.listen(
+        (event) => unawaited(_handleBackgroundEvent(tunnel.id, event)),
+      );
+    }
+  }
+
+  Future<void> _handleBackgroundEvent(
+    String tunnelId,
+    InternetEvent event,
+  ) async {
+    if (event.type != 'message' || event.data['message'] is! Map) return;
+    final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+    final incoming = await CgMediaStore.cacheIncomingMessage(
+      CgMessage.fromJson(raw),
+    );
+    if (!mounted) return;
+    final tunnelIndex = _tunnels.indexWhere((item) => item.id == tunnelId);
+    if (tunnelIndex < 0) return;
+    final tunnel = _tunnels[tunnelIndex];
+    final messageIndex =
+        tunnel.messages.indexWhere((message) => message.id == incoming.id);
+    if (messageIndex >= 0 &&
+        tunnel.messages[messageIndex].sameVisibleContent(incoming)) {
+      return;
+    }
+    final messages = <CgMessage>[...tunnel.messages];
+    if (messageIndex < 0) {
+      messages.add(incoming);
+    } else {
+      messages[messageIndex] = incoming;
+    }
+    messages.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    final updated = tunnel.copyWith(messages: messages);
+    final copy = <CgTunnel>[..._tunnels];
+    copy[tunnelIndex] = updated;
+    copy.sort((a, b) {
+      final aTime = a.messages.isEmpty ? a.createdAt : a.messages.last.sentAt;
+      final bTime = b.messages.isEmpty ? b.createdAt : b.messages.last.sentAt;
+      return bTime.compareTo(aTime);
+    });
+    _tunnels = copy;
+    if (_activeTunnelId != tunnelId && incoming.authorId != _profile?.id) {
+      _unreadCounts[tunnelId] = (_unreadCounts[tunnelId] ?? 0) + 1;
+      unawaited(_persistUnread());
+    }
+    setState(() {});
+    final snapshot = List<CgTunnel>.from(_tunnels);
+    _saveTunnelsTimer?.cancel();
+    _saveTunnelsTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_saveTunnelsFast(snapshot));
+    });
+  }
+
+  Future<void> _deleteTunnel(CgTunnel tunnel) async {
+    var current = List<CgTunnel>.from(_tunnels);
+    for (final item in CgMediaStore.collect(<CgTunnel>[tunnel])) {
+      current = await CgMediaStore.purgeItem(current, item);
+    }
+    _tunnels = current.where((item) => item.id != tunnel.id).toList();
+    _unreadCounts.remove(tunnel.id);
+    await _relaySubscriptions.remove(tunnel.id)?.cancel();
+    await InternetRelay.close(tunnel.id);
+    await _saveTunnelsFast(_tunnels);
+    await _persistUnread();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _forwardMessage(
+    CgMessage source,
+    String sourceTunnelId,
+  ) async {
+    final targets = _tunnels
+        .where((tunnel) => tunnel.id != sourceTunnelId)
+        .toList();
+    if (targets.isEmpty || !mounted) return;
+    final target = await showModalBottomSheet<CgTunnel>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 18),
+          itemCount: targets.length,
+          itemBuilder: (context, index) {
+            final tunnel = targets[index];
+            return ListTile(
+              leading: _V12TunnelAvatar(tunnel: tunnel, size: 42),
+              title: Text(tunnel.displayName),
+              onTap: () => Navigator.pop(context, tunnel),
+            );
+          },
+        ),
+      ),
+    );
+    if (target == null) return;
+    CgAttachment? transportAttachment = source.attachment;
+    if (transportAttachment != null) {
+      final file = await CgMediaStore.existingFile(transportAttachment);
+      if (file != null && await file.exists()) {
+        transportAttachment = transportAttachment.copyWith(
+          dataBase64: base64Encode(await file.readAsBytes()),
+          clearLocalPath: true,
+        );
+      }
+    }
+    final forwarded = CgMessage(
+      id: CgIds.random(24),
+      authorId: _profile!.id,
+      authorName: _profile!.nickname,
+      text: source.text,
+      sentAt: DateTime.now(),
+      type: source.type,
+      attachment: transportAttachment,
+      meta: <String, dynamic>{
+        ...source.meta,
+        'forwardedFrom': source.authorName,
+      },
+    );
+    final local = forwarded.attachment == null
+        ? forwarded
+        : forwarded.copyWith(
+            attachment: forwarded.attachment!.copyWith(clearData: true),
+          );
+    final index = _tunnels.indexWhere((item) => item.id == target.id);
+    if (index < 0) return;
+    final copy = <CgTunnel>[..._tunnels];
+    copy[index] = copy[index].copyWith(
+      messages: <CgMessage>[...copy[index].messages, local],
+    );
+    _tunnels = copy;
+    await _saveTunnelsFast(_tunnels);
+    final session = await InternetRelay.open(
+      tunnelId: target.id,
+      secret: target.secret,
+      profileId: _profile!.id,
+      nickname: _profile!.nickname,
+      history: copy[index].historyJson(),
+    );
+    await session.sendMessage(forwarded.toJson(includeLocalPaths: false));
+    if (mounted) setState(() {});
   }
 
   Future<void> _listenLinks() async {
@@ -168,7 +408,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
         SnackBar(
           content: Text(
             widget.ru
-                ? 'Это не приглашение Чернограма.'
+                ? 'Это не приглашение.'
                 : 'This is not a Chernogram invite.',
           ),
         ),
@@ -353,20 +593,28 @@ class _ChernogramV12State extends State<ChernogramV12> {
   Future<void> _openTunnel(CgTunnel tunnel, {bool autoInvite = false}) async {
     final profile = _profile;
     if (profile == null || !mounted) return;
+    final currentIndex = _tunnels.indexWhere((item) => item.id == tunnel.id);
+    final current = currentIndex < 0 ? tunnel : _tunnels[currentIndex];
+    _activeTunnelId = current.id;
+    _markRead(current.id);
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => CgChatScreen(
           ru: widget.ru,
           profile: profile,
-          tunnel: tunnel,
+          tunnel: current,
           privacyLens: _privacyLens,
           autoInvite: autoInvite,
           onChanged: _updateTunnel,
+          onDelete: _deleteTunnel,
+          onForward: (message) => _forwardMessage(message, current.id),
           onContactSeen: _rememberContact,
         ),
       ),
     );
+    _activeTunnelId = null;
+    _markRead(current.id);
   }
 
   void _updateTunnel(CgTunnel updated) {
@@ -458,6 +706,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _saveTunnelsTimer?.cancel();
     _saveContactsTimer?.cancel();
     unawaited(_linkSubscription?.cancel());
+    for (final subscription in _relaySubscriptions.values) {
+      unawaited(subscription.cancel());
+    }
     super.dispose();
   }
 
@@ -473,6 +724,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _V12ChatsHome(
         ru: widget.ru,
         tunnels: _tunnels,
+        unreadCounts: _unreadCounts,
         privacyLens: _privacyLens,
         onCreate: _createTunnel,
         onScan: _scanQr,
@@ -505,7 +757,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
       extendBody: true,
       appBar: AppBar(
         title: BrandHeader(
-          subtitle: widget.ru ? 'ЧАТЫ И ЗВОНКИ' : 'CHATS AND CALLS',
+          subtitle: widget.ru ? 'чаты и звонки' : 'chats and calls',
         ),
         actions: [
           GlassIconButton(
@@ -705,6 +957,7 @@ class _FastChatHostState extends State<_FastChatHost> {
 class _V12ChatsHome extends StatelessWidget {
   final bool ru;
   final List<CgTunnel> tunnels;
+  final Map<String, int> unreadCounts;
   final bool privacyLens;
   final VoidCallback onCreate;
   final VoidCallback onScan;
@@ -713,6 +966,7 @@ class _V12ChatsHome extends StatelessWidget {
   const _V12ChatsHome({
     required this.ru,
     required this.tunnels,
+    required this.unreadCounts,
     required this.privacyLens,
     required this.onCreate,
     required this.onScan,
@@ -723,10 +977,14 @@ class _V12ChatsHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 112),
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 106),
       children: [
-        GlassPanel(
-          padding: const EdgeInsets.all(17),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(22),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -740,17 +998,16 @@ class _V12ChatsHome extends StatelessWidget {
               const SizedBox(height: 5),
               Text(
                 ru
-                    ? 'Сообщения, файлы и звонки между разными городами и сетями.'
-                    : 'Messages, files and calls across cities and networks.',
+                    ? 'Сообщения, файлы и звонки без VPN и рекламы.'
+                    : 'Messages, files and calls without VPN or ads.',
                 style: TextStyle(
-                  color: scheme.onSurface.withValues(alpha: .57),
+                  color: scheme.onSurface.withValues(alpha: .58),
                 ),
               ),
               const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
-                    flex: 2,
                     child: FilledButton.icon(
                       onPressed: onCreate,
                       icon: const Icon(Icons.add_rounded),
@@ -758,8 +1015,9 @@ class _V12ChatsHome extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
+                  SizedBox(
+                    width: 110,
+                    child: FilledButton.tonalIcon(
                       onPressed: onScan,
                       icon: const Icon(Icons.qr_code_scanner_rounded),
                       label: const Text('QR'),
@@ -770,62 +1028,61 @@ class _V12ChatsHome extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                ru ? 'Чаты' : 'Chats',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+        const SizedBox(height: 17),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  ru ? 'Чаты' : 'Chats',
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            Text(
-              '${tunnels.length}',
-              style: TextStyle(color: scheme.onSurface.withValues(alpha: .45)),
-            ),
-          ],
+              Text(
+                '${tunnels.length}',
+                style: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: .45),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 9),
+        const SizedBox(height: 6),
         if (tunnels.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 50),
+            padding: const EdgeInsets.only(top: 54),
             child: Column(
               children: [
                 Icon(
                   Icons.forum_outlined,
-                  size: 68,
-                  color: scheme.onSurface.withValues(alpha: .18),
+                  size: 64,
+                  color: scheme.onSurface.withValues(alpha: .16),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   ru ? 'Чатов пока нет' : 'No chats yet',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  ru
-                      ? 'Создайте чат или подключитесь по QR.'
-                      : 'Create a chat or join with a QR code.',
-                  textAlign: TextAlign.center,
-                ),
               ],
             ),
           )
         else
-          for (final tunnel in tunnels) ...[
-            Card(
+          for (final tunnel in tunnels)
+            Material(
+              color: Colors.transparent,
               child: InkWell(
                 onTap: () => onOpen(tunnel),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(16),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
                   child: Row(
                     children: [
-                      _V12TunnelAvatar(tunnel: tunnel, size: 52),
-                      const SizedBox(width: 12),
+                      _V12TunnelAvatar(tunnel: tunnel, size: 50),
+                      const SizedBox(width: 11),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -836,56 +1093,63 @@ class _V12ChatsHome extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 16,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Text(
                               privacyLens
-                                  ? '••••••••••••'
+                                  ? '••••••••••'
                                   : _lastMessage(tunnel, ru),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: scheme.onSurface.withValues(alpha: .50),
+                                color: scheme.onSurface.withValues(alpha: .52),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Icon(
-                        tunnel.isPrivate
-                            ? Icons.visibility_off_outlined
-                            : Icons.public,
-                        size: 16,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right_rounded),
+                      if ((unreadCounts[tunnel.id] ?? 0) > 0)
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 22,
+                            minHeight: 22,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '${unreadCounts[tunnel.id]}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-          ],
       ],
     );
   }
 
   static String _lastMessage(CgTunnel tunnel, bool ru) {
-    if (tunnel.messages.isEmpty) {
-      return ru ? 'Готов к приглашению' : 'Ready to invite';
-    }
-    final message = tunnel.messages.last;
+    final visible = tunnel.messages
+        .where((message) => message.meta['localHidden'] != true)
+        .toList();
+    if (visible.isEmpty) return ru ? 'Готов к приглашению' : 'Ready to invite';
+    final message = visible.last;
     if (message.deleted) return ru ? 'Сообщение удалено' : 'Message deleted';
     if (message.type == 'call') return ru ? 'Звонок' : 'Call';
-    if (message.attachment != null) {
-      return ru
-          ? 'Вложение: ${message.attachment!.name}'
-          : 'Attachment: ${message.attachment!.name}';
-    }
+    if (message.attachment != null) return message.attachment!.name;
     return message.text;
   }
 }
@@ -901,32 +1165,36 @@ class _V12TunnelAvatar extends StatelessWidget {
     final raw = tunnel.avatarBase64;
     if (raw != null) {
       try {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(size * .32),
+        return ClipOval(
           child: Image.memory(
             base64Decode(raw),
             width: size,
             height: size,
             fit: BoxFit.cover,
             gaplessPlayback: true,
+            cacheWidth: (size * 3).round(),
           ),
         );
       } catch (_) {}
     }
+    final letter = tunnel.displayName.trim().isEmpty
+        ? '#'
+        : tunnel.displayName.trim()[0].toUpperCase();
     return Container(
       width: size,
       height: size,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * .32),
-        gradient: LinearGradient(
-          colors: tunnel.isPrivate
-              ? const [Color(0xFF795DFF), Color(0xFF27396F)]
-              : const [Color(0xFF00A9D9), Color(0xFF3867E8)],
-        ),
+        shape: BoxShape.circle,
+        color: Theme.of(context).colorScheme.primaryContainer,
       ),
-      child: Icon(
-        tunnel.isPrivate ? Icons.visibility_off_outlined : Icons.public,
-        color: Colors.white,
+      child: Text(
+        letter,
+        style: TextStyle(
+          fontSize: size * .36,
+          fontWeight: FontWeight.w900,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
+        ),
       ),
     );
   }
@@ -1104,13 +1372,10 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
 
   void _save() {
     final nickname = _nickname.text.trim().toLowerCase();
-    if (nickname.length < 3) {
+    final error = _nicknameError(nickname, widget.ru);
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.ru ? 'Минимум 3 символа.' : 'Use at least 3 characters.',
-          ),
-        ),
+        SnackBar(content: Text(error)),
       );
       return;
     }

@@ -34,7 +34,7 @@ class CgProfile {
         avatarBase64: avatarBase64 ?? this.avatarBase64,
       );
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'nickname': nickname,
         'createdAt': createdAt.toIso8601String(),
@@ -47,7 +47,7 @@ class CgProfile {
             : CgIds.random(12),
         nickname: json['nickname']?.toString().trim().isNotEmpty == true
             ? json['nickname'].toString()
-            : 'user_${CgIds.random(4).toLowerCase()}',
+            : 'пользователь_${CgIds.random(4).toLowerCase()}',
         createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
             DateTime.now(),
         avatarBase64: json['avatarBase64']?.toString(),
@@ -83,7 +83,7 @@ class CgContact {
         avatarBase64: avatarBase64 ?? this.avatarBase64,
       );
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'nickname': nickname,
         'lastSeenAt': lastSeenAt.toIso8601String(),
@@ -93,14 +93,96 @@ class CgContact {
 
   factory CgContact.fromJson(Map<String, dynamic> json) => CgContact(
         id: json['id']?.toString() ?? '',
-        nickname: json['nickname']?.toString() ?? 'user',
+        nickname: json['nickname']?.toString() ?? 'пользователь',
         lastSeenAt: DateTime.tryParse(json['lastSeenAt']?.toString() ?? '') ??
             DateTime.now(),
-        tunnelIds: ((json['tunnelIds'] as List?) ?? const [])
+        tunnelIds: ((json['tunnelIds'] as List?) ?? const <dynamic>[])
             .map((item) => item.toString())
             .where((item) => item.isNotEmpty)
             .toList(),
         avatarBase64: json['avatarBase64']?.toString(),
+      );
+}
+
+class CgPermissions {
+  final bool canWriteMessages;
+  final bool canSendMedia;
+  final bool canDownload;
+  final bool canInvite;
+  final bool canSeeHistory;
+  final bool canCall;
+
+  const CgPermissions({
+    this.canWriteMessages = true,
+    this.canSendMedia = true,
+    this.canDownload = true,
+    this.canInvite = false,
+    this.canSeeHistory = true,
+    this.canCall = true,
+  });
+
+  CgPermissions copyWith({
+    bool? canWriteMessages,
+    bool? canSendMedia,
+    bool? canDownload,
+    bool? canInvite,
+    bool? canSeeHistory,
+    bool? canCall,
+  }) =>
+      CgPermissions(
+        canWriteMessages: canWriteMessages ?? this.canWriteMessages,
+        canSendMedia: canSendMedia ?? this.canSendMedia,
+        canDownload: canDownload ?? this.canDownload,
+        canInvite: canInvite ?? this.canInvite,
+        canSeeHistory: canSeeHistory ?? this.canSeeHistory,
+        canCall: canCall ?? this.canCall,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'canWriteMessages': canWriteMessages,
+        'canSendMedia': canSendMedia,
+        'canDownload': canDownload,
+        'canInvite': canInvite,
+        'canSeeHistory': canSeeHistory,
+        'canCall': canCall,
+      };
+
+  factory CgPermissions.fromJson(Map<String, dynamic> json) => CgPermissions(
+        canWriteMessages: json['canWriteMessages'] != false,
+        canSendMedia: json['canSendMedia'] != false,
+        canDownload: json['canDownload'] != false,
+        canInvite: json['canInvite'] == true,
+        canSeeHistory: json['canSeeHistory'] != false,
+        canCall: json['canCall'] != false,
+      );
+}
+
+class CgSharedFileInfo {
+  final String id;
+  final String name;
+  final int size;
+  final String kind;
+
+  const CgSharedFileInfo({
+    required this.id,
+    required this.name,
+    required this.size,
+    required this.kind,
+  });
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'size': size,
+        'kind': kind,
+      };
+
+  factory CgSharedFileInfo.fromJson(Map<String, dynamic> json) =>
+      CgSharedFileInfo(
+        id: json['id']?.toString() ?? CgIds.random(18),
+        name: json['name']?.toString() ?? 'file',
+        size: int.tryParse(json['size']?.toString() ?? '') ?? 0,
+        kind: json['kind']?.toString() ?? 'file',
       );
 }
 
@@ -121,14 +203,36 @@ class CgAttachment {
     this.localPath,
   });
 
-  Map<String, dynamic> toJson() => {
+  CgAttachment copyWith({
+    String? dataBase64,
+    String? localPath,
+    bool clearData = false,
+    bool clearLocalPath = false,
+  }) =>
+      CgAttachment(
+        id: id,
+        name: name,
+        size: size,
+        kind: kind,
+        dataBase64: clearData ? null : (dataBase64 ?? this.dataBase64),
+        localPath: clearLocalPath ? null : (localPath ?? this.localPath),
+      );
+
+  Map<String, dynamic> toJson({
+    bool includeData = true,
+    bool includeLocalPath = true,
+  }) =>
+      <String, dynamic>{
         'id': id,
         'name': name,
         'size': size,
         'kind': kind,
-        if (dataBase64 != null) 'dataBase64': dataBase64,
-        if (localPath != null) 'localPath': localPath,
+        if (includeData && dataBase64 != null) 'dataBase64': dataBase64,
+        if (includeLocalPath && localPath != null) 'localPath': localPath,
       };
+
+  Map<String, dynamic> metadataJson() =>
+      toJson(includeData: false, includeLocalPath: false);
 
   factory CgAttachment.fromJson(Map<String, dynamic> json) => CgAttachment(
         id: json['id']?.toString() ?? CgIds.random(),
@@ -136,8 +240,7 @@ class CgAttachment {
         size: int.tryParse(json['size']?.toString() ?? '') ?? 0,
         kind: json['kind']?.toString() ?? 'file',
         dataBase64: json['dataBase64']?.toString(),
-        localPath:
-            json['localPath']?.toString() ?? json['path']?.toString(),
+        localPath: json['localPath']?.toString() ?? json['path']?.toString(),
       );
 }
 
@@ -173,6 +276,7 @@ class CgMessage {
     bool? deleted,
     Map<String, List<String>>? reactions,
     Map<String, dynamic>? meta,
+    bool clearAttachment = false,
   }) =>
       CgMessage(
         id: id,
@@ -181,13 +285,17 @@ class CgMessage {
         text: text ?? this.text,
         sentAt: sentAt,
         type: type ?? this.type,
-        attachment: attachment ?? this.attachment,
+        attachment: clearAttachment ? null : (attachment ?? this.attachment),
         deleted: deleted ?? this.deleted,
         reactions: reactions ?? this.reactions,
         meta: meta ?? this.meta,
       );
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({
+    bool includeAttachmentData = true,
+    bool includeLocalPaths = true,
+  }) =>
+      <String, dynamic>{
         'id': id,
         'authorId': authorId,
         'authorName': authorName,
@@ -196,10 +304,30 @@ class CgMessage {
         'sentAt': sentAt.toIso8601String(),
         'type': type,
         'deleted': deleted,
-        if (attachment != null) 'attachment': attachment!.toJson(),
+        if (attachment != null)
+          'attachment': attachment!.toJson(
+            includeData: includeAttachmentData,
+            includeLocalPath: includeLocalPaths,
+          ),
         if (reactions.isNotEmpty) 'reactions': reactions,
         if (meta.isNotEmpty) 'meta': meta,
       };
+
+  Map<String, dynamic> metadataJson() => toJson(
+        includeAttachmentData: false,
+        includeLocalPaths: false,
+      );
+
+  bool sameVisibleContent(CgMessage other) {
+    return id == other.id &&
+        text == other.text &&
+        type == other.type &&
+        deleted == other.deleted &&
+        attachment?.id == other.attachment?.id &&
+        attachment?.localPath == other.attachment?.localPath &&
+        reactions.toString() == other.reactions.toString() &&
+        meta.toString() == other.meta.toString();
+  }
 
   factory CgMessage.fromJson(Map<String, dynamic> json) {
     final rawReactions = json['reactions'];
@@ -219,7 +347,7 @@ class CgMessage {
       authorId: json['authorId']?.toString() ?? '',
       authorName: json['authorName']?.toString() ??
           json['author']?.toString() ??
-          'user',
+          'пользователь',
       text: json['text']?.toString() ?? '',
       sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '') ??
           DateTime.now(),
@@ -248,6 +376,8 @@ class CgTunnel {
   final String? avatarBase64;
   final List<CgMessage> messages;
   final int revision;
+  final CgPermissions permissions;
+  final List<CgSharedFileInfo> sharedFiles;
 
   const CgTunnel({
     required this.id,
@@ -259,6 +389,8 @@ class CgTunnel {
     required this.messages,
     this.avatarBase64,
     this.revision = 0,
+    this.permissions = const CgPermissions(),
+    this.sharedFiles = const <CgSharedFileInfo>[],
   });
 
   String get displayName => name.trim().isEmpty ? 'Без названия' : name.trim();
@@ -270,6 +402,8 @@ class CgTunnel {
     String? avatarBase64,
     List<CgMessage>? messages,
     int? revision,
+    CgPermissions? permissions,
+    List<CgSharedFileInfo>? sharedFiles,
   }) =>
       CgTunnel(
         id: id,
@@ -281,9 +415,12 @@ class CgTunnel {
         avatarBase64: avatarBase64 ?? this.avatarBase64,
         messages: messages ?? this.messages,
         revision: revision ?? this.revision,
+        permissions: permissions ?? this.permissions,
+        sharedFiles: sharedFiles ?? this.sharedFiles,
       );
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({bool includeAttachmentData = false}) =>
+      <String, dynamic>{
         'id': id,
         'name': name,
         'isPrivate': isPrivate,
@@ -293,19 +430,38 @@ class CgTunnel {
         'inviteSecret': secret,
         'createdAt': createdAt.toIso8601String(),
         'revision': revision,
+        'permissions': permissions.toJson(),
+        'sharedFiles': sharedFiles.map((item) => item.toJson()).toList(),
         if (avatarBase64 != null) 'avatarBase64': avatarBase64,
-        'messages': messages.map((message) => message.toJson()).toList(),
+        'messages': messages
+            .map(
+              (message) => message.toJson(
+                includeAttachmentData: includeAttachmentData,
+                includeLocalPaths: true,
+              ),
+            )
+            .toList(),
       };
 
+  List<Map<String, dynamic>> historyJson({int limit = 120}) {
+    final start = messages.length > limit ? messages.length - limit : 0;
+    return messages
+        .skip(start)
+        .map((message) => message.metadataJson())
+        .toList(growable: false);
+  }
+
   String get inviteToken {
-    final payload = jsonEncode({
-      'v': 4,
+    final payload = jsonEncode(<String, dynamic>{
+      'v': 5,
       'id': id,
       'name': name,
       'private': isPrivate,
       'owner': ownerId,
       'secret': secret,
       'revision': revision,
+      'permissions': permissions.toJson(),
+      'sharedFiles': sharedFiles.map((item) => item.toJson()).toList(),
     });
     return base64Url.encode(utf8.encode(payload)).replaceAll('=', '');
   }
@@ -322,6 +478,8 @@ class CgTunnel {
       final id = map['id']?.toString() ?? '';
       final secret = map['secret']?.toString() ?? '';
       if (id.isEmpty || secret.isEmpty) return null;
+      final rawPermissions = map['permissions'];
+      final rawShared = (map['sharedFiles'] as List?) ?? const <dynamic>[];
       return CgTunnel(
         id: id,
         name: map['name']?.toString() ?? '',
@@ -330,7 +488,20 @@ class CgTunnel {
         secret: secret,
         revision: int.tryParse(map['revision']?.toString() ?? '') ?? 0,
         createdAt: DateTime.now(),
-        messages: const [],
+        permissions: rawPermissions is Map
+            ? CgPermissions.fromJson(
+                Map<String, dynamic>.from(rawPermissions),
+              )
+            : const CgPermissions(),
+        sharedFiles: rawShared
+            .whereType<Map>()
+            .map(
+              (item) => CgSharedFileInfo.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .toList(),
+        messages: const <CgMessage>[],
       );
     } catch (_) {
       return null;
@@ -338,7 +509,9 @@ class CgTunnel {
   }
 
   factory CgTunnel.fromJson(Map<String, dynamic> json) {
-    final rawMessages = (json['messages'] as List?) ?? const [];
+    final rawMessages = (json['messages'] as List?) ?? const <dynamic>[];
+    final rawPermissions = json['permissions'];
+    final rawShared = (json['sharedFiles'] as List?) ?? const <dynamic>[];
     return CgTunnel(
       id: json['id']?.toString() ?? CgIds.random(16),
       name: json['name']?.toString() ?? '',
@@ -353,6 +526,17 @@ class CgTunnel {
           DateTime.now(),
       revision: int.tryParse(json['revision']?.toString() ?? '') ?? 0,
       avatarBase64: json['avatarBase64']?.toString(),
+      permissions: rawPermissions is Map
+          ? CgPermissions.fromJson(Map<String, dynamic>.from(rawPermissions))
+          : const CgPermissions(),
+      sharedFiles: rawShared
+          .whereType<Map>()
+          .map(
+            (item) => CgSharedFileInfo.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(),
       messages: rawMessages
           .whereType<Map>()
           .map((item) => CgMessage.fromJson(Map<String, dynamic>.from(item)))
@@ -381,7 +565,7 @@ class CgStore {
     }
     final profile = CgProfile(
       id: CgIds.random(12),
-      nickname: 'user_${CgIds.random(5).toLowerCase()}',
+      nickname: 'пользователь_${CgIds.random(4).toLowerCase()}',
       createdAt: DateTime.now(),
     );
     await saveProfile(profile);
@@ -399,21 +583,21 @@ class CgStore {
     if (raw == null) return <CgTunnel>[];
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return <CgTunnel>[];
-      return decoded
-          .whereType<Map>()
-          .map((item) => CgTunnel.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-    } catch (_) {
-      return <CgTunnel>[];
-    }
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => CgTunnel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    } catch (_) {}
+    return <CgTunnel>[];
   }
 
   static Future<void> saveTunnels(List<CgTunnel> tunnels) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       tunnelsKey,
-      jsonEncode(tunnels.map((tunnel) => tunnel.toJson()).toList()),
+      jsonEncode(tunnels.map((item) => item.toJson()).toList()),
     );
   }
 
@@ -423,33 +607,22 @@ class CgStore {
     if (raw == null) return <CgContact>[];
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return <CgContact>[];
-      return decoded
-          .whereType<Map>()
-          .map((item) => CgContact.fromJson(Map<String, dynamic>.from(item)))
-          .where((item) => item.id.isNotEmpty)
-          .toList();
-    } catch (_) {
-      return <CgContact>[];
-    }
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => CgContact.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    } catch (_) {}
+    return <CgContact>[];
   }
 
   static Future<void> saveContacts(List<CgContact> contacts) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       contactsKey,
-      jsonEncode(contacts.map((contact) => contact.toJson()).toList()),
+      jsonEncode(contacts.map((item) => item.toJson()).toList()),
     );
-  }
-
-  static Future<bool> loadDarkMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(darkModeKey) ?? true;
-  }
-
-  static Future<void> saveDarkMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(darkModeKey, value);
   }
 
   static Future<bool> loadPrivacyLens() async {
