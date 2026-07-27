@@ -1,6 +1,6 @@
 Windows build failed
-Commit: be1de31d1e646865110aa9c44ead1e33116c851a
-Time: 2026-07-27T06:35:20Z
+Commit: 1d13d4076538b93e47703819b8e68d51fd75e222
+Time: 2026-07-27T06:44:49Z
 ===== windows-build.txt =====
 
 ===== FLUTTER =====
@@ -234,7 +234,7 @@ Formatted lib\v06.dart
 Formatted lib\v07.dart
 Formatted lib\v12.dart
 Formatted lib\windows_update_service.dart
-Formatted 26 files (25 changed) in 0.49 seconds.
+Formatted 26 files (25 changed) in 0.53 seconds.
 ===== ANALYZE =====
 Analyzing chernogram_new...                                     
 
@@ -269,5 +269,5 @@ warning - Unused import: 'brand.dart'. Try removing the import directive - lib\m
    info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v07.dart:389:11 - curly_braces_in_flow_control_structures
    info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive - lib\v12.dart:3:8 - unnecessary_import
 
-30 issues found. (ran in 17.4s)
+30 issues found. (ran in 18.5s)
 WINDOWS BUILD ERROR: ANALYZE failed with exit code 1
