@@ -1,6 +1,6 @@
 Windows ready
-Commit: caf0708bd732fb5c8193299fa2fb594b1f62e9d5
-Time: 2026-07-27T04:49:01Z
+Commit: ff76001cced000ecca4652261a0b2fb9ad979923
+Time: 2026-07-27T05:49:47Z
 Version: 0.14.1+25
 Architecture: x64
 Supported: Windows 10 and Windows 11
