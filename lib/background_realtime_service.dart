@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -162,28 +164,33 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
       ),
     );
 
+    final callDetails = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'chernogram_calls_v3',
+        'Входящие звонки',
+        channelDescription: 'Полноэкранные входящие звонки Чернограма',
+        importance: Importance.max,
+        priority: Priority.max,
+        category: AndroidNotificationCategory.call,
+        fullScreenIntent: true,
+        ongoing: true,
+        autoCancel: false,
+        playSound: true,
+        sound: const RawResourceAndroidNotificationSound(
+          'chernogram_incoming',
+        ),
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList(
+          <int>[0, 650, 350, 650, 350, 650],
+        ),
+        visibility: NotificationVisibility.public,
+      ),
+    );
     await notifications.show(
       id: callId.hashCode & 0x7fffffff,
       title: video ? 'Видеозвонок' : 'Аудиозвонок',
       body: '$fromName звонит вам',
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'chernogram_calls_v3',
-          'Входящие звонки',
-          channelDescription: 'Полноэкранные входящие звонки Чернограма',
-          importance: Importance.max,
-          priority: Priority.max,
-          category: AndroidNotificationCategory.call,
-          fullScreenIntent: true,
-          ongoing: true,
-          autoCancel: false,
-          playSound: true,
-          sound: RawResourceAndroidNotificationSound('chernogram_incoming'),
-          enableVibration: true,
-          vibrationPattern: Int64List.fromList(<int>[0, 650, 350, 650, 350, 650]),
-          visibility: NotificationVisibility.public,
-        ),
-      ),
+      notificationDetails: callDetails,
       payload: 'call:$callId',
     );
   }
