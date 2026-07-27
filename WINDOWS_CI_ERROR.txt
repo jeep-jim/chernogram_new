@@ -1,16 +1,16 @@
 Windows build failed
-Commit: 0561568a638a1846f7a986c513c3586133345803
-Time: 2026-07-27T02:21:47Z
+Commit: e1c0a6f4e54ba5fb182781ed17384c0fd9450350
+Time: 2026-07-27T02:29:31Z
 ===== windows-build.txt =====
 **********************
 PowerShell transcript start
-Start time: 20260727022108
+Start time: 20260727022442
 Username: runnervmr7g38\runneradmin
 RunAs User: runnervmr7g38\runneradmin
 Configuration Name: 
 Machine: runnervmr7g38 (Microsoft Windows NT 10.0.26100.0)
-Host Application: C:\Program Files\PowerShell\7\pwsh.dll -command . 'D:\a\_temp\cc028209-8f2c-4622-a953-11fabd169a0b.ps1'
-Process ID: 2684
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -command . 'D:\a\_temp\ed20fc26-5e37-4117-9dc0-a20029854c83.ps1'
+Process ID: 8980
 PSVersion: 7.6.3
 PSEdition: Core
 GitCommitId: 7.6.3
@@ -47,8 +47,18 @@ WSManStackVersion: 3.0
 ===== PREPARE WINDOWS =====
 
 
-WINDOWS BUILD ERROR: fix_windows_desktop.py failed: 1
+===== PUB GET =====
+
+===== FORMAT =====
+
+===== ANALYZE =====
+
+===== TEST =====
+
+===== BUILD WINDOWS =====
+
+WINDOWS BUILD ERROR: flutter build windows failed: 1
 **********************
 PowerShell transcript end
-End time: 20260727022146
+End time: 20260727022930
 **********************
