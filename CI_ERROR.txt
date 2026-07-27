@@ -1,6 +1,6 @@
 GitHub Actions build failed
-Commit: 111a2761843b3aee793b3b23333e846bd1bc7aa0
-Time: 2026-07-27T14:57:49Z
+Commit: 3dde1e549946bb95f53c3845284fc8c86240c77c
+Time: 2026-07-27T14:59:19Z
 ===== SIGNING KEY =====
 Alias name: androiddebugkey
 Creation date: Jul 26, 2026
@@ -118,7 +118,7 @@ Formatted lib/v06.dart
 Formatted lib/v07.dart
 Formatted lib/v12.dart
 Formatted lib/windows_update_service.dart
-Formatted 29 files (27 changed) in 0.51 seconds.
+Formatted 29 files (27 changed) in 0.50 seconds.
 Unhandled exception:
 Error on line 56, column 3: Duplicate mapping key.
    ╷
