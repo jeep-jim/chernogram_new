@@ -13,7 +13,7 @@ def patch_windows_updater() -> bool:
             r"      exit\(0\);\n",
             re.S,
         )
-        launch_block = """      final executable = File(Platform.resolvedExecutable);
+        launch_block = r"""      final executable = File(Platform.resolvedExecutable);
       final installDirectory = executable.parent.path;
       final executableName = executable.uri.pathSegments.last;
       final script = File(
@@ -43,10 +43,10 @@ def patch_windows_updater() -> bool:
       ].join(' ');
       final escapedCommand = command.replaceAll('"', '""');
       await launcher.writeAsString(
-        'Set shell = CreateObject("WScript.Shell")\\r\\n'
-        'shell.Run "$escapedCommand", 0, False\\r\\n'
+        'Set shell = CreateObject("WScript.Shell")\r\n'
+        'shell.Run "$escapedCommand", 0, False\r\n'
         'CreateObject("Scripting.FileSystemObject").DeleteFile '
-        'WScript.ScriptFullName, True\\r\\n',
+        'WScript.ScriptFullName, True\r\n',
         flush: true,
       );
 
@@ -83,8 +83,8 @@ def patch_windows_updater() -> bool:
         raise RuntimeError('Windows updater script marker was not found')
 
     if 'static String _quoteWindowsArgument' not in source:
-        helper = """  static String _quoteWindowsArgument(String value) {
-    return '\"${value.replaceAll('\"', r'\\\"')}\"';
+        helper = r"""  static String _quoteWindowsArgument(String value) {
+    return '"${value.replaceAll('"', r'\"')}"';
   }
 
 """
