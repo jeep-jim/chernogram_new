@@ -45,6 +45,12 @@ try {
   Invoke-LoggedCommand `
     -Name 'FIX 0.16.2 BRAND' `
     -Command 'python tooling/fix_v0162_brand.py'
+  Invoke-LoggedCommand `
+    -Name 'MATERIALIZE 0.16.3 RINGTONE' `
+    -Command 'python tooling/materialize_v0163_ringtone.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.3 REALTIME' `
+    -Command 'python tooling/fix_v0163_realtime.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
