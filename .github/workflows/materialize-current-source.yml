@@ -1,0 +1,42 @@
+name: Materialize current source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/materialize-current-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply all proven source migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tooling/fix_v07_compile.py
+          python3 tooling/fix_v09_media_calls.py
+          python3 tooling/fix_v09_compile.py
+          python3 tooling/fix_v091_player_header.py
+          python3 tooling/fix_v010_rtc_circles.py
+          python3 tooling/fix_v0101_chat_keyboard.py
+          python3 tooling/fix_v011_messenger_polish.py
+          python3 tooling/fix_v011_compile.py
+
+      - name: Commit canonical application source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/materialize-current-source.yml
+          git add lib android pubspec.yaml pubspec.lock
+          git commit -m "Зафиксировать единый рабочий исходник перед 0.15 [skip ci]"
+          git push origin HEAD:main
