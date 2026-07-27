@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fix_v0151_features import apply_feature_fixes
 from fix_v0151_windows import apply_windows_fix
+from fix_v0152_profile_cards import apply_profile_card_fix
 
 
 def replace_once(source: str, old: str, new: str, label: str) -> str:
@@ -119,11 +120,12 @@ def main() -> None:
     changed |= patch_internet_core()
     changed |= patch_chat_media()
     changed |= apply_feature_fixes()
+    changed |= apply_profile_card_fix()
     changed |= apply_windows_fix()
     print(
-        'Applied Chernogram 0.15.1 compile and release corrections'
+        'Applied Chernogram 0.15.2 compile and release corrections'
         if changed
-        else 'Chernogram 0.15.1 corrections already applied'
+        else 'Chernogram 0.15.2 corrections already applied'
     )
 
 
