@@ -57,6 +57,9 @@ try {
   Invoke-LoggedCommand `
     -Name 'FIX 0.16.5 CALLS AND PRESENCE' `
     -Command 'python tooling/fix_v0165_reliability.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.6 CLEAN TRANSPORT' `
+    -Command 'python tooling/fix_v0166_clean_transport.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
