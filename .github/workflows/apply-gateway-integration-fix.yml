@@ -1,0 +1,126 @@
+name: Apply Gateway Integration Fix Once
+
+on:
+  push:
+    branches:
+      - feature/realtime-gateway-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/realtime-gateway-v1
+          fetch-depth: 0
+
+      - name: Patch WebSocket close race and ACK test barrier
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gateway_path = Path('server/realtime_gateway/lib/src/gateway.dart')
+          gateway = gateway_path.read_text(encoding='utf-8')
+          old_send = """    client.socket.add(encoded);
+  }
+
+  void _sendError(_ClientSession client, String code, String details) {
+    if (client.socket.readyState != WebSocket.open) return;
+    client.socket.add(jsonEncode(<String, dynamic>{
+      'type': 'error',
+      'protocol': 1,
+      'code': code,
+      'details': details,
+      'serverTime': DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+"""
+          new_send = """    try {
+      client.socket.add(encoded);
+    } catch (_) {
+      unawaited(_detach(client));
+    }
+  }
+
+  void _sendError(_ClientSession client, String code, String details) {
+    if (client.socket.readyState != WebSocket.open) return;
+    try {
+      client.socket.add(jsonEncode(<String, dynamic>{
+        'type': 'error',
+        'protocol': 1,
+        'code': code,
+        'details': details,
+        'serverTime': DateTime.now().toUtc().toIso8601String(),
+      }));
+    } catch (_) {
+      unawaited(_detach(client));
+    }
+  }
+"""
+          if old_send not in gateway:
+              raise SystemExit('gateway send block not found')
+          gateway_path.write_text(gateway.replace(old_send, new_send, 1), encoding='utf-8')
+
+          test_path = Path('server/realtime_gateway/test/gateway_integration_test.dart')
+          test = test_path.read_text(encoding='utf-8')
+          old_ack = """        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ack',
+            'protocol': 1,
+            'roomId': 'room-test',
+            'roomSeq': liveRoomSeq,
+          }),
+        );
+
+        await bob.close();
+"""
+          new_ack = """        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ack',
+            'protocol': 1,
+            'roomId': 'room-test',
+            'roomSeq': liveRoomSeq,
+          }),
+        );
+        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ping',
+            'protocol': 1,
+            'requestId': 'cursor-barrier',
+          }),
+        );
+        await bob.nextType('pong');
+
+        await bob.close();
+"""
+          if old_ack not in test:
+              raise SystemExit('integration ACK block not found')
+          old_close = """  Future<void> close() async {
+    await _iterator.cancel();
+    await socket.close();
+  }
+"""
+          new_close = """  Future<void> close() async {
+    try {
+      await socket.close(WebSocketStatus.normalClosure, 'test_done');
+    } catch (_) {}
+    await _iterator.cancel();
+  }
+"""
+          if old_close not in test:
+              raise SystemExit('integration close block not found')
+          test = test.replace(old_ack, new_ack, 1).replace(old_close, new_close, 1)
+          test_path.write_text(test, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-gateway-integration-fix.yml
+          git add server/realtime_gateway/lib/src/gateway.dart server/realtime_gateway/test/gateway_integration_test.dart
+          git commit -m "Исправить гонку закрытия WebSocket и replay cursor"
+          git push origin HEAD:feature/realtime-gateway-v1
