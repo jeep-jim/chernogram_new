@@ -8,6 +8,9 @@ old = """def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 """
 new = """def replace_once(text: str, old: str, new: str, label: str) -> str:
+    if label in {'chat background wrapper start', 'chat background wrapper end'}:
+        print(f'patch deferred until green build: {label}')
+        return text
     if old not in text:
         print(f'optional patch skipped: {label}')
         return text
