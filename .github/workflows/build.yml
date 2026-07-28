@@ -36,12 +36,19 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply pending compile fix
+      - name: Apply pending compile and UX fixes
         shell: bash
         run: |
           set -euo pipefail
+          if [ -f tooling/relax_experience_patch.py ]; then
+            python3 tooling/relax_experience_patch.py
+          fi
           if [ -f tooling/fix_experience_compile_once.py ]; then
             python3 tooling/fix_experience_compile_once.py
+          fi
+          if grep -q 'DateTime.fromMillisecondsSinceEpoch(asset.createDateSecond \* 1000)' lib/music_player.dart; then
+            echo '::error::Nullable Android audio creation date was not fixed'
+            exit 1
           fi
 
       - name: Format, analyze, test and build
@@ -72,9 +79,9 @@ jobs:
           Checks: format, analyze, tests, Android release build
           EOF
           git add lib pubspec.yaml pubspec.lock android/app/src/main/AndroidManifest.xml EXPERIENCE_CI_STATUS.md
-          if [ -f tooling/fix_experience_compile_once.py ]; then
-            git rm -f tooling/fix_experience_compile_once.py
-          fi
+          for file in tooling/fix_experience_compile_once.py tooling/relax_experience_patch.py; do
+            if [ -f "$file" ]; then git rm -f "$file"; fi
+          done
           if git ls-files --error-unmatch EXPERIENCE_CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f EXPERIENCE_CI_ERROR.txt
           fi
