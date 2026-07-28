@@ -504,8 +504,47 @@ class CgInlineAttachment extends StatefulWidget {
 
 class _CgInlineAttachmentState extends State<CgInlineAttachment> {
   File? _file;
+  VideoPlayerController? _previewController;
   bool _loading = false;
-  bool _revealed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepareLocalPreview());
+  }
+
+  @override
+  void didUpdateWidget(covariant CgInlineAttachment oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.id != widget.attachment.id) {
+      unawaited(_previewController?.dispose());
+      _previewController = null;
+      _file = null;
+      unawaited(_prepareLocalPreview());
+    }
+  }
+
+  Future<void> _prepareLocalPreview() async {
+    final file = await CgMediaStore.existingFile(widget.attachment) ??
+        await CgMediaStore.ensureFile(widget.attachment);
+    if (file == null || !mounted) return;
+    _file = file;
+    if (CgMediaStore.isVideo(widget.attachment)) {
+      final controller = VideoPlayerController.file(file);
+      try {
+        await controller.initialize();
+        await controller.setVolume(0);
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _previewController = controller;
+      } catch (_) {
+        await controller.dispose();
+      }
+    }
+    if (mounted) setState(() {});
+  }
 
   Future<File?> _ensure() async {
     if (_file != null && await _file!.exists()) return _file;
@@ -513,6 +552,11 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
     _file = await CgMediaStore.existingFile(widget.attachment);
     _file ??= await widget.onEnsure?.call(widget.attachment);
     _file ??= await CgMediaStore.ensureFile(widget.attachment);
+    if (_file != null &&
+        CgMediaStore.isVideo(widget.attachment) &&
+        _previewController == null) {
+      await _prepareLocalPreview();
+    }
     if (mounted) setState(() => _loading = false);
     return _file;
   }
@@ -537,8 +581,8 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
       await widget.onPlayAudio?.call(widget.attachment, file);
       return;
     }
-    if (widget.attachment.kind == 'image' && !_revealed) {
-      setState(() => _revealed = true);
+    if (widget.attachment.kind == 'image') {
+      await _showImage();
       return;
     }
     if (CgMediaStore.isVideo(widget.attachment)) {
@@ -591,11 +635,70 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
     }
     if (value == 'share') {
       final file = await _ensure();
-      if (file != null) {
-        await Share.shareXFiles(<XFile>[XFile(file.path)]);
-      }
+      if (file != null) await Share.shareXFiles(<XFile>[XFile(file.path)]);
     }
     if (value == 'delete') await widget.onDelete?.call();
+  }
+
+  Widget _imagePreview(File file) => GestureDetector(
+        onTap: _showImage,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.file(
+            file,
+            width: 286,
+            height: 214,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            cacheWidth: 760,
+          ),
+        ),
+      );
+
+  Widget _videoPreview(VideoPlayerController controller) {
+    final preview = Stack(
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+        ),
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .56),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 31),
+        ),
+      ],
+    );
+    if (widget.attachment.kind == 'circle') {
+      return GestureDetector(
+        onTap: _activate,
+        child: ClipOval(child: SizedBox.square(dimension: 170, child: preview)),
+      );
+    }
+    return GestureDetector(
+      onTap: _activate,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(width: 286, height: 190, child: preview),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_previewController?.dispose());
+    super.dispose();
   }
 
   @override
@@ -613,22 +716,16 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
       );
     }
     final attachment = widget.attachment;
-    if (_revealed && attachment.kind == 'image' && _file != null) {
-      return GestureDetector(
-        onTap: _showImage,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Image.file(
-            _file!,
-            width: 280,
-            height: 210,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-            cacheWidth: 700,
-          ),
-        ),
-      );
+    if (attachment.kind == 'image' && _file != null) {
+      return _imagePreview(_file!);
     }
+    final preview = _previewController;
+    if (CgMediaStore.isVideo(attachment) &&
+        preview != null &&
+        preview.value.isInitialized) {
+      return _videoPreview(preview);
+    }
+
     final icon = CgMediaStore.isAudio(attachment)
         ? Icons.headphones_rounded
         : attachment.kind == 'image'
@@ -829,14 +926,22 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
       );
       return;
     }
-    if (item.attachment.kind == 'image' &&
-        item.attachment.dataBase64 != null) {
+    if (item.attachment.kind == 'image') {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) => CgImageViewer(
-            bytes: base64Decode(item.attachment.dataBase64!),
-            title: item.attachment.name,
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+              title: Text(item.attachment.name),
+            ),
+            body: InteractiveViewer(
+              minScale: .5,
+              maxScale: 5,
+              child: Center(child: Image.file(file, fit: BoxFit.contain)),
+            ),
           ),
         ),
       );
@@ -951,7 +1056,7 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
                         child: Text(
                           stats == null
                               ? (widget.ru ? 'Считаем место…' : 'Calculating storage…')
-                              : '${widget.ru ? 'Медиа Чернограма' : 'Chernogram media'}: ${CgMediaStore.fileSize(stats.mediaBytes)}',
+                              : '${widget.ru ? 'Медиа' : 'Media'}: ${CgMediaStore.fileSize(stats.mediaBytes)}',
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
@@ -1139,27 +1244,97 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
   }
 }
 
-class _MediaLeading extends StatelessWidget {
+class _MediaLeading extends StatefulWidget {
   final CgMediaItem item;
 
   const _MediaLeading({required this.item});
 
   @override
-  Widget build(BuildContext context) {
-    final attachment = item.attachment;
-    if (attachment.kind == 'image' && attachment.dataBase64 != null) {
+  State<_MediaLeading> createState() => _MediaLeadingState();
+}
+
+class _MediaLeadingState extends State<_MediaLeading> {
+  File? _file;
+  VideoPlayerController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepare());
+  }
+
+  Future<void> _prepare() async {
+    final attachment = widget.item.attachment;
+    final file = await CgMediaStore.existingFile(attachment) ??
+        await CgMediaStore.ensureFile(attachment);
+    if (file == null || !mounted) return;
+    _file = file;
+    if (CgMediaStore.isVideo(attachment)) {
+      final controller = VideoPlayerController.file(file);
       try {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.memory(
-            base64Decode(attachment.dataBase64!),
-            width: 52,
-            height: 52,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
+        await controller.initialize();
+        await controller.setVolume(0);
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _controller = controller;
+      } catch (_) {
+        await controller.dispose();
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final attachment = widget.item.attachment;
+    if (attachment.kind == 'image' && _file != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.file(
+          _file!,
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          cacheWidth: 180,
+        ),
+      );
+    }
+    final controller = _controller;
+    if (CgMediaStore.isVideo(attachment) &&
+        controller != null &&
+        controller.value.isInitialized) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 52,
+          height: 52,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: controller.value.size.width,
+                  height: controller.value.size.height,
+                  child: VideoPlayer(controller),
+                ),
+              ),
+              const Center(
+                child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 25),
+              ),
+            ],
           ),
-        );
-      } catch (_) {}
+        ),
+      );
     }
     return CircleAvatar(
       child: Icon(
@@ -1167,7 +1342,9 @@ class _MediaLeading extends StatelessWidget {
             ? Icons.graphic_eq_rounded
             : CgMediaStore.isVideo(attachment)
                 ? Icons.play_arrow_rounded
-                : Icons.description_outlined,
+                : attachment.kind == 'image'
+                    ? Icons.image_outlined
+                    : Icons.description_outlined,
       ),
     );
   }

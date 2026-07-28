@@ -91,9 +91,13 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   String? _peerId;
   bool _transportConnected = false;
   DateTime _lastRecoveryAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _prepareEpoch = 0;
 
   String get _callId => _resolvedCallId;
   String get _profileId => widget.profileId ?? '';
+
+  bool _prepareCancelled(int epoch) =>
+      _ended || !mounted || epoch != _prepareEpoch;
 
   @override
   void initState() {
@@ -107,6 +111,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   }
 
   Future<void> _prepare() async {
+    final epoch = ++_prepareEpoch;
     try {
       await _localRenderer.initialize();
       await _remoteRenderer.initialize();
@@ -131,6 +136,22 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           );
       _session = session;
       _signalSubscription = session.events.listen(_onRelayEvent);
+
+      if (widget.isCaller) {
+        unawaited(_sendInvite());
+        _inviteTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) {
+          if (_connectedAt == null && !_ended) unawaited(_sendInvite());
+        });
+        if (mounted) setState(() => _status = widget.ru ? 'Звоним…' : 'Calling…');
+      } else {
+        unawaited(_sendReady());
+        _readyTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) {
+          if (!_remoteDescriptionSet && !_ended) unawaited(_sendReady());
+        });
+        if (mounted) {
+          setState(() => _status = widget.ru ? 'Принимаем звонок…' : 'Answering…');
+        }
+      }
 
       final stream = await navigator.mediaDevices.getUserMedia(<String, dynamic>{
         'audio': <String, dynamic>{
@@ -158,6 +179,15 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
               }
             : false,
       });
+      if (_prepareCancelled(epoch)) {
+        for (final track in stream.getTracks()) {
+          try {
+            track.stop();
+          } catch (_) {}
+        }
+        await stream.dispose();
+        return;
+      }
 
       final peer = await createPeerConnection(<String, dynamic>{
         'iceServers': <Map<String, dynamic>>[
@@ -185,9 +215,19 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         'bundlePolicy': 'max-bundle',
         'rtcpMuxPolicy': 'require',
         'iceTransportPolicy': 'all',
-        'iceCandidatePoolSize': 8,
+        'iceCandidatePoolSize': 2,
         'continualGatheringPolicy': 'gather_continually',
       });
+      if (_prepareCancelled(epoch)) {
+        await peer.close();
+        for (final track in stream.getTracks()) {
+          try {
+            track.stop();
+          } catch (_) {}
+        }
+        await stream.dispose();
+        return;
+      }
 
       peer.onIceCandidate = (candidate) {
         final value = candidate.candidate;
@@ -268,24 +308,6 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         _handleSignal(signal);
       }
 
-      if (widget.isCaller) {
-        await _sendInvite();
-        _inviteTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-          if (_connectedAt == null && _peerId == null && !_ended) {
-            unawaited(_sendInvite());
-          }
-        });
-        if (mounted) setState(() => _status = widget.ru ? 'Звоним…' : 'Calling…');
-      } else {
-        await _sendReady();
-        _readyTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-          if (!_remoteDescriptionSet && !_ended) unawaited(_sendReady());
-        });
-        if (mounted) {
-          setState(() => _status = widget.ru ? 'Принимаем звонок…' : 'Answering…');
-        }
-      }
-
       _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
         if (_ended) return;
         if (_peerId == null || _peerId!.isEmpty) {
@@ -299,7 +321,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         if (!_transportConnected) unawaited(_recoverConnection());
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && !_ended && epoch == _prepareEpoch) {
         setState(() {
           _preparing = false;
           _error = error.toString();
@@ -345,12 +367,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         if (widget.isCaller) unawaited(_makeOffer());
         break;
       case 'call_decline':
-        if (mounted) {
-          setState(() => _status = widget.ru ? 'Звонок отклонён' : 'Call declined');
-          Future<void>.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) _finish('declined');
-          });
-        }
+        if (mounted) _finish('declined');
         break;
       case 'offer':
         unawaited(_handleOffer(data));
@@ -362,12 +379,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         unawaited(_handleIce(data));
         break;
       case 'call_end':
-        if (mounted) {
-          setState(() => _status = widget.ru ? 'Звонок завершён' : 'Call ended');
-          Future<void>.delayed(const Duration(milliseconds: 250), () {
-            if (mounted) _finish(_connectedAt == null ? 'missed' : 'completed');
-          });
-        }
+        if (mounted) _finish(_connectedAt == null ? 'missed' : 'completed');
         break;
     }
   }
@@ -396,7 +408,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
       await peer.setLocalDescription(offer);
       _localOffer = offer;
       await _sendOffer(offer);
-      _offerTimer ??= Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      _offerTimer ??= Timer.periodic(const Duration(milliseconds: 1500), (_) {
         final cached = _localOffer;
         if (_connectedAt == null && cached != null && !_ended) {
           unawaited(_sendOffer(cached));
@@ -514,6 +526,9 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
             : 'Restoring media channel…';
       });
     }
+    try {
+      await _peer?.restartIce();
+    } catch (_) {}
     if (widget.isCaller) {
       await _makeOffer(iceRestart: true);
     } else {
@@ -524,13 +539,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   Future<void> _sendSignal(Map<String, dynamic> data) async {
     final session = _session;
     if (session == null || _ended) return;
-    await session.sendSignal(<String, dynamic>{
-      ...data,
-      'callId': _callId,
-      'from': _profileId,
-      'video': widget.video,
-      if (_peerId != null && _peerId!.isNotEmpty) 'target': _peerId,
-    });
+    try {
+      await session
+          .sendSignal(<String, dynamic>{
+            ...data,
+            'callId': _callId,
+            'from': _profileId,
+            'video': widget.video,
+            if (_peerId != null && _peerId!.isNotEmpty) 'target': _peerId,
+          })
+          .timeout(const Duration(milliseconds: 3200));
+    } catch (_) {}
   }
 
   void _markConnected() {
@@ -581,13 +600,37 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
 
   Future<void> _hangUp() async {
     if (_ended) return;
-    await _sendSignal(<String, dynamic>{'action': 'call_end'});
-    _finish(_connectedAt == null ? 'cancelled' : 'completed');
+    final status = _connectedAt == null ? 'cancelled' : 'completed';
+    final session = _session;
+    final peerId = _peerId;
+    Future<void>? endSignal;
+    if (session != null) {
+      endSignal = session.sendSignal(<String, dynamic>{
+        'action': 'call_end',
+        'callId': _callId,
+        'from': _profileId,
+        'video': widget.video,
+        if (peerId != null && peerId.isNotEmpty) 'target': peerId,
+      });
+    }
+    _finish(status);
+    if (endSignal != null) {
+      unawaited(
+        endSignal
+            .timeout(const Duration(milliseconds: 700))
+            .catchError((_) {}),
+      );
+    }
   }
 
   void _finish(String status) {
     if (_ended || !mounted) return;
     _ended = true;
+    _durationTimer?.cancel();
+    _inviteTimer?.cancel();
+    _readyTimer?.cancel();
+    _offerTimer?.cancel();
+    _watchdog?.cancel();
     final duration = _connectedAt == null
         ? 0
         : DateTime.now().difference(_connectedAt!).inSeconds;
@@ -611,6 +654,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   @override
   void dispose() {
     _ended = true;
+    _prepareEpoch++;
     _durationTimer?.cancel();
     _inviteTimer?.cancel();
     _readyTimer?.cancel();
@@ -619,7 +663,9 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
     unawaited(_signalSubscription?.cancel());
     unawaited(_peer?.close());
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
-      track.stop();
+      try {
+        track.stop();
+      } catch (_) {}
     }
     unawaited(_localStream?.dispose());
     _localRenderer.srcObject = null;
@@ -803,6 +849,9 @@ class _CallControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton.filled(
         style: IconButton.styleFrom(
+          shape: const CircleBorder(),
+          fixedSize: const Size.square(58),
+          padding: EdgeInsets.zero,
           backgroundColor: danger
               ? ChernogramColors.danger
               : active

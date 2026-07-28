@@ -582,7 +582,11 @@ class _ChernogramGroupCallScreenState
 
   Future<void> _hangUp() async {
     if (_ended) return;
-    await _send({'action': 'group_leave'});
+    unawaited(
+      _send({'action': 'group_leave'})
+          .timeout(const Duration(milliseconds: 700))
+          .catchError((_) {}),
+    );
     _finish();
   }
 

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,25 +9,74 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_navigation.dart';
 import 'app_update_service.dart';
+import 'background_realtime_service.dart';
 import 'brand.dart';
+import 'crash_reporter.dart';
+import 'desktop_tray_service.dart';
+import 'notification_service.dart';
 import 'v12.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.example.chernogram.audio',
-    androidNotificationChannelName: 'Музыка Чернограма',
-    androidNotificationOngoing: true,
+  await ChernogramCrashReporter.initialize();
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    unawaited(ChernogramCrashReporter.recordFlutterError(details));
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    unawaited(
+      ChernogramCrashReporter.recordError(
+        error,
+        stack,
+        source: 'PLATFORM_DISPATCHER',
+      ),
+    );
+    return true;
+  };
+
+  final startup = runZonedGuarded<Future<void>>(
+    () async {
+      await ChernogramCrashReporter.breadcrumb('audio background init begin');
+      try {
+        await JustAudioBackground.init(
+          androidNotificationChannelId: 'com.example.chernogram.audio',
+          androidNotificationChannelName: 'Музыка Чернограма',
+          androidNotificationOngoing: true,
+        );
+        await ChernogramCrashReporter.breadcrumb('audio background init complete');
+      } catch (error, stack) {
+        await ChernogramCrashReporter.recordError(
+          error,
+          stack,
+          source: 'AUDIO_BACKGROUND_INIT',
+        );
+      }
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: ChernogramColors.background,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: ChernogramColors.background,
+          systemNavigationBarContrastEnforced: false,
+          systemStatusBarContrastEnforced: false,
+        ),
+      );
+      await ChernogramCrashReporter.breadcrumb('runApp');
+      runApp(const ChernogramApp());
+    },
+    (error, stack) {
+      unawaited(
+        ChernogramCrashReporter.recordError(
+          error,
+          stack,
+          source: 'ROOT_ZONE',
+        ),
+      );
+    },
   );
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: ChernogramColors.background,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
-  runApp(const ChernogramApp());
+  if (startup != null) await startup;
 }
 
 class ChernogramApp extends StatefulWidget {
@@ -35,7 +86,8 @@ class ChernogramApp extends StatefulWidget {
   State<ChernogramApp> createState() => _ChernogramAppState();
 }
 
-class _ChernogramAppState extends State<ChernogramApp> {
+class _ChernogramAppState extends State<ChernogramApp>
+    with WidgetsBindingObserver {
   bool? _ru;
   bool _darkMode = true;
   bool _introDone = false;
@@ -44,7 +96,15 @@ class _ChernogramAppState extends State<ChernogramApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(setChernogramAppForeground(true));
     unawaited(_loadSettings());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final foreground = state == AppLifecycleState.resumed;
+    unawaited(setChernogramAppForeground(foreground));
   }
 
   Future<void> _loadSettings() async {
@@ -98,6 +158,13 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(setChernogramAppForeground(false));
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ready = _ru != null;
     SystemChrome.setSystemUIOverlayStyle(
@@ -108,6 +175,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
               statusBarBrightness: Brightness.dark,
               systemNavigationBarColor: ChernogramColors.background,
               systemNavigationBarIconBrightness: Brightness.light,
+              systemNavigationBarDividerColor: ChernogramColors.background,
               systemNavigationBarContrastEnforced: false,
               systemStatusBarContrastEnforced: false,
             )
@@ -125,14 +193,14 @@ class _ChernogramAppState extends State<ChernogramApp> {
     return MaterialApp(
       navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Чернограм',
+      title: _ru == false ? 'Cernogram' : 'Чернограм',
       theme: chernogramLightTheme(),
       darkTheme: chernogramTheme(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       home: !ready
           ? const Scaffold(
               body: Center(
-                child: ChernogramLogo(size: 112, withPlate: true),
+                child: ChernogramLogo(size: 112),
               ),
             )
           : !_introDone

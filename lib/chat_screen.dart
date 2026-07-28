@@ -26,6 +26,8 @@ import 'sound_service.dart';
 
 const String _landingBase =
     'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
+const String _androidInstallUrl =
+    'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk';
 
 class CgChatScreen extends StatefulWidget {
   final bool ru;
@@ -65,7 +67,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   InternetTunnelSession? _session;
   StreamSubscription<InternetEvent>? _subscription;
   String _networkState = 'connecting';
-  int _onlinePeers = 1;
+  int _onlinePeers = 0;
   bool _sendingFile = false;
   bool _hasText = false;
   CgMessage? _replyingTo;
@@ -77,6 +79,25 @@ class _CgChatScreenState extends State<CgChatScreen> {
   bool get _canDownload => _isOwner || _tunnel.permissions.canDownload;
   bool get _canInvite => _isOwner || _tunnel.permissions.canInvite || !_tunnel.isPrivate;
   bool get _canCall => _isOwner || _tunnel.permissions.canCall;
+
+  String? get _preferredPeerId {
+    final session = _session;
+    if (session == null) return null;
+    for (final member in session.members) {
+      if (member['self'] == true) continue;
+      final id = member['id']?.toString() ?? '';
+      if (id.isNotEmpty && id != widget.profile.id) return id;
+    }
+    return null;
+  }
+
+  String? get _preferredPeerName {
+    for (final message in _tunnel.messages.reversed) {
+      final id = message.authorId.trim();
+      if (id.isNotEmpty && id != widget.profile.id) return message.authorName;
+    }
+    return null;
+  }
 
   Future<void> _sendBytes(String name, List<int> bytes) async {
     if (!_canSendMedia || bytes.isEmpty || bytes.length > 20 * 1024 * 1024) {
@@ -408,9 +429,18 @@ class _CgChatScreenState extends State<CgChatScreen> {
       await _subscription?.cancel();
       _session = session;
       _subscription = session.events.listen(_onInternetEvent);
+      unawaited(
+        session.sendControl(<String, dynamic>{
+          'operationId': CgIds.random(24),
+          'action': 'profile_card',
+          'nickname': widget.profile.nickname,
+          if (widget.profile.avatarBase64?.isNotEmpty == true)
+            'avatarBase64': widget.profile.avatarBase64,
+        }),
+      );
       setState(() {
         _networkState = session.connected ? 'connected' : 'connecting';
-        _onlinePeers = session.onlinePeers;
+        _onlinePeers = (session.onlinePeers - 1).clamp(0, 999).toInt();
       });
     } catch (_) {
       if (!mounted) return;
@@ -464,8 +494,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
         break;
       case 'presence':
         setState(() {
-          _onlinePeers =
+          final total =
               int.tryParse(event.data['peers']?.toString() ?? '') ?? 1;
+          _onlinePeers = (total - 1).clamp(0, 999).toInt();
         });
         break;
       case 'status':
@@ -482,7 +513,11 @@ class _CgChatScreenState extends State<CgChatScreen> {
     }
   }
 
-  void _rememberContact(String id, String name) {
+  void _rememberContact(
+    String id,
+    String name, {
+    String? avatarBase64,
+  }) {
     if (id.isEmpty || id == widget.profile.id) return;
     widget.onContactSeen?.call(
       CgContact(
@@ -490,6 +525,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
         nickname: name.trim().isEmpty ? 'user' : name,
         lastSeenAt: DateTime.now(),
         tunnelIds: [_tunnel.id],
+        avatarBase64: avatarBase64,
       ),
     );
   }
@@ -506,6 +542,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _mergeMessages(List<Map<String, dynamic>> raw) async {
+    final shouldFollowBottom = _isNearBottom;
     final messages = <CgMessage>[..._tunnel.messages];
     var changed = false;
     for (final item in raw) {
@@ -529,13 +566,22 @@ class _CgChatScreenState extends State<CgChatScreen> {
     if (!changed) return;
     setState(() => _tunnel = _tunnel.copyWith(messages: messages));
     _persist();
-    _scrollToBottom();
+    if (shouldFollowBottom) _scrollToBottom();
   }
 
   Future<void> _handleControl(Map<String, dynamic> data) async {
     final action = data['action']?.toString() ?? '';
     final sender = data['relaySender']?.toString() ?? '';
     switch (action) {
+      case 'profile_card':
+        _rememberContact(
+          sender,
+          data['nickname']?.toString() ??
+              data['relaySenderName']?.toString() ??
+              'user',
+          avatarBase64: data['avatarBase64']?.toString(),
+        );
+        break;
       case 'message_delete':
         final messageId = data['messageId']?.toString() ?? '';
         final index = _tunnel.messages.indexWhere(
@@ -952,6 +998,11 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
   }
 
+  bool get _isNearBottom {
+    if (!_scroll.hasClients) return true;
+    return _scroll.position.maxScrollExtent - _scroll.offset < 120;
+  }
+
   String _attachmentKind(String name) {
     final ext = name.split('.').last.toLowerCase();
     if (<String>{'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'}.contains(ext)) {
@@ -984,7 +1035,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   String get _inviteUrl =>
-      '$_landingBase?v=15&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';
+      '$_landingBase?v=35&invite=${Uri.encodeQueryComponent(_tunnel.inviteToken)}';
 
   String get _deepInvite =>
       'chernogram://join/${Uri.encodeComponent(_tunnel.inviteToken)}';
@@ -1035,10 +1086,27 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   onPressed: () => Share.share(
                     widget.ru
                         ? 'Открой чат в Чернограме: $_deepInvite\n\nЕсли приложение не открылось: $_inviteUrl'
-                        : 'Open the Chernogram chat: $_deepInvite\n\nIf the app did not open: $_inviteUrl',
+                        : 'Open the Cernogram chat: $_deepInvite\n\nIf the app did not open: $_inviteUrl',
                   ),
                   icon: const Icon(Icons.ios_share_rounded),
                   label: Text(widget.ru ? 'Отправить ссылку' : 'Share invite'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Share.share(
+                    widget.ru
+                        ? 'Установить Чернограм для Android:\n$_androidInstallUrl'
+                        : 'Install Cernogram for Android:\n$_androidInstallUrl',
+                  ),
+                  icon: const Icon(Icons.install_mobile_rounded),
+                  label: Text(
+                    widget.ru
+                        ? 'Поделиться ссылкой на установку'
+                        : 'Share installation link',
+                  ),
                 ),
               ),
             ],
@@ -1357,10 +1425,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _startCall(bool video) async {
-    if (!_canCall || await _session?.waitUntilConnected() != true) {
-      _showNotConnected();
-      return;
-    }
+    if (!_canCall) return;
+    unawaited(_session?.connect());
     final callId = CgIds.random(22);
     final outcome = await Navigator.push<CgCallOutcome>(
       context,
@@ -1371,6 +1437,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
           secret: _tunnel.secret,
           profileId: widget.profile.id,
           nickname: widget.profile.nickname,
+          peerId: _preferredPeerId,
+          peerName: _preferredPeerName,
           peerAvatarBase64: _tunnel.avatarBase64,
           myAvatarBase64: widget.profile.avatarBase64,
           callId: callId,
@@ -1392,10 +1460,11 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _startGroupCall({required bool video}) async {
-    if (!_canCall || await _session?.waitUntilConnected() != true) {
+    if (!_canCall || _session == null) {
       _showNotConnected();
       return;
     }
+    unawaited(_session!.connect());
     final callId = CgIds.random(22);
     final outcome = await Navigator.push<CgCallOutcome>(
       context,
@@ -1464,6 +1533,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   void _handleSignal(Map<String, dynamic> signal) {
+    final target = signal['target']?.toString() ?? '';
+    if (target.isNotEmpty && target != widget.profile.id) return;
+    final signalAt = DateTime.tryParse(
+      signal['receivedAt']?.toString() ?? signal['sentAt']?.toString() ?? '',
+    );
+    if (signalAt != null &&
+        DateTime.now().toUtc().difference(signalAt.toUtc()).inSeconds > 25) {
+      return;
+    }
     final action = signal['action']?.toString() ?? '';
     if (action == 'call_invite') {
       _handleDirectInvite(signal);
@@ -1547,6 +1625,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
           IconButton.filled(
             style: IconButton.styleFrom(
               backgroundColor: ChernogramColors.danger,
+              shape: const CircleBorder(),
+              fixedSize: const Size.square(54),
             ),
             onPressed: () => Navigator.pop(context, false),
             icon: const Icon(Icons.call_end),
@@ -1555,6 +1635,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
           IconButton.filled(
             style: IconButton.styleFrom(
               backgroundColor: ChernogramColors.success,
+              shape: const CircleBorder(),
+              fixedSize: const Size.square(54),
             ),
             onPressed: () => Navigator.pop(context, true),
             icon: const Icon(Icons.call),
@@ -1564,12 +1646,12 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
     await ChernogramSound.stopIncomingCall();
     if (accepted != true) {
-      await _session?.sendSignal({
+      unawaited(_session?.sendSignal({
         'action': 'call_decline',
         'callId': callId,
         'from': widget.profile.id,
         'target': fromId,
-      });
+      }));
       return;
     }
     if (!mounted) return;
@@ -1659,7 +1741,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   String get _statusText {
     if (_networkState == 'connected') {
-      return widget.ru ? 'Онлайн • $_onlinePeers' : 'Online • $_onlinePeers';
+      if (_onlinePeers > 0) {
+        return widget.ru ? 'В сети • $_onlinePeers' : 'Online • $_onlinePeers';
+      }
+      return widget.ru ? 'Ожидаем собеседника' : 'Waiting for peer';
     }
     if (_networkState == 'queued') {
       return widget.ru ? 'Отправим при подключении' : 'Will send when online';
@@ -1834,6 +1919,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   )
                 : ListView.builder(
                     controller: _scroll,
+                    physics: const ClampingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    dragStartBehavior: DragStartBehavior.down,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
@@ -2144,7 +2233,7 @@ class _EmptyChat extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ChernogramLogo(size: 82, withPlate: true),
+          const ChernogramLogo(size: 82),
           const SizedBox(height: 18),
           Text(
             ru ? 'Туннель готов' : 'Tunnel is ready',

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -269,121 +270,133 @@ class GlassIconButton extends StatelessWidget {
 class ChernogramLogo extends StatelessWidget {
   final double size;
   final bool withPlate;
+  final double progress;
 
   const ChernogramLogo({
     super.key,
     required this.size,
     this.withPlate = false,
+    this.progress = 1,
   });
 
   @override
   Widget build(BuildContext context) {
     final mark = CustomPaint(
-      size: Size.square(withPlate ? size * .72 : size),
-      painter: _ChernogramMarkPainter(
+      size: Size.square(size),
+      painter: _ChernogramFacePainter(
         dark: Theme.of(context).brightness == Brightness.dark,
+        progress: progress.clamp(0.0, 1.0).toDouble(),
       ),
     );
     if (!withPlate) return mark;
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * .28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF202A45), Color(0xFF090D18)],
+    return SizedBox.square(
+      dimension: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: ChernogramColors.orange.withValues(alpha: .13),
+              blurRadius: size * .42,
+              spreadRadius: -size * .12,
+            ),
+          ],
         ),
-        border: Border.all(color: Colors.white12),
-        boxShadow: [
-          BoxShadow(
-            color: ChernogramColors.orange.withValues(alpha: .28),
-            blurRadius: size * .35,
-          ),
-        ],
+        child: mark,
       ),
-      child: mark,
     );
   }
 }
 
-class _ChernogramMarkPainter extends CustomPainter {
+class _ChernogramFacePainter extends CustomPainter {
   final bool dark;
+  final double progress;
 
-  const _ChernogramMarkPainter({required this.dark});
+  const _ChernogramFacePainter({required this.dark, required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final center = rect.center;
-    final stroke = size.width * .14;
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * 1.35
-      ..strokeCap = StrokeCap.round
-      ..shader = const LinearGradient(
-        colors: [Color(0x667C5CFF), Color(0x6618B8FF)],
-      ).createShader(rect)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * .08);
-    final main = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF9C86FF), Color(0xFF19C8FF)],
-      ).createShader(rect);
+    final stripeCount = size.width < 52 ? 11 : 15;
+    final lineWidth = size.width / (stripeCount * 3.15);
+    final topBase = size.height * .11;
+    final centerY = size.height * .48;
+    final faceHeight = size.height * .72;
+    final mainShader = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xFFB9A8FF), Color(0xFF7B5CFF), Color(0xFF20C7FF)],
+    ).createShader(rect);
 
-    final arcRect = Rect.fromCircle(center: center, radius: size.width * .34);
-    canvas.drawArc(arcRect, .62, 4.95, false, glow);
-    canvas.drawArc(arcRect, .62, 4.95, false, main);
+    for (var index = 0; index < stripeCount; index++) {
+      final t = stripeCount == 1 ? .5 : index / (stripeCount - 1);
+      final normalizedX = t * 2 - 1;
+      final x = size.width * (.14 + t * .72);
+      final ellipse = math.sqrt(math.max(0, 1 - normalizedX * normalizedX));
+      final top = topBase + (1 - ellipse) * size.height * .12;
+      final jaw = ellipse * faceHeight * .50 - normalizedX.abs() * size.height * .035;
+      final bottom = centerY + jaw;
+      final stagger = (progress * 1.42 - t * .34).clamp(0.0, 1.0).toDouble();
+      final eased = Curves.easeOutCubic.transform(stagger);
+      if (eased <= 0) continue;
+      final animatedTop = centerY + (top - centerY) * eased;
+      final animatedBottom = centerY + (bottom - centerY) * eased;
+      final alpha = (255 * eased).round();
 
-    final cutPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * .72
-      ..strokeCap = StrokeCap.round
-      ..color = dark ? const Color(0xFF070A12) : const Color(0xFFF2F6FF);
-    canvas.drawLine(
-      Offset(size.width * .54, size.height * .48),
-      Offset(size.width * .82, size.height * .48),
-      cutPaint,
-    );
-    canvas.drawCircle(
-      Offset(size.width * .72, size.height * .48),
-      size.width * .065,
-      Paint()..color = const Color(0xFF8DDEFF),
-    );
+      final main = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lineWidth
+        ..strokeCap = StrokeCap.round
+        ..shader = mainShader
+        ..color = Colors.white.withAlpha(alpha);
+
+      final gaps = <(double, double)>[];
+      if (normalizedX.abs() > .17 && normalizedX.abs() < .72) {
+        gaps.add((size.height * .37, size.height * .445));
+      }
+      var cursor = animatedTop;
+      for (final gap in gaps) {
+        final gapStart = gap.$1.clamp(animatedTop, animatedBottom).toDouble();
+        final gapEnd = gap.$2.clamp(animatedTop, animatedBottom).toDouble();
+        if (gapStart > cursor) {
+          canvas.drawLine(Offset(x, cursor), Offset(x, gapStart), main);
+        }
+        cursor = math.max(cursor, gapEnd).toDouble();
+      }
+      if (cursor < animatedBottom) {
+        canvas.drawLine(Offset(x, cursor), Offset(x, animatedBottom), main);
+      }
+    }
+
   }
 
   @override
-  bool shouldRepaint(covariant _ChernogramMarkPainter oldDelegate) =>
-      oldDelegate.dark != dark;
+  bool shouldRepaint(covariant _ChernogramFacePainter oldDelegate) =>
+      oldDelegate.dark != dark || oldDelegate.progress != progress;
 }
 
 class BrandHeader extends StatelessWidget {
   final String? subtitle;
+  final bool ru;
 
-  const BrandHeader({super.key, this.subtitle});
+  const BrandHeader({super.key, this.subtitle, this.ru = true});
 
   @override
   Widget build(BuildContext context) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ChernogramLogo(size: 34, withPlate: true),
-          const SizedBox(width: 10),
+          const ChernogramLogo(size: 39),
+          const SizedBox(width: 9),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Чернограм',
+                Text(
+                  ru ? 'Чернограм' : 'Cernogram',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -.45,
@@ -429,7 +442,7 @@ class _ChernogramAnimatedIntroState extends State<ChernogramAnimatedIntro>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: const Duration(milliseconds: 1900),
   );
 
   @override
@@ -448,40 +461,163 @@ class _ChernogramAnimatedIntroState extends State<ChernogramAnimatedIntro>
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        backgroundColor: ChernogramColors.background,
         body: Center(
-          child: FadeTransition(
-            opacity: CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-            child: ScaleTransition(
-              scale: Tween<double>(begin: .84, end: 1).animate(
-                CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-              ),
-              child: Column(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final stripes = CurvedAnimation(
+                parent: _controller,
+                curve: const Interval(0, .60, curve: Curves.easeOutCubic),
+              ).value;
+              final assembly = CurvedAnimation(
+                parent: _controller,
+                curve: const Interval(.04, .62, curve: Curves.easeOutCubic),
+              ).value;
+              final eyePhase = CurvedAnimation(
+                parent: _controller,
+                curve: const Interval(.50, .82, curve: Curves.easeOut),
+              ).value;
+              final textPhase = CurvedAnimation(
+                parent: _controller,
+                curve: const Interval(.58, 1, curve: Curves.easeOutCubic),
+              ).value;
+              final settle = CurvedAnimation(
+                parent: _controller,
+                curve: const Interval(.62, .90, curve: Curves.easeOut),
+              ).value;
+              final eyePulse = (eyePhase *
+                      (.78 + .22 * math.sin(_controller.value * math.pi * 7)))
+                  .clamp(0.0, 1.0)
+                  .toDouble();
+
+              const markSize = 156.0;
+              final travel = 72 * (1 - assembly);
+              return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const ChernogramLogo(size: 132, withPlate: true),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'CHERNOGRAM',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 3.2,
+                  Transform.scale(
+                    scale: .96 + assembly * .06 - settle * .02,
+                    child: SizedBox.square(
+                      dimension: markSize,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ClipRect(
+                            clipper: const _FaceHalfClipper(top: true),
+                            child: Transform.translate(
+                              offset: Offset(0, -travel),
+                              child: ChernogramLogo(
+                                size: markSize,
+                                progress: stripes,
+                              ),
+                            ),
+                          ),
+                          ClipRect(
+                            clipper: const _FaceHalfClipper(top: false),
+                            child: Transform.translate(
+                              offset: Offset(0, travel),
+                              child: ChernogramLogo(
+                                size: markSize,
+                                progress: stripes,
+                              ),
+                            ),
+                          ),
+                          if (eyePulse > 0)
+                            Opacity(
+                              opacity: eyePulse,
+                              child: CustomPaint(
+                                painter: _IntroEyesPainter(progress: eyePulse),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 7),
-                  Text(
-                    widget.ru ? 'СВЯЗЬ БЕЗ ГРАНИЦ' : 'CONNECTION WITHOUT BORDERS',
-                    style: const TextStyle(
-                      color: ChernogramColors.goldLight,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5,
+                  const SizedBox(height: 19),
+                  Opacity(
+                    opacity: textPhase,
+                    child: Transform.translate(
+                      offset: Offset(0, 10 * (1 - textPhase)),
+                      child: Column(
+                        children: [
+                          Text(
+                            widget.ru ? 'ЧЕРНОГРАМ' : 'CERNOGRAM',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 3,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            widget.ru
+                                ? 'СВЯЗЬ БЕЗ ГРАНИЦ'
+                                : 'CONNECTION WITHOUT BORDERS',
+                            style: const TextStyle(
+                              color: ChernogramColors.goldLight,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
         ),
       );
+}
+
+class _FaceHalfClipper extends CustomClipper<Rect> {
+  final bool top;
+
+  const _FaceHalfClipper({required this.top});
+
+  @override
+  Rect getClip(Size size) => top
+      ? Rect.fromLTWH(0, 0, size.width, size.height / 2)
+      : Rect.fromLTWH(0, size.height / 2, size.width, size.height / 2);
+
+  @override
+  bool shouldReclip(covariant _FaceHalfClipper oldClipper) =>
+      oldClipper.top != top;
+}
+
+class _IntroEyesPainter extends CustomPainter {
+  final double progress;
+
+  const _IntroEyesPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * .040
+      ..color = const Color(0x5520C7FF).withValues(alpha: progress * .65);
+    final inner = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * .016
+      ..color = const Color(0xFFB9F1FF).withValues(alpha: progress);
+
+    final leftStart = Offset(size.width * .285, size.height * .405);
+    final leftEnd = Offset(size.width * .430, size.height * .430);
+    final rightStart = Offset(size.width * .570, size.height * .430);
+    final rightEnd = Offset(size.width * .715, size.height * .405);
+    canvas.drawLine(leftStart, leftEnd, outer);
+    canvas.drawLine(rightStart, rightEnd, outer);
+    canvas.drawLine(leftStart, leftEnd, inner);
+    canvas.drawLine(rightStart, rightEnd, inner);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IntroEyesPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

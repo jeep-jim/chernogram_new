@@ -16,6 +16,17 @@ const String _foregroundChannelId = 'chernogram_realtime_service';
 const int _foregroundNotificationId = 991;
 const String _foregroundStateKey = 'cg_app_foreground_v1';
 
+
+Future<void> setChernogramAppForeground(bool foreground) async {
+  if (!Platform.isAndroid) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_foregroundStateKey, foreground);
+  FlutterBackgroundService().invoke(
+    'appState',
+    <String, dynamic>{'foreground': foreground},
+  );
+}
+
 Future<void> initializeChernogramRealtimeService() async {
   if (!Platform.isAndroid) return;
 
@@ -43,8 +54,8 @@ Future<void> initializeChernogramRealtimeService() async {
       autoStartOnBoot: true,
       isForegroundMode: true,
       notificationChannelId: _foregroundChannelId,
-      initialNotificationTitle: 'Чернограм на связи',
-      initialNotificationContent: 'Сообщения и звонки работают в фоне',
+      initialNotificationTitle: 'Чернограм',
+      initialNotificationContent: 'Фоновая связь активна',
       foregroundServiceNotificationId: _foregroundNotificationId,
     ),
     iosConfiguration: IosConfiguration(
@@ -70,7 +81,7 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
   final notifications = FlutterLocalNotificationsPlugin();
   await notifications.initialize(
     settings: const InitializationSettings(
-      android: AndroidInitializationSettings('chernogram_launcher_icon'),
+      android: AndroidInitializationSettings('chernogram_notification_icon'),
     ),
   );
 
@@ -80,6 +91,7 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
   final displayedCalls = <String>{};
   CgProfile? profile;
   List<CgTunnel> tunnels = const <CgTunnel>[];
+  bool syncingSessions = false;
 
   Future<bool> appIsForeground() async {
     final prefs = await SharedPreferences.getInstance();
@@ -135,6 +147,15 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
   ) async {
     final currentProfile = profile;
     if (currentProfile == null || await appIsForeground()) return;
+    final target = signal['target']?.toString() ?? '';
+    if (target.isNotEmpty && target != currentProfile.id) return;
+    final signalAt = DateTime.tryParse(
+      signal['receivedAt']?.toString() ?? signal['sentAt']?.toString() ?? '',
+    );
+    if (signalAt != null &&
+        DateTime.now().toUtc().difference(signalAt.toUtc()).inSeconds > 25) {
+      return;
+    }
     final action = signal['action']?.toString() ?? '';
     final group = action == 'group_call_invite';
     final callId = signal['callId']?.toString() ?? '';
@@ -225,42 +246,85 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
     }
   }
 
+  Future<void> closeSessions() async {
+    for (final subscription in subscriptions.values) {
+      await subscription.cancel();
+    }
+    subscriptions.clear();
+    for (final session in sessions.values) {
+      await session.close();
+    }
+    sessions.clear();
+  }
+
   Future<void> syncSessions() async {
-    profile = await CgStore.loadOrCreateProfile();
-    tunnels = await CgStore.loadTunnels();
-    final currentProfile = profile;
-    if (currentProfile == null) return;
-    final activeIds = tunnels.map((item) => item.id).toSet();
+    if (syncingSessions) return;
+    syncingSessions = true;
+    try {
+      final foreground = await appIsForeground();
+      if (foreground) {
+        await closeSessions();
+        if (service is AndroidServiceInstance &&
+            await service.isForegroundService()) {
+          await service.setAsBackgroundService();
+        }
+        return;
+      }
 
-    final stale = sessions.keys.where((id) => !activeIds.contains(id)).toList();
-    for (final id in stale) {
-      await subscriptions.remove(id)?.cancel();
-      await sessions.remove(id)?.close();
-    }
+      if (service is AndroidServiceInstance &&
+          !await service.isForegroundService()) {
+        await service.setAsForegroundService();
+      }
 
-    for (final tunnel in tunnels) {
-      if (sessions.containsKey(tunnel.id)) continue;
-      final session = await InternetRelay.open(
-        tunnelId: tunnel.id,
-        secret: tunnel.secret,
-        profileId: currentProfile.id,
-        nickname: currentProfile.nickname,
-        history: const <Map<String, dynamic>>[],
-      );
-      sessions[tunnel.id] = session;
-      subscriptions[tunnel.id] = session.events.listen(
-        (event) => unawaited(handleEvent(tunnel.id, tunnel, event)),
-      );
-    }
+      profile = await CgStore.loadOrCreateProfile();
+      tunnels = await CgStore.loadTunnels();
+      final currentProfile = profile;
+      if (currentProfile == null) return;
+      final activeIds = tunnels.map((item) => item.id).toSet();
 
-    if (service is AndroidServiceInstance &&
-        await service.isForegroundService()) {
-      service.setForegroundNotificationInfo(
-        title: 'Чернограм на связи',
-        content: '${tunnels.length} чатов слушают сообщения и звонки',
-      );
+      final stale = sessions.keys.where((id) => !activeIds.contains(id)).toList();
+      for (final id in stale) {
+        await subscriptions.remove(id)?.cancel();
+        await sessions.remove(id)?.close();
+      }
+
+      for (final tunnel in tunnels) {
+        if (sessions.containsKey(tunnel.id)) continue;
+        try {
+          final session = await InternetRelay.open(
+            tunnelId: tunnel.id,
+            secret: tunnel.secret,
+            profileId: currentProfile.id,
+            nickname: currentProfile.nickname,
+            history: const <Map<String, dynamic>>[],
+          );
+          sessions[tunnel.id] = session;
+          subscriptions[tunnel.id] = session.events.listen(
+            (event) => unawaited(handleEvent(tunnel.id, tunnel, event)),
+          );
+        } catch (_) {}
+      }
+
+      if (service is AndroidServiceInstance &&
+          await service.isForegroundService()) {
+        service.setForegroundNotificationInfo(
+          title: 'Чернограм',
+          content: 'Фоновая связь активна',
+        );
+      }
+    } catch (_) {
+      // Keep the background isolate alive across temporary radio/storage errors.
+    } finally {
+      syncingSessions = false;
     }
   }
+
+  service.on('appState').listen((event) async {
+    final foreground = event?['foreground'] == true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_foregroundStateKey, foreground);
+    await syncSessions();
+  });
 
   service.on('refresh').listen((_) => unawaited(syncSessions()));
   service.on('stopService').listen((_) async {
@@ -274,5 +338,7 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
   });
 
   await syncSessions();
-  Timer.periodic(const Duration(seconds: 20), (_) => unawaited(syncSessions()));
+  Timer.periodic(const Duration(seconds: 20), (_) {
+    unawaited(syncSessions().catchError((_) {}));
+  });
 }

@@ -9,16 +9,28 @@ import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zxing2/qrcode.dart';
 
 import 'agent_screen.dart';
+import 'app_monitor.dart';
 import 'brand.dart';
+import 'call_service.dart';
 import 'chat_media.dart';
 import 'chat_screen.dart';
+import 'crash_reporter.dart';
 import 'core_models.dart';
+import 'group_call_service.dart';
 import 'music_player.dart';
+import 'notification_service.dart';
+import 'pending_call.dart';
+import 'permission_center.dart';
 import 'internet_core.dart';
+
+const String _androidInstallUrl =
+    'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk';
 
 String _encodeStoredJson(Object value) => jsonEncode(value);
 
@@ -105,15 +117,15 @@ String? _nicknameError(String value, bool ru) {
   if (nickname.length < 3 || nickname.length > 24) {
     return ru ? 'Никнейм: от 3 до 24 символов.' : 'Use 3 to 24 characters.';
   }
-  if (RegExp(r'[a-z]', caseSensitive: false).hasMatch(nickname)) {
+  if (RegExp(r'[а-яё]', caseSensitive: false).hasMatch(nickname)) {
     return ru
-        ? 'Латиница в никнеймах запрещена. Используйте кириллицу.'
-        : 'Latin letters are not allowed. Use Cyrillic.';
+        ? 'Кириллица в никнеймах запрещена. Используйте латиницу.'
+        : 'Cyrillic letters are not allowed. Use Latin letters.';
   }
-  if (!RegExp(r'^[а-яё0-9_.-]+$', caseSensitive: false).hasMatch(nickname)) {
+  if (!RegExp(r'^[a-z0-9_.-]+$', caseSensitive: false).hasMatch(nickname)) {
     return ru
-        ? 'Допустимы кириллица, цифры, точка, дефис и подчёркивание.'
-        : 'Use Cyrillic, digits, dot, dash or underscore.';
+        ? 'Допустимы латинские буквы, цифры, точка, дефис и подчёркивание.'
+        : 'Use Latin letters, digits, dot, dash or underscore.';
   }
   final key = _nicknameKey(nickname);
   for (final root in _blockedNicknameRoots) {
@@ -123,6 +135,20 @@ String? _nicknameError(String value, bool ru) {
   }
   return null;
 }
+
+
+String _directPairToken(String left, String right) {
+  final ids = <String>[left, right]..sort();
+  return base64Url
+      .encode(utf8.encode('direct-v1:${ids[0]}:${ids[1]}'))
+      .replaceAll('=', '');
+}
+
+String _directTunnelId(String left, String right) =>
+    'dm_${_directPairToken(left, right)}';
+
+String _directTunnelSecret(String left, String right) =>
+    'dm-secret-${_directPairToken(left, right)}';
 
 class ChernogramV12 extends StatefulWidget {
   final bool ru;
@@ -147,8 +173,11 @@ class ChernogramV12 extends StatefulWidget {
 class _ChernogramV12State extends State<ChernogramV12> {
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<String>? _notificationClickSubscription;
+  StreamSubscription<String>? _callClickSubscription;
   Timer? _saveTunnelsTimer;
   Timer? _saveContactsTimer;
+  Timer? _presenceRefreshTimer;
   CgProfile? _profile;
   List<CgTunnel> _tunnels = <CgTunnel>[];
   List<CgContact> _contacts = <CgContact>[];
@@ -157,6 +186,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
   int _tab = 0;
   String? _activeTunnelId;
   Map<String, int> _unreadCounts = <String, int>{};
+  final Map<String, int> _onlineByTunnel = <String, int>{};
+  final Set<String> _onlineContactIds = <String>{};
   final Map<String, StreamSubscription<InternetEvent>> _relaySubscriptions =
       <String, StreamSubscription<InternetEvent>>{};
 
@@ -173,6 +204,13 @@ class _ChernogramV12State extends State<ChernogramV12> {
       CgStore.loadContacts(),
       CgStore.loadPrivacyLens(),
     ]);
+    var profile = values[0] as CgProfile;
+    if (_nicknameError(profile.nickname, true) != null) {
+      profile = profile.copyWith(
+        nickname: 'user_${CgIds.random(4).toLowerCase()}',
+      );
+      await CgStore.saveProfile(profile);
+    }
     final prefs = await SharedPreferences.getInstance();
     final unread = <String, int>{};
     final unreadRaw = prefs.getString('cg_unread_v2');
@@ -189,7 +227,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
     }
     if (!mounted) return;
     setState(() {
-      _profile = values[0] as CgProfile;
+      _profile = profile;
       _tunnels = values[1] as List<CgTunnel>;
       _contacts = values[2] as List<CgContact>;
       _privacyLens = values[3] as bool;
@@ -197,7 +235,88 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _loading = false;
     });
     await _listenLinks();
+    _notificationClickSubscription =
+        CgNotificationService.tunnelClicks.listen(_openNotificationTunnel);
+    _callClickSubscription =
+        CgNotificationService.callClicks.listen(_openPendingCall);
+    final pendingTunnelId = CgNotificationService.consumePendingTunnelId();
+    if (pendingTunnelId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openNotificationTunnel(pendingTunnelId));
+      });
+    }
+    final pendingCallId = CgNotificationService.consumePendingCallId();
+    if (pendingCallId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openPendingCall(pendingCallId));
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(CgPermissionCenter.maybePrompt(context, ru: widget.ru));
+    });
     unawaited(_prewarmAll());
+    unawaited(_syncAppMonitor());
+    _presenceRefreshTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _refreshAllPresence(),
+    );
+  }
+
+  Future<void> _openNotificationTunnel(String tunnelId) async {
+    final index = _tunnels.indexWhere((item) => item.id == tunnelId);
+    if (index < 0 || !mounted) return;
+    await _openTunnel(_tunnels[index]);
+  }
+
+  Future<void> _openPendingCall(String callId) async {
+    final pending = await CgPendingCallStore.take(callId);
+    final profile = _profile;
+    if (pending == null || profile == null || !mounted) return;
+    final index = _tunnels.indexWhere((item) => item.id == pending.tunnelId);
+    if (index < 0) return;
+    final tunnel = _tunnels[index];
+    await CgNotificationService.cancelCall(callId);
+    if (!mounted) return;
+    if (pending.group) {
+      await Navigator.push<CgCallOutcome>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChernogramGroupCallScreen(
+            tunnelName: tunnel.displayName,
+            tunnelId: tunnel.id,
+            secret: tunnel.secret,
+            profileId: profile.id,
+            nickname: profile.nickname,
+            callId: pending.callId,
+            isHost: false,
+            video: pending.video,
+            ru: widget.ru,
+            myAvatarBase64: profile.avatarBase64,
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.push<CgCallOutcome>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChernogramCallScreen(
+          tunnelName: tunnel.displayName,
+          tunnelId: tunnel.id,
+          secret: tunnel.secret,
+          profileId: profile.id,
+          nickname: profile.nickname,
+          peerId: pending.fromId,
+          peerName: pending.fromName,
+          peerAvatarBase64: pending.avatarBase64,
+          myAvatarBase64: profile.avatarBase64,
+          callId: pending.callId,
+          isCaller: false,
+          video: pending.video,
+          ru: widget.ru,
+        ),
+      ),
+    );
   }
 
 
@@ -211,6 +330,94 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _unreadCounts[tunnelId] = 0;
     if (mounted) setState(() {});
     unawaited(_persistUnread());
+  }
+
+  void _refreshPresence([String? tunnelId]) {
+    var changed = false;
+    if (tunnelId != null) {
+      final session = InternetRelay.session(tunnelId);
+      final online = session == null
+          ? 0
+          : session.members.where((member) => member['self'] != true).length;
+      if (_onlineByTunnel[tunnelId] != online) {
+        _onlineByTunnel[tunnelId] = online;
+        changed = true;
+      }
+    }
+
+    final activeTunnelIds = _tunnels.map((item) => item.id).toSet();
+    for (final id in _onlineByTunnel.keys
+        .where((id) => !activeTunnelIds.contains(id))
+        .toList()) {
+      _onlineByTunnel.remove(id);
+      changed = true;
+    }
+
+    final onlineContactIds = <String>{};
+    for (final tunnel in _tunnels) {
+      final session = InternetRelay.session(tunnel.id);
+      if (session == null) continue;
+      for (final member in session.members) {
+        if (member['self'] == true) continue;
+        final id = member['id']?.toString() ?? '';
+        if (id.isNotEmpty) onlineContactIds.add(id);
+      }
+    }
+    final contactsChanged =
+        onlineContactIds.length != _onlineContactIds.length ||
+        !_onlineContactIds.containsAll(onlineContactIds);
+    if (contactsChanged) {
+      _onlineContactIds
+        ..clear()
+        ..addAll(onlineContactIds);
+      changed = true;
+    }
+    if (changed && mounted) setState(() {});
+  }
+
+  void _refreshAllPresence() {
+    final nextByTunnel = <String, int>{};
+    final nextContacts = <String>{};
+    for (final tunnel in _tunnels) {
+      final session = InternetRelay.session(tunnel.id);
+      if (session == null) continue;
+      final peers = session.members.where((member) => member['self'] != true);
+      var count = 0;
+      for (final member in peers) {
+        final id = member['id']?.toString() ?? '';
+        if (id.isEmpty || id == _profile?.id) continue;
+        count++;
+        nextContacts.add(id);
+      }
+      if (count > 0) nextByTunnel[tunnel.id] = count;
+    }
+    final tunnelChanged = nextByTunnel.length != _onlineByTunnel.length ||
+        nextByTunnel.entries.any(
+          (entry) => _onlineByTunnel[entry.key] != entry.value,
+        );
+    final contactsChanged = nextContacts.length != _onlineContactIds.length ||
+        !_onlineContactIds.containsAll(nextContacts);
+    if (!tunnelChanged && !contactsChanged) return;
+    _onlineByTunnel
+      ..clear()
+      ..addAll(nextByTunnel);
+    _onlineContactIds
+      ..clear()
+      ..addAll(nextContacts);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _syncAppMonitor() async {
+    final profile = _profile;
+    if (profile == null) return;
+    await ChernogramAppMonitor.sync(
+      profile: profile,
+      tunnels: _tunnels,
+      ru: widget.ru,
+      onTunnelChanged: _updateTunnel,
+      onContactSeen: _rememberContact,
+    );
+    _refreshAllPresence();
   }
 
   Future<void> _prewarmAll() async {
@@ -231,6 +438,17 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _relaySubscriptions[tunnel.id] = session.events.listen(
         (event) => unawaited(_handleBackgroundEvent(tunnel.id, event)),
       );
+      _refreshAllPresence();
+      _refreshPresence(tunnel.id);
+      unawaited(
+        session.sendControl(<String, dynamic>{
+          'operationId': CgIds.random(24),
+          'action': 'profile_card',
+          'nickname': profile.nickname,
+          if (profile.avatarBase64?.isNotEmpty == true)
+            'avatarBase64': profile.avatarBase64,
+        }),
+      );
     }
   }
 
@@ -238,11 +456,58 @@ class _ChernogramV12State extends State<ChernogramV12> {
     String tunnelId,
     InternetEvent event,
   ) async {
+    if (event.type == 'control' &&
+        event.data['action']?.toString() == 'profile_card') {
+      final contactId = event.data['relaySender']?.toString() ?? '';
+      if (contactId.isNotEmpty && contactId != _profile?.id) {
+        _rememberContact(
+          CgContact(
+            id: contactId,
+            nickname: event.data['nickname']?.toString() ??
+                event.data['relaySenderName']?.toString() ??
+                'user',
+            lastSeenAt: DateTime.now(),
+            tunnelIds: <String>[tunnelId],
+            avatarBase64: event.data['avatarBase64']?.toString(),
+          ),
+        );
+      }
+      return;
+    }
     if (event.type != 'message' || event.data['message'] is! Map) return;
     final raw = Map<String, dynamic>.from(event.data['message'] as Map);
     final incoming = await CgMediaStore.cacheIncomingMessage(
       CgMessage.fromJson(raw),
     );
+    if (incoming.authorId != _profile?.id) {
+      final tunnelIndexForNotification =
+          _tunnels.indexWhere((item) => item.id == tunnelId);
+      final notificationTitle = tunnelIndexForNotification < 0
+          ? (widget.ru ? 'Новое сообщение' : 'New message')
+          : _tunnels[tunnelIndexForNotification].displayName;
+      final body = incoming.text.trim().isNotEmpty
+          ? '${incoming.authorName}: ${incoming.text.trim()}'
+          : '${incoming.authorName}: ${incoming.attachment?.name ?? (widget.ru ? 'Новое сообщение' : 'New message')}';
+      unawaited(
+        CgNotificationService.showMessage(
+          messageId: incoming.id,
+          tunnelId: tunnelId,
+          title: notificationTitle,
+          body: body,
+        ),
+      );
+    }
+    if (incoming.authorId.isNotEmpty && incoming.authorId != _profile?.id) {
+      _rememberContact(
+        CgContact(
+          id: incoming.authorId,
+          nickname: incoming.authorName.trim().isEmpty ? 'user' : incoming.authorName,
+          lastSeenAt: DateTime.now(),
+          tunnelIds: <String>[tunnelId],
+          avatarBase64: incoming.meta['authorAvatarBase64']?.toString(),
+        ),
+      );
+    }
     if (!mounted) return;
     final tunnelIndex = _tunnels.indexWhere((item) => item.id == tunnelId);
     if (tunnelIndex < 0) return;
@@ -290,6 +555,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _unreadCounts.remove(tunnel.id);
     await _relaySubscriptions.remove(tunnel.id)?.cancel();
     await InternetRelay.close(tunnel.id);
+    _onlineByTunnel.remove(tunnel.id);
+    _refreshPresence();
     await _saveTunnelsFast(_tunnels);
     await _persistUnread();
     if (mounted) setState(() {});
@@ -596,6 +863,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
     final currentIndex = _tunnels.indexWhere((item) => item.id == tunnel.id);
     final current = currentIndex < 0 ? tunnel : _tunnels[currentIndex];
     _activeTunnelId = current.id;
+    CgNotificationService.setActiveTunnel(current.id);
     _markRead(current.id);
     await Navigator.push<void>(
       context,
@@ -614,6 +882,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
       ),
     );
     _activeTunnelId = null;
+    CgNotificationService.setActiveTunnel(null);
     _markRead(current.id);
   }
 
@@ -637,6 +906,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _saveTunnelsTimer = Timer(const Duration(milliseconds: 350), () {
       unawaited(_saveTunnelsFast(snapshot));
     });
+    unawaited(_syncAppMonitor());
+    _refreshAllPresence();
   }
 
   void _rememberContact(CgContact incoming) {
@@ -664,35 +935,101 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _contacts.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
     if (mounted) setState(() {});
     _saveContactsTimer?.cancel();
+    _presenceRefreshTimer?.cancel();
+    unawaited(ChernogramAppMonitor.stop());
     final snapshot = List<CgContact>.from(_contacts);
     _saveContactsTimer = Timer(const Duration(milliseconds: 350), () {
       unawaited(_saveContactsFast(snapshot));
     });
+    unawaited(_ensureDirectTunnel(incoming));
+  }
+
+  Future<CgTunnel> _ensureDirectTunnel(CgContact contact) async {
+    final profile = _profile;
+    if (profile == null) {
+      throw StateError('Profile is not loaded');
+    }
+    final directId = _directTunnelId(profile.id, contact.id);
+    final existingIndex = _tunnels.indexWhere((item) => item.id == directId);
+    CgTunnel direct;
+    var changed = false;
+    if (existingIndex >= 0) {
+      final existing = _tunnels[existingIndex];
+      direct = existing.copyWith(
+        name: contact.nickname,
+        avatarBase64: contact.avatarBase64,
+      );
+      if (direct.name != existing.name ||
+          direct.avatarBase64 != existing.avatarBase64) {
+        final copy = <CgTunnel>[..._tunnels];
+        copy[existingIndex] = direct;
+        _tunnels = copy;
+        changed = true;
+      }
+    } else {
+      direct = CgTunnel(
+        id: directId,
+        name: contact.nickname,
+        isPrivate: true,
+        ownerId: '',
+        secret: _directTunnelSecret(profile.id, contact.id),
+        createdAt: DateTime.now(),
+        avatarBase64: contact.avatarBase64,
+        messages: const <CgMessage>[],
+      );
+      _tunnels = <CgTunnel>[direct, ..._tunnels];
+      changed = true;
+    }
+    if (changed) {
+      await _saveTunnelsFast(_tunnels);
+      if (mounted) setState(() {});
+    }
+    if (!_relaySubscriptions.containsKey(direct.id)) {
+      final session = await InternetRelay.open(
+        tunnelId: direct.id,
+        secret: direct.secret,
+        profileId: profile.id,
+        nickname: profile.nickname,
+        history: direct.historyJson(),
+      );
+      _relaySubscriptions[direct.id] = session.events.listen(
+        (event) => unawaited(_handleBackgroundEvent(direct.id, event)),
+      );
+      unawaited(
+        session.sendControl(<String, dynamic>{
+          'operationId': CgIds.random(24),
+          'action': 'profile_card',
+          'nickname': profile.nickname,
+          if (profile.avatarBase64?.isNotEmpty == true)
+            'avatarBase64': profile.avatarBase64,
+        }),
+      );
+    }
+    return direct;
   }
 
   Future<void> _openContact(CgContact contact) async {
-    for (final tunnelId in contact.tunnelIds) {
-      final index = _tunnels.indexWhere((item) => item.id == tunnelId);
-      if (index >= 0) {
-        await _openTunnel(_tunnels[index]);
-        return;
-      }
-    }
+    final direct = await _ensureDirectTunnel(contact);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.ru
-              ? 'Чат с этим контактом пока не найден.'
-              : 'No chat was found for this contact.',
-        ),
-      ),
-    );
+    await _openTunnel(direct);
   }
 
   Future<void> _saveProfile(CgProfile profile) async {
     await CgStore.saveProfile(profile);
     if (mounted) setState(() => _profile = profile);
+    for (final tunnel in _tunnels) {
+      final session = InternetRelay.session(tunnel.id);
+      if (session == null) continue;
+      unawaited(
+        session.sendControl(<String, dynamic>{
+          'operationId': CgIds.random(24),
+          'action': 'profile_card',
+          'nickname': profile.nickname,
+          if (profile.avatarBase64?.isNotEmpty == true)
+            'avatarBase64': profile.avatarBase64,
+        }),
+      );
+    }
   }
 
   Future<void> _togglePrivacy() async {
@@ -706,6 +1043,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
     _saveTunnelsTimer?.cancel();
     _saveContactsTimer?.cancel();
     unawaited(_linkSubscription?.cancel());
+    unawaited(_notificationClickSubscription?.cancel());
+    unawaited(_callClickSubscription?.cancel());
     for (final subscription in _relaySubscriptions.values) {
       unawaited(subscription.cancel());
     }
@@ -716,7 +1055,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
   Widget build(BuildContext context) {
     if (_loading || _profile == null) {
       return const Scaffold(
-        body: Center(child: ChernogramLogo(size: 112, withPlate: true)),
+        body: Center(child: ChernogramLogo(size: 112)),
       );
     }
 
@@ -724,15 +1063,19 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _V12ChatsHome(
         ru: widget.ru,
         tunnels: _tunnels,
+        contacts: _contacts,
         unreadCounts: _unreadCounts,
+        onlineByTunnel: _onlineByTunnel,
         privacyLens: _privacyLens,
         onCreate: _createTunnel,
         onScan: _scanQr,
         onOpen: _openTunnel,
+        onOpenContact: _openContact,
       ),
       _V12ContactsScreen(
         ru: widget.ru,
         contacts: _contacts,
+        onlineContactIds: _onlineContactIds,
         privacyLens: _privacyLens,
         onOpen: _openContact,
       ),
@@ -757,6 +1100,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
       extendBody: true,
       appBar: AppBar(
         title: BrandHeader(
+          ru: widget.ru,
           subtitle: widget.ru ? 'чаты и звонки' : 'chats and calls',
         ),
         actions: [
@@ -915,7 +1259,7 @@ class _FastChatHostState extends State<_FastChatHost> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        body: const Center(child: ChernogramLogo(size: 82, withPlate: true)),
+        body: const Center(child: ChernogramLogo(size: 82)),
       );
     }
 
@@ -954,190 +1298,484 @@ class _FastChatHostState extends State<_FastChatHost> {
   }
 }
 
-class _V12ChatsHome extends StatelessWidget {
+class _V12ChatsHome extends StatefulWidget {
   final bool ru;
   final List<CgTunnel> tunnels;
+  final List<CgContact> contacts;
   final Map<String, int> unreadCounts;
+  final Map<String, int> onlineByTunnel;
   final bool privacyLens;
   final VoidCallback onCreate;
   final VoidCallback onScan;
   final Future<void> Function(CgTunnel tunnel) onOpen;
+  final Future<void> Function(CgContact contact) onOpenContact;
 
   const _V12ChatsHome({
     required this.ru,
     required this.tunnels,
+    required this.contacts,
     required this.unreadCounts,
+    required this.onlineByTunnel,
     required this.privacyLens,
     required this.onCreate,
     required this.onScan,
     required this.onOpen,
+    required this.onOpenContact,
   });
+
+  @override
+  State<_V12ChatsHome> createState() => _V12ChatsHomeState();
+}
+
+class _V12ChatsHomeState extends State<_V12ChatsHome> {
+  final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _searching = false;
+  bool _aboutOpen = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  List<CgTunnel> get _visibleTunnels => widget.tunnels
+      .where((item) => !item.id.startsWith('dm_') || item.messages.isNotEmpty)
+      .toList(growable: false);
+
+  String _key(String value) => value.trim().toLowerCase();
+
+  bool _chatMatches(CgTunnel tunnel, String query) {
+    if (_key(tunnel.displayName).contains(query)) return true;
+    return tunnel.messages.reversed.take(50).any((message) =>
+        _key(message.authorName).contains(query) ||
+        _key(message.text).contains(query) ||
+        _key(message.attachment?.name ?? '').contains(query));
+  }
+
+  void _openSearch() {
+    setState(() => _searching = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _search.clear();
+    _searchFocus.unfocus();
+    setState(() => _searching = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final visible = _visibleTunnels;
+    final query = _key(_search.text);
+    final foundChats = query.isEmpty
+        ? const <CgTunnel>[]
+        : visible.where((item) => _chatMatches(item, query)).toList();
+    final foundPeople = query.isEmpty
+        ? const <CgContact>[]
+        : widget.contacts.where((item) {
+            return _key(item.nickname).contains(query) ||
+                _key(item.id).contains(query);
+          }).toList();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 106),
-      children: [
+      children: <Widget>[
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(22),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                ru ? 'Связь без границ' : 'Connection without borders',
-                style: const TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w900,
-                ),
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      widget.ru
+                          ? 'Связь без границ'
+                          : 'Connection without borders',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        height: 1.08,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: widget.ru ? 'О проекте' : 'About',
+                    onPressed: () => setState(() => _aboutOpen = !_aboutOpen),
+                    icon: AnimatedRotation(
+                      turns: _aboutOpen ? .5 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      child: const Icon(Icons.keyboard_arrow_down_rounded),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 5),
               Text(
-                ru
-                    ? 'Сообщения, файлы и звонки без VPN и рекламы.'
-                    : 'Messages, files and calls without VPN or ads.',
+                widget.ru
+                    ? 'Общайся без впн и рекламы.'
+                    : 'Chat without VPN or ads.',
                 style: TextStyle(
                   color: scheme.onSurface.withValues(alpha: .58),
                 ),
               ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: onCreate,
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(ru ? 'Новый чат' : 'New chat'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 110,
-                    child: FilledButton.tonalIcon(
-                      onPressed: onScan,
-                      icon: const Icon(Icons.qr_code_scanner_rounded),
-                      label: const Text('QR'),
-                    ),
-                  ),
-                ],
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                child: _aboutOpen
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              widget.ru
+                                  ? 'Чернограм объединяет чаты, звонки, файлы, музыку и прямой обмен между людьми и собственными устройствами. История хранится локально, а тяжёлый контент загружается только по запросу.'
+                                  : 'Chernogram combines chats, calls, files, music and direct sharing between people and your own devices. History stays local and heavy content loads only on demand.',
+                              style: TextStyle(
+                                height: 1.35,
+                                color: scheme.onSurface.withValues(alpha: .66),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 7,
+                              runSpacing: 7,
+                              children: <Widget>[
+                                _pill(context, Icons.block_rounded,
+                                    widget.ru ? 'Без рекламы' : 'No ads'),
+                                _pill(context, Icons.folder_copy_outlined,
+                                    widget.ru ? 'P2P-файлы' : 'P2P files'),
+                                _pill(context, Icons.offline_bolt_outlined,
+                                    widget.ru ? 'Локальная история' : 'Local history'),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 10),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _searching
+                    ? TextField(
+                        key: const ValueKey<String>('home-search'),
+                        controller: _search,
+                        focusNode: _searchFocus,
+                        onChanged: (_) => setState(() {}),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: widget.ru
+                              ? 'Чаты, люди и аккаунты'
+                              : 'Chats, people and accounts',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: IconButton(
+                            onPressed: _closeSearch,
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                          filled: true,
+                          fillColor: scheme.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      )
+                    : Row(
+                        key: const ValueKey<String>('home-actions'),
+                        children: <Widget>[
+                          SizedBox(
+                            width: 54,
+                            height: 48,
+                            child: Material(
+                              color: Colors.white.withValues(alpha: .92),
+                              borderRadius: BorderRadius.circular(16),
+                              child: InkWell(
+                                onTap: _openSearch,
+                                borderRadius: BorderRadius.circular(16),
+                                child: Icon(
+                                  Icons.search_rounded,
+                                  color: scheme.primary,
+                                  size: 25,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 6,
+                            child: FilledButton.icon(
+                              onPressed: widget.onCreate,
+                              icon: const Icon(Icons.add_rounded),
+                              label: Text(widget.ru ? 'Новый чат' : 'New chat'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 88,
+                            child: FilledButton.tonalIcon(
+                              onPressed: widget.onScan,
+                              icon: const Icon(Icons.qr_code_scanner_rounded),
+                              label: const Text('QR'),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 17),
+        if (_searching)
+          ..._searchResults(context, query, foundChats, foundPeople)
+        else ...<Widget>[
+          _header(context, widget.ru ? 'Чаты' : 'Chats', '${visible.length}'),
+          const SizedBox(height: 6),
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 54),
+              child: Column(
+                children: <Widget>[
+                  Icon(Icons.forum_outlined,
+                      size: 64,
+                      color: scheme.onSurface.withValues(alpha: .16)),
+                  const SizedBox(height: 12),
+                  Text(widget.ru ? 'Чатов пока нет' : 'No chats yet',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                ],
+              ),
+            )
+          else
+            for (final tunnel in visible) _chatTile(context, tunnel),
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _searchResults(BuildContext context, String query,
+      List<CgTunnel> chats, List<CgContact> people) {
+    final scheme = Theme.of(context).colorScheme;
+    if (query.isEmpty) {
+      return <Widget>[
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  ru ? 'Чаты' : 'Chats',
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Text(
-                '${tunnels.length}',
-                style: TextStyle(
-                  color: scheme.onSurface.withValues(alpha: .45),
-                ),
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(12, 24, 12, 0),
+          child: Text(
+            widget.ru
+                ? 'Введите название чата, никнейм или ID аккаунта.'
+                : 'Type a chat name, nickname or account ID.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: .55)),
           ),
         ),
-        const SizedBox(height: 6),
-        if (tunnels.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 54),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.forum_outlined,
-                  size: 64,
-                  color: scheme.onSurface.withValues(alpha: .16),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  ru ? 'Чатов пока нет' : 'No chats yet',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
-          )
-        else
-          for (final tunnel in tunnels)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onOpen(tunnel),
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
-                  child: Row(
-                    children: [
-                      _V12TunnelAvatar(tunnel: tunnel, size: 50),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              privacyLens ? '••••••••' : tunnel.displayName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              privacyLens
-                                  ? '••••••••••'
-                                  : _lastMessage(tunnel, ru),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurface.withValues(alpha: .52),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if ((unreadCounts[tunnel.id] ?? 0) > 0)
-                        Container(
-                          constraints: const BoxConstraints(
-                            minWidth: 22,
-                            minHeight: 22,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
+      ];
+    }
+    if (chats.isEmpty && people.isEmpty) {
+      return <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(top: 32),
+          child: Center(
+            child: Text(widget.ru ? 'Ничего не найдено' : 'Nothing found'),
+          ),
+        ),
+      ];
+    }
+    return <Widget>[
+      if (chats.isNotEmpty) ...<Widget>[
+        _header(context, widget.ru ? 'Чаты' : 'Chats', '${chats.length}'),
+        for (final tunnel in chats) _chatTile(context, tunnel),
+        const SizedBox(height: 12),
+      ],
+      if (people.isNotEmpty) ...<Widget>[
+        _header(context, widget.ru ? 'Люди и аккаунты' : 'People and accounts',
+            '${people.length}'),
+        for (final contact in people) _contactTile(context, contact),
+      ],
+    ];
+  }
+
+  Widget _header(BuildContext context, String title, String count) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(
+                    fontSize: 19, fontWeight: FontWeight.w900)),
+          ),
+          Text(count,
+              style: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: .45))),
+        ],
+      ),
+    );
+  }
+
+  Widget _chatTile(BuildContext context, CgTunnel tunnel) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => unawaited(widget.onOpen(tunnel)),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
+          child: Row(
+            children: <Widget>[
+              _V12TunnelAvatar(tunnel: tunnel, size: 50),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Expanded(
                           child: Text(
-                            '${unreadCounts[tunnel.id]}',
+                            widget.privacyLens ? '••••••••' : tunnel.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if ((widget.onlineByTunnel[tunnel.id] ?? 0) > 0) ...<Widget>[
+                          const SizedBox(width: 7),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF22C7F2),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${widget.onlineByTunnel[tunnel.id]}',
+                            style: const TextStyle(
+                              color: Color(0xFF22C7F2),
                               fontSize: 11,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.privacyLens
+                          ? '••••••••••'
+                          : _lastMessage(tunnel, widget.ru),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurface.withValues(alpha: .52)),
+                    ),
+                  ],
                 ),
               ),
-            ),
-      ],
+              if ((widget.unreadCounts[tunnel.id] ?? 0) > 0)
+                Container(
+                  constraints:
+                      const BoxConstraints(minWidth: 22, minHeight: 22),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text('${widget.unreadCounts[tunnel.id]}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _contactTile(BuildContext context, CgContact contact) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => unawaited(widget.onOpenContact(contact)),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 9, 8, 9),
+          child: Row(
+            children: <Widget>[
+              _V12ProfileAvatar(
+                nickname: contact.nickname,
+                avatarBase64: contact.avatarBase64,
+                size: 48,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(widget.privacyLens ? '••••••••' : contact.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(widget.privacyLens ? '••••••••' : 'ID ${contact.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurface.withValues(alpha: .52))),
+                  ],
+                ),
+              ),
+              Icon(Icons.chat_bubble_outline_rounded, color: scheme.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(BuildContext context, IconData icon, String text) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 15, color: scheme.primary),
+          const SizedBox(width: 5),
+          Text(text,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurface.withValues(alpha: .72))),
+        ],
+      ),
     );
   }
 
@@ -1203,12 +1841,14 @@ class _V12TunnelAvatar extends StatelessWidget {
 class _V12ContactsScreen extends StatelessWidget {
   final bool ru;
   final List<CgContact> contacts;
+  final Set<String> onlineContactIds;
   final bool privacyLens;
   final Future<void> Function(CgContact contact) onOpen;
 
   const _V12ContactsScreen({
     required this.ru,
     required this.contacts,
+    required this.onlineContactIds,
     required this.privacyLens,
     required this.onOpen,
   });
@@ -1252,21 +1892,44 @@ class _V12ContactsScreen extends StatelessWidget {
         else
           for (final contact in contacts)
             Card(
+              margin: const EdgeInsets.only(bottom: 2),
               child: ListTile(
                 onTap: () => onOpen(contact),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 6,
                 ),
-                leading: _V12ContactAvatar(contact: contact),
+                leading: _V12ContactAvatar(
+                  contact: contact,
+                  online: onlineContactIds.contains(contact.id),
+                ),
                 title: Text(
                   privacyLens ? '••••••••' : '@${contact.nickname}',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                subtitle: Text(
-                  privacyLens ? '••••••••' : _lastSeen(contact.lastSeenAt, ru),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      privacyLens ? '••••••••' : _lastSeen(contact.lastSeenAt, ru),
+                    ),
+                    if (!privacyLens)
+                      Text(
+                        'ID ${contact.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: scheme.onSurface.withValues(alpha: .42),
+                        ),
+                      ),
+                  ],
                 ),
-                trailing: const Icon(Icons.chat_bubble_outline_rounded),
+                trailing: IconButton(
+                  tooltip: ru ? 'Личное сообщение' : 'Private message',
+                  onPressed: () => onOpen(contact),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                ),
               ),
             ),
       ],
@@ -1292,18 +1955,50 @@ class _V12ContactsScreen extends StatelessWidget {
 
 class _V12ContactAvatar extends StatelessWidget {
   final CgContact contact;
+  final bool online;
 
-  const _V12ContactAvatar({required this.contact});
+  const _V12ContactAvatar({required this.contact, required this.online});
 
   @override
   Widget build(BuildContext context) {
+    Widget avatar;
     if (contact.avatarBase64 != null) {
       try {
-        return CircleAvatar(
+        avatar = CircleAvatar(
           backgroundImage: MemoryImage(base64Decode(contact.avatarBase64!)),
         );
-      } catch (_) {}
+      } catch (_) {
+        avatar = _fallback(context);
+      }
+    } else {
+      avatar = _fallback(context);
     }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        avatar,
+        if (online)
+          Positioned(
+            right: -1,
+            top: -1,
+            child: Container(
+              width: 11,
+              height: 11,
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C7F2),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.surface,
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _fallback(BuildContext context) {
     final letter = contact.nickname.trim().isEmpty
         ? '?'
         : contact.nickname.trim()[0].toUpperCase();
@@ -1358,6 +2053,134 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
     if (mounted) {
       setState(() => _version = '${info.version} (${info.buildNumber})');
     }
+  }
+
+  Future<void> _showBuildInfo() async {
+    if (!mounted) return;
+    final notes = widget.ru
+        ? <String>[
+            'Убрана светлая полоса Android в тёмной теме.',
+            'Входящий звонок теперь принимается на любом экране приложения.',
+            'Отбой и очистка WebRTC не блокируют интерфейс Android.',
+            'В чатах показано число собеседников онлайн.',
+            'В контактах добавлены точки «в сети» и точный отступ 2 пикселя.',
+            'Добавлены QR и отправка постоянной ссылки установки Android.',
+          ]
+        : <String>[
+            'Removed the light Android divider in dark mode.',
+            'Incoming calls are now handled on every application screen.',
+            'Hang-up and WebRTC cleanup no longer block Android UI.',
+            'Chats show the number of online peers.',
+            'Contacts show online dots and use an exact 2-pixel gap.',
+            'Added a QR code and permanent Android installation link.',
+          ];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.ru ? 'Сборка Чернограма' : 'Cernogram build',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _version,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final note in notes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 5),
+                        child: Icon(Icons.circle, size: 7, color: Color(0xFF22C7F2)),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(child: Text(note)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: QrImageView(data: _androidInstallUrl, size: 190),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                _androidInstallUrl,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .58),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Share.share(
+                    widget.ru
+                        ? 'Установить Чернограм для Android:\n$_androidInstallUrl'
+                        : 'Install Cernogram for Android:\n$_androidInstallUrl',
+                  ),
+                  icon: const Icon(Icons.ios_share_rounded),
+                  label: Text(
+                    widget.ru
+                        ? 'Отправить ссылку на установку'
+                        : 'Share installation link',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final shared =
+                        await ChernogramCrashReporter.shareDiagnosticReport(
+                      ru: widget.ru,
+                    );
+                    if (!shared && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            widget.ru
+                                ? 'Не удалось подготовить журнал ошибок'
+                                : 'Could not prepare the crash report',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.bug_report_outlined),
+                  label: Text(
+                    widget.ru
+                        ? 'Отправить журнал ошибок'
+                        : 'Share crash report',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickAvatar() async {
@@ -1427,13 +2250,20 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
       ),
       if (_version.isNotEmpty)
         Center(
-          child: Text(
-            '${widget.ru ? 'Версия' : 'Version'} $_version',
-            style: TextStyle(
-              fontSize: 11,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: .48),
+          child: InkWell(
+            onTap: _showBuildInfo,
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                '${widget.ru ? 'Версия' : 'Version'} $_version',
+                style: TextStyle(
+                  fontSize: 11,
+                  decoration: TextDecoration.underline,
+                  decorationStyle: TextDecorationStyle.dotted,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .58),
+                ),
+              ),
             ),
           ),
         ),
@@ -1458,6 +2288,13 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
         icon: const Icon(Icons.system_update_alt_rounded),
         label: Text(widget.ru ? 'Проверить обновления' : 'Check updates'),
       ),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        onPressed: () => CgPermissionCenter.open(context, ru: widget.ru),
+        icon: const Icon(Icons.admin_panel_settings_outlined),
+        label: Text(widget.ru ? 'Доступы приложения' : 'App permissions'),
+      ),
+      const SizedBox(height: 8),
       OutlinedButton.icon(
         onPressed: widget.onChangeLanguage,
         icon: const Icon(Icons.language),

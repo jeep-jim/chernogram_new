@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'notification_service.dart';
+
 class CgPermissionCenter {
   static const String _introKey = 'cg_permission_intro_v2';
 
@@ -78,6 +80,7 @@ class _PermissionSheetState extends State<_PermissionSheet> {
           : 'Opening system prompts one by one…';
     });
 
+    await CgNotificationService.requestCallPermissions();
     final permissions = <Permission>[
       Permission.notification,
       Permission.microphone,

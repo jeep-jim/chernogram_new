@@ -94,14 +94,15 @@ class InternetTunnelSession {
     });
     try {
       await _prepareCryptoAndTopic();
+      final connectHosts = relayHosts.take(2).toList(growable: false);
       final completer = Completer<void>();
       var finished = 0;
-      for (final host in relayHosts) {
+      for (final host in connectHosts) {
         unawaited(
           _connectHost(host).then((ok) {
             finished++;
             if (ok && !completer.isCompleted) completer.complete();
-            if (finished == relayHosts.length && !completer.isCompleted) {
+            if (finished == connectHosts.length && !completer.isCompleted) {
               completer.complete();
             }
           }),
@@ -155,10 +156,10 @@ class InternetTunnelSession {
         scheme: 'wss',
         host: host,
         path: '/${_topic!}/ws',
-        queryParameters: const <String, String>{'since': '30m'},
+        queryParameters: const <String, String>{'since': '30s'},
       );
       final socket = await WebSocket.connect(uri.toString()).timeout(
-        const Duration(seconds: 6),
+        const Duration(milliseconds: 3200),
       );
       if (_closed) {
         await socket.close();
@@ -329,6 +330,7 @@ class InternetTunnelSession {
           ...data,
           'relaySender': sender,
           'relaySenderName': senderName,
+          'sentAt': envelope['sentAt'],
           'receivedAt': DateTime.now().toUtc().toIso8601String(),
         };
         _signalHistory.add(signal);
@@ -427,14 +429,27 @@ class InternetTunnelSession {
     ];
     String? successfulHost;
     Object? lastError;
-    for (final host in orderedHosts) {
-      try {
-        await _publishEncrypted(host, encrypted, cache: kind != 'presence');
-        successfulHost = host;
-        break;
-      } catch (error) {
-        lastError = error;
-        _scheduleHostReconnect(host);
+    final fastPacket = kind == 'signal' ||
+        kind == 'presence' ||
+        kind == 'control' ||
+        (kind == 'message' && encrypted.length <= 3500);
+    if (fastPacket) {
+      successfulHost = await _publishSignalFast(orderedHosts, encrypted);
+    } else {
+      for (final host in orderedHosts) {
+        try {
+          await _publishEncrypted(
+            host,
+            encrypted,
+            cache: kind != 'presence',
+            priority: 'default',
+          );
+          successfulHost = host;
+          break;
+        } catch (error) {
+          lastError = error;
+          _scheduleHostReconnect(host);
+        }
       }
     }
 
@@ -452,7 +467,12 @@ class InternetTunnelSession {
       }
       if (backup != null && kind != 'presence') {
         unawaited(
-          _publishEncrypted(backup, encrypted, cache: true).catchError((_) {}),
+          _publishEncrypted(
+            backup,
+            encrypted,
+            cache: true,
+            priority: kind == 'signal' ? 'max' : 'high',
+          ).catchError((_) {}),
         );
       }
       return;
@@ -494,10 +514,45 @@ class InternetTunnelSession {
     _scheduleGlobalReconnect();
   }
 
+  Future<String?> _publishSignalFast(
+    List<String> hosts,
+    String encrypted,
+  ) async {
+    final selected = hosts.take(4).toList(growable: false);
+    if (selected.isEmpty) return null;
+    final completer = Completer<String?>();
+    var completed = 0;
+    for (final host in selected) {
+      unawaited(
+        _publishEncrypted(
+          host,
+          encrypted,
+          cache: true,
+          priority: 'max',
+          timeout: const Duration(milliseconds: 2600),
+        ).then((_) {
+          if (!completer.isCompleted) completer.complete(host);
+        }).catchError((Object error) {
+          completed++;
+          _scheduleHostReconnect(host);
+          if (completed >= selected.length && !completer.isCompleted) {
+            completer.complete(null);
+          }
+        }),
+      );
+    }
+    return completer.future.timeout(
+      const Duration(milliseconds: 2800),
+      onTimeout: () => null,
+    );
+  }
+
   Future<void> _publishEncrypted(
     String host,
     String encrypted, {
     required bool cache,
+    String priority = 'default',
+    Duration timeout = const Duration(seconds: 4),
   }) async {
     final bytes = utf8.encode(encrypted);
     final large = bytes.length > 3500;
@@ -509,14 +564,14 @@ class InternetTunnelSession {
                 ? 'application/octet-stream'
                 : 'text/plain; charset=utf-8',
             'Title': 'message',
-            'Priority': 'min',
+            'Priority': priority,
             'Firebase': 'no',
             if (large) 'Filename': 'packet.cg',
             if (!cache) 'Cache': 'no',
           },
           body: large ? bytes : encrypted,
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 6));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('$host:${response.statusCode}');
     }
@@ -587,11 +642,11 @@ class InternetTunnelSession {
   void _startTimers() {
     _presenceTimer?.cancel();
     _peerCleanupTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 35), (_) {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 12), (_) {
       unawaited(_publishPresence());
     });
-    _peerCleanupTimer = Timer.periodic(const Duration(seconds: 25), (_) {
-      final cutoff = DateTime.now().subtract(const Duration(seconds: 100));
+    _peerCleanupTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 32));
       final removed = _peers.keys
           .where((id) => _peers[id]?.isBefore(cutoff) == true)
           .toList();
@@ -613,7 +668,7 @@ class InternetTunnelSession {
   void _scheduleHostReconnect(String host) {
     if (_closed || _sockets.containsKey(host)) return;
     _relayRetryTimers.remove(host)?.cancel();
-    final delay = Duration(seconds: 15 + (_reconnectAttempt * 5).clamp(0, 45).toInt());
+    final delay = Duration(seconds: 4 + (_reconnectAttempt * 2).clamp(0, 12).toInt());
     _relayRetryTimers[host] = Timer(delay, () {
       unawaited(_connectHost(host));
     });
@@ -622,7 +677,7 @@ class InternetTunnelSession {
   void _scheduleGlobalReconnect() {
     if (_closed || connected || _globalRetryTimer?.isActive == true) return;
     _reconnectAttempt++;
-    final seconds = (10 + _reconnectAttempt * 8).clamp(10, 60).toInt();
+    final seconds = (3 + _reconnectAttempt * 3).clamp(3, 18).toInt();
     _globalRetryTimer = Timer(Duration(seconds: seconds), () {
       _globalRetryTimer = null;
       unawaited(connect());

@@ -27,7 +27,7 @@
   <div class="tag">Открываем установленное приложение сразу в нужном чате. Установка показывается только отдельной кнопкой.</div>
   <div class="actions">
     <a id="openApp" class="btn primary pulse" href="chernogram://join">Открыть чат в приложении</a>
-    <a id="android" class="btn install" href="https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=15">Установить Чернограм для Android</a>
+    <a id="android" class="btn install" href="https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=40">Установить Чернограм для Android</a>
     <a id="ios" class="btn disabled" href="#" hidden>iPhone: ожидается подписанная сборка</a>
     <button id="copy" class="btn" type="button">Скопировать код приглашения</button>
   </div>
@@ -38,7 +38,7 @@
 <script>
   const params = new URLSearchParams(location.search);
   const token = params.get('invite') || params.get('t') || location.hash.replace(/^#/, '');
-  const apk = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=15';
+  const apk = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=40';
   const deep = token ? `chernogram://join/${encodeURIComponent(token)}` : 'chernogram://join';
   const androidIntent = token
     ? `intent://join/${encodeURIComponent(token)}#Intent;scheme=chernogram;package=com.example.chernogram;end`

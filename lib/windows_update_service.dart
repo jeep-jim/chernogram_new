@@ -301,33 +301,59 @@ class ChernogramWindowsUpdater {
       final installDirectory = executable.parent.path;
       final executableName = executable.uri.pathSegments.last;
       final script = File(
-        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ps1',
+        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.cmd',
       );
+      final readyFile = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-install-$safeVersion.ready',
+      );
+      final launcher = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-update-launcher-$safeVersion.vbs',
+      );
+      if (await readyFile.exists()) await readyFile.delete();
       await script.writeAsString(_windowsInstallScript, flush: true);
 
+      final command = <String>[
+        'cmd.exe',
+        '/d',
+        '/s',
+        '/c',
+        'call',
+        _quoteWindowsArgument(script.path),
+        pid.toString(),
+        _quoteWindowsArgument(zipFile.path),
+        _quoteWindowsArgument(installDirectory),
+        _quoteWindowsArgument(executableName),
+        _quoteWindowsArgument(readyFile.path),
+      ].join(' ');
+      final escapedCommand = command.replaceAll('"', '""');
+      await launcher.writeAsString(
+        'Set shell = CreateObject("WScript.Shell")\r\n'
+        'shell.Run "$escapedCommand", 0, False\r\n'
+        'CreateObject("Scripting.FileSystemObject").DeleteFile '
+        'WScript.ScriptFullName, True\r\n',
+        flush: true,
+      );
+
       await Process.start(
-        'powershell.exe',
-        <String>[
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-AppProcessId',
-          pid.toString(),
-          '-ZipPath',
-          zipFile.path,
-          '-InstallDir',
-          installDirectory,
-          '-ExeName',
-          executableName,
-        ],
+        'wscript.exe',
+        <String>['//B', '//Nologo', launcher.path],
         mode: ProcessStartMode.detached,
         runInShell: false,
       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      var helperReady = false;
+      for (var attempt = 0; attempt < 50; attempt++) {
+        if (await readyFile.exists()) {
+          helperReady = true;
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (!helperReady) {
+        throw StateError('Windows updater helper did not start');
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
       closeDialog();
       exit(0);
     } catch (error) {
@@ -386,59 +412,74 @@ class ChernogramWindowsUpdater {
     );
   }
 
-  static const String _windowsInstallScript = r'''
-param(
-  [Parameter(Mandatory=$true)][int]$AppProcessId,
-  [Parameter(Mandatory=$true)][string]$ZipPath,
-  [Parameter(Mandatory=$true)][string]$InstallDir,
-  [Parameter(Mandatory=$true)][string]$ExeName
+  static String _quoteWindowsArgument(String value) {
+    return '"${value.replaceAll('"', r'\"')}"';
+  }
+
+  static const String _windowsInstallScript = r'''@echo off
+setlocal EnableExtensions
+
+set "APP_PID=%~1"
+set "ZIP_PATH=%~2"
+set "INSTALL_DIR=%~3"
+set "EXE_NAME=%~4"
+set "READY_PATH=%~5"
+set "ORIGINAL_INSTALL=%INSTALL_DIR%"
+set "LOG_PATH=%TEMP%\chernogram-update.log"
+set "STAGE=%TEMP%\chernogram-stage-%RANDOM%-%RANDOM%"
+
+> "%READY_PATH%" echo ready
+> "%LOG_PATH%" echo [%DATE% %TIME%] Windows updater started for PID %APP_PID%
+
+:wait_for_app
+tasklist /FI "PID eq %APP_PID%" /NH 2>NUL | findstr /R /C:"[ ]%APP_PID%[ ]" >NUL
+if not errorlevel 1 (
+  ping 127.0.0.1 -n 2 >NUL
+  goto wait_for_app
 )
+ping 127.0.0.1 -n 2 >NUL
 
-$ErrorActionPreference = 'Stop'
-$logPath = Join-Path ([System.IO.Path]::GetTempPath()) 'chernogram-update.log'
-$stage = Join-Path ([System.IO.Path]::GetTempPath()) ('chernogram-stage-' + [Guid]::NewGuid().ToString('N'))
+if exist "%STAGE%" rmdir /S /Q "%STAGE%" >NUL 2>&1
+mkdir "%STAGE%" >>"%LOG_PATH%" 2>&1
+if errorlevel 1 goto fail
 
-try {
-  "[$([DateTime]::UtcNow.ToString('o'))] Waiting for process $AppProcessId" | Set-Content -LiteralPath $logPath -Encoding UTF8
-  Wait-Process -Id $AppProcessId -ErrorAction SilentlyContinue
-  Start-Sleep -Milliseconds 700
+where tar.exe >NUL 2>&1
+if errorlevel 1 goto fail
 
-  New-Item -ItemType Directory -Path $stage -Force | Out-Null
-  Expand-Archive -LiteralPath $ZipPath -DestinationPath $stage -Force
+tar.exe -xf "%ZIP_PATH%" -C "%STAGE%" >>"%LOG_PATH%" 2>&1
+if errorlevel 1 goto fail
 
-  $copied = $false
-  for ($attempt = 1; $attempt -le 20; $attempt++) {
-    try {
-      Get-ChildItem -LiteralPath $stage -Force | Copy-Item -Destination $InstallDir -Recurse -Force
-      $copied = $true
-      break
-    }
-    catch {
-      Start-Sleep -Milliseconds 600
-    }
-  }
+set "SOURCE=%STAGE%\app"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+set "SOURCE=%STAGE%"
+if exist "%SOURCE%\%EXE_NAME%" goto source_ready
+for /R "%STAGE%" %%F in (%EXE_NAME%) do set "SOURCE=%%~dpF"
 
-  if (-not $copied) {
-    throw 'Could not replace application files.'
-  }
+:source_ready
+if not exist "%SOURCE%\%EXE_NAME%" goto fail
 
-  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+for /L %%A in (1,1,30) do (
+  robocopy "%SOURCE%" "%INSTALL_DIR%" /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP >>"%LOG_PATH%" 2>&1
+  if errorlevel 8 (
+    ping 127.0.0.1 -n 2 >NUL
+  ) else (
+    goto copied
+  )
+)
+goto fail
 
-  $newExe = Join-Path $InstallDir $ExeName
-  if (-not (Test-Path -LiteralPath $newExe)) {
-    throw "Updated executable was not found: $newExe"
-  }
+:copied
+if not exist "%INSTALL_DIR%\%EXE_NAME%" goto fail
+del /Q "%ZIP_PATH%" >NUL 2>&1
+rmdir /S /Q "%STAGE%" >NUL 2>&1
+del /Q "%READY_PATH%" >NUL 2>&1
+>>"%LOG_PATH%" echo [%DATE% %TIME%] Update completed
+start "" /D "%INSTALL_DIR%" "%INSTALL_DIR%\%EXE_NAME%"
+exit /B 0
 
-  "[$([DateTime]::UtcNow.ToString('o'))] Update completed" | Add-Content -LiteralPath $logPath -Encoding UTF8
-  Start-Process -FilePath $newExe -WorkingDirectory $InstallDir
-}
-catch {
-  $_ | Out-String | Add-Content -LiteralPath $logPath -Encoding UTF8
-  $oldExe = Join-Path $InstallDir $ExeName
-  if (Test-Path -LiteralPath $oldExe) {
-    Start-Process -FilePath $oldExe -WorkingDirectory $InstallDir
-  }
-}
+:fail
+>>"%LOG_PATH%" echo [%DATE% %TIME%] Update failed, restarting previous version
+if exist "%ORIGINAL_INSTALL%\%EXE_NAME%" start "" /D "%ORIGINAL_INSTALL%" "%ORIGINAL_INSTALL%\%EXE_NAME%"
+exit /B 1
 ''';
 }

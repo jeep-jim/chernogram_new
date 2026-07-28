@@ -4,6 +4,8 @@
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:statusBarColor">#080808</item>
         <item name="android:navigationBarColor">#080808</item>
+        <item name="android:navigationBarDividerColor">#080808</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
@@ -11,6 +13,8 @@
         <item name="android:windowBackground">#080808</item>
         <item name="android:statusBarColor">#080808</item>
         <item name="android:navigationBarColor">#080808</item>
+        <item name="android:navigationBarDividerColor">#080808</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>

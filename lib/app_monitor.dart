@@ -45,6 +45,7 @@ class ChernogramAppMonitor {
   static ValueChanged<CgTunnel>? _onTunnelChanged;
   static ValueChanged<CgContact>? _onContactSeen;
   static bool _dialogOpen = false;
+  static final Set<String> _endedCalls = <String>{};
 
   static Future<void> sync({
     required CgProfile profile,
@@ -251,21 +252,42 @@ class ChernogramAppMonitor {
     Map<String, dynamic> signal,
   ) async {
     final action = signal['action']?.toString() ?? '';
-    if (action != 'call_invite' && action != 'group_call_invite') return;
     final callId = signal['callId']?.toString() ?? '';
+    final profile = _profile;
+    final tunnel = _tunnels[tunnelId];
+    if (profile == null || tunnel == null || callId.isEmpty) return;
+
+    final target = signal['target']?.toString() ?? '';
+    if (target.isNotEmpty && target != profile.id) return;
+
+    if (action == 'call_end' ||
+        action == 'call_decline' ||
+        action == 'group_leave') {
+      _endedCalls.add(callId);
+      if (_endedCalls.length > 500) _endedCalls.remove(_endedCalls.first);
+      return;
+    }
+    if (action != 'call_invite' && action != 'group_call_invite') return;
+    if (_endedCalls.contains(callId)) return;
+
+    final signalAt = DateTime.tryParse(
+      signal['receivedAt']?.toString() ?? signal['sentAt']?.toString() ?? '',
+    );
+    if (signalAt != null &&
+        DateTime.now().toUtc().difference(signalAt.toUtc()).inSeconds > 25) {
+      return;
+    }
+
     final from = signal['from']?.toString() ??
         signal['relaySender']?.toString() ??
         '';
-    final profile = _profile;
-    final tunnel = _tunnels[tunnelId];
-    if (profile == null ||
-        tunnel == null ||
-        from.isEmpty ||
-        from == profile.id ||
-        !CgSignalRegistry.claim(callId) ||
-        _dialogOpen) {
-      return;
-    }
+    if (from.isEmpty || from == profile.id || _dialogOpen) return;
+
+    final context = chernogramNavigatorKey.currentContext;
+    final navigator = chernogramNavigatorKey.currentState;
+    if (context == null || navigator == null) return;
+    if (!CgSignalRegistry.claim(callId)) return;
+
     final fromName = signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         (_ru ? 'Собеседник' : 'Peer');
@@ -274,73 +296,88 @@ class ChernogramAppMonitor {
     final callerAvatar = signal['avatarBase64']?.toString();
     _rememberContact(tunnelId, from, fromName);
 
-    final context = chernogramNavigatorKey.currentContext;
-    if (context == null) return;
     _dialogOpen = true;
-    await ChernogramSound.startIncomingCall(video: video);
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        icon: CgCallAvatar(
-          avatarBase64: callerAvatar,
-          name: fromName,
-          size: 78,
-          fallbackIcon: group
-              ? Icons.groups_2_rounded
-              : video
-                  ? Icons.videocam_rounded
-                  : Icons.call_rounded,
-        ),
-        title: Text(
-          group
-              ? (video
-                  ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
-                  : (_ru ? 'Групповой звонок' : 'Group call'))
-              : (video
-                  ? (_ru ? 'Видеозвонок' : 'Video call')
-                  : (_ru ? 'Аудиозвонок' : 'Audio call')),
-        ),
-        content: Text(
-          group
-              ? (_ru
-                  ? '$fromName приглашает в звонок до 6 участников.'
-                  : '$fromName invites you to a call for up to 6 participants.')
-              : (_ru ? '$fromName звонит вам' : '$fromName is calling you'),
-          textAlign: TextAlign.center,
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: <Widget>[
-          IconButton.filled(
-            style: IconButton.styleFrom(
-              backgroundColor: ChernogramColors.danger,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            icon: const Icon(Icons.call_end_rounded),
+    bool? accepted;
+    try {
+      await ChernogramSound.startIncomingCall(video: video);
+      accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          icon: CgCallAvatar(
+            avatarBase64: callerAvatar,
+            name: fromName,
+            size: 78,
+            fallbackIcon: group
+                ? Icons.groups_2_rounded
+                : video
+                    ? Icons.videocam_rounded
+                    : Icons.call_rounded,
           ),
-          const SizedBox(width: 20),
-          IconButton.filled(
-            style: IconButton.styleFrom(
-              backgroundColor: ChernogramColors.success,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.call_rounded),
+          title: Text(
+            group
+                ? (video
+                    ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
+                    : (_ru ? 'Групповой звонок' : 'Group call'))
+                : (video
+                    ? (_ru ? 'Видеозвонок' : 'Video call')
+                    : (_ru ? 'Аудиозвонок' : 'Audio call')),
           ),
-        ],
-      ),
-    );
-    await ChernogramSound.stopIncomingCall();
-    _dialogOpen = false;
+          content: Text(
+            group
+                ? (_ru
+                    ? '$fromName приглашает в звонок до 6 участников.'
+                    : '$fromName invites you to a call for up to 6 participants.')
+                : (_ru ? '$fromName звонит вам' : '$fromName is calling you'),
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: <Widget>[
+            IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: ChernogramColors.danger,
+                shape: const CircleBorder(),
+                fixedSize: const Size.square(54),
+              ),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              icon: const Icon(Icons.call_end_rounded),
+            ),
+            const SizedBox(width: 20),
+            IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: ChernogramColors.success,
+                shape: const CircleBorder(),
+                fixedSize: const Size.square(54),
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.call_rounded),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      accepted = false;
+    } finally {
+      await ChernogramSound.stopIncomingCall();
+      _dialogOpen = false;
+    }
 
     final session = _sessions[tunnelId];
     if (accepted != true) {
       if (!group) {
-        await session?.sendSignal(<String, dynamic>{
+        final decline = session?.sendSignal(<String, dynamic>{
           'action': 'call_decline',
           'callId': callId,
           'from': profile.id,
           'target': from,
         });
+        if (decline != null) {
+          unawaited(
+            decline
+                .timeout(const Duration(milliseconds: 800))
+                .catchError((_) {}),
+          );
+        }
       }
       _appendLocalCallEvent(
         tunnelId: tunnelId,
@@ -355,8 +392,7 @@ class ChernogramAppMonitor {
       return;
     }
 
-    final navigator = chernogramNavigatorKey.currentState;
-    if (navigator == null) return;
+    if (_endedCalls.contains(callId)) return;
     final outcome = await navigator.push<CgCallOutcome>(
       MaterialPageRoute<CgCallOutcome>(
         builder: (_) => group

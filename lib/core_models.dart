@@ -47,7 +47,7 @@ class CgProfile {
             : CgIds.random(12),
         nickname: json['nickname']?.toString().trim().isNotEmpty == true
             ? json['nickname'].toString()
-            : 'пользователь_${CgIds.random(4).toLowerCase()}',
+            : 'user_${CgIds.random(4).toLowerCase()}',
         createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
             DateTime.now(),
         avatarBase64: json['avatarBase64']?.toString(),
@@ -93,7 +93,7 @@ class CgContact {
 
   factory CgContact.fromJson(Map<String, dynamic> json) => CgContact(
         id: json['id']?.toString() ?? '',
-        nickname: json['nickname']?.toString() ?? 'пользователь',
+        nickname: json['nickname']?.toString() ?? 'user',
         lastSeenAt: DateTime.tryParse(json['lastSeenAt']?.toString() ?? '') ??
             DateTime.now(),
         tunnelIds: ((json['tunnelIds'] as List?) ?? const <dynamic>[])
@@ -565,7 +565,7 @@ class CgStore {
     }
     final profile = CgProfile(
       id: CgIds.random(12),
-      nickname: 'пользователь_${CgIds.random(4).toLowerCase()}',
+      nickname: 'user_${CgIds.random(4).toLowerCase()}',
       createdAt: DateTime.now(),
     );
     await saveProfile(profile);
