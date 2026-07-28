@@ -42,11 +42,11 @@ Future<void> main() async {
 
   final shutdown = Completer<void>();
   final subscriptions = <StreamSubscription<ProcessSignal>>[];
-  for (final signal in <ProcessSignal>[
+  final signals = <ProcessSignal>[
     ProcessSignal.sigint,
-    ProcessSignal.sigterm,
-  ]) {
-    if (!signal.isSupported) continue;
+    if (!Platform.isWindows) ProcessSignal.sigterm,
+  ];
+  for (final signal in signals) {
     subscriptions.add(
       signal.watch().listen((_) {
         if (!shutdown.isCompleted) shutdown.complete();
