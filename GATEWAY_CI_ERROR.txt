@@ -1,6 +1,6 @@
 Cernogram Realtime Gateway CI failed
-Commit: 54257093a43122585c7fa0bb4e94f638f1007e50
-Time: 2026-07-28T13:33:01Z
+Commit: e93216839ba81b026876bf0767b3470e9a178571
+Time: 2026-07-28T13:34:04Z
 Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
 Resolving dependencies...
 Downloading packages...
@@ -55,16 +55,8 @@ Downloading packages...
 Changed 48 dependencies!
 1 package has newer versions incompatible with dependency constraints.
 Try `dart pub outdated` for more information.
-Warning: Package resolution error when reading "analysis_options.yaml" file:
-Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
-Warning: Package resolution error when reading "analysis_options.yaml" file:
-Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
 Changed lib/src/gateway.dart
 Changed lib/src/store.dart
 Changed lib/src/token.dart
-Warning: Package resolution error when reading "analysis_options.yaml" file:
-Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
 Changed test/store_test.dart
-Warning: Package resolution error when reading "analysis_options.yaml" file:
-Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
 Formatted 6 files (4 changed) in 0.02 seconds.
