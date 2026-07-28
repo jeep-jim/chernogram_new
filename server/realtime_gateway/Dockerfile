@@ -2,7 +2,8 @@ FROM dart:stable AS build
 WORKDIR /app
 COPY pubspec.yaml ./
 RUN dart pub get
-COPY . ./
+COPY bin ./bin
+COPY lib ./lib
 RUN dart compile exe bin/server.dart -o /app/cernogram-gateway
 
 FROM debian:bookworm-slim
