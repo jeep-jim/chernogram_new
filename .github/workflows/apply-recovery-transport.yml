@@ -1,0 +1,32 @@
+name: Apply recovery transport once
+
+on:
+  push:
+    branches:
+      - rebuild/realtime-core
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/realtime-core
+          fetch-depth: 0
+      - name: Apply recovery changes
+        run: python3 tooling/apply_recovery_transport_once.py
+      - name: Commit materialized recovery source
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-recovery-transport.yml
+          git rm tooling/apply_recovery_transport_once.py
+          rm -f RECOVERY_TRIGGER.txt
+          git add -A
+          git commit -m "Стабилизировать foreground-транспорт 0.16.10"
+          git push origin HEAD:rebuild/realtime-core
