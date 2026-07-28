@@ -36,6 +36,14 @@ jobs:
           channel: stable
           cache: false
 
+      - name: Apply pending compile fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f tooling/fix_experience_compile_once.py ]; then
+            python3 tooling/fix_experience_compile_once.py
+          fi
+
       - name: Format, analyze, test and build
         shell: bash
         run: |
@@ -64,6 +72,9 @@ jobs:
           Checks: format, analyze, tests, Android release build
           EOF
           git add lib pubspec.yaml pubspec.lock android/app/src/main/AndroidManifest.xml EXPERIENCE_CI_STATUS.md
+          if [ -f tooling/fix_experience_compile_once.py ]; then
+            git rm -f tooling/fix_experience_compile_once.py
+          fi
           if git ls-files --error-unmatch EXPERIENCE_CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f EXPERIENCE_CI_ERROR.txt
           fi
