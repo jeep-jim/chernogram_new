@@ -1,0 +1,42 @@
+name: Apply Realtime Outbox Once
+
+on:
+  push:
+    branches:
+      - rebuild/realtime-core
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-realtime-outbox-once
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/realtime-core
+          fetch-depth: 0
+
+      - name: Materialize persistent realtime outbox
+        run: python3 tooling/apply_realtime_outbox_once.py
+
+      - name: Format and validate source
+        run: |
+          dart format lib/internet_core.dart
+
+      - name: Commit materialized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm tooling/apply_realtime_outbox_once.py
+          git rm .github/workflows/apply-realtime-outbox-once.yml
+          git add lib/internet_core.dart pubspec.yaml .github/workflows/build.yml
+          git commit -m "Добавить зашифрованную дисковую очередь realtime 0.16.11"
+          git push origin HEAD:rebuild/realtime-core
