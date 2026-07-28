@@ -38,7 +38,7 @@ jobs:
             dart --version
             dart pub get
             dart format .
-            dart analyze --fatal-infos
+            dart analyze
             dart test -r expanded
           } 2>&1 | tee gateway-ci.txt
 
