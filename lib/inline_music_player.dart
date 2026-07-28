@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'core_models.dart';
+import 'music_library.dart';
 import 'music_player.dart';
 
 class CgInlineMusicPlayer extends StatefulWidget {
@@ -66,6 +67,8 @@ class _CgInlineMusicPlayerState extends State<CgInlineMusicPlayer> {
           title: widget.attachment.name,
           subtitle: widget.subtitle,
           path: file.path,
+          source: CgMusicSource.chats,
+          addedAt: DateTime.now().toUtc(),
         ),
       );
     }
