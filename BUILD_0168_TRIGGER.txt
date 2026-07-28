@@ -1,1 +1,0 @@
-Build Cernogram 0.16.8+39 with eyes-only striped head and Windows startup recovery.
