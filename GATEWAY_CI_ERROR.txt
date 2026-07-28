@@ -1,6 +1,6 @@
 Cernogram Realtime Gateway CI failed
-Commit: 088efc3871fd5fa3ddd7790f31be9d62a754ca6c
-Time: 2026-07-28T13:34:40Z
+Commit: f3e3a2fab473a9be70df751a53450a53fd29d2ea
+Time: 2026-07-28T13:37:08Z
 Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
 Resolving dependencies...
 Downloading packages...
@@ -62,9 +62,8 @@ Formatted test/store_test.dart
 Formatted 6 files (4 changed) in 0.02 seconds.
 Analyzing realtime_gateway...
 
-  error - bin/server.dart:49:17 - The getter 'isSupported' isn't defined for the type 'ProcessSignal'. Try importing the library that defines 'isSupported', correcting the name to the name of an existing getter, or defining a getter or field named 'isSupported'. - undefined_getter
 warning - lib/src/gateway.dart:264:20 - The generic type 'Map<dynamic, dynamic>' should have explicit type arguments but doesn't. Use explicit type arguments for 'Map<dynamic, dynamic>'. - strict_raw_type
 warning - lib/src/store.dart:314:20 - The generic type 'Map<dynamic, dynamic>' should have explicit type arguments but doesn't. Use explicit type arguments for 'Map<dynamic, dynamic>'. - strict_raw_type
    info - lib/src/store.dart:331:25 - Unnecessary braces in a string interpolation. Try removing the braces. - unnecessary_brace_in_string_interps
 
-4 issues found.
+3 issues found.
