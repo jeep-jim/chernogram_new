@@ -63,6 +63,9 @@ try {
   Invoke-LoggedCommand `
     -Name 'FIX 0.16.7 BRAND MEDIA LIFECYCLE' `
     -Command 'python tooling/fix_v0167_brand_media.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.8 LOGO AND WINDOWS STARTUP' `
+    -Command 'python tooling/fix_v0168_logo_windows.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
