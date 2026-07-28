@@ -1,6 +1,6 @@
 Cernogram Realtime Gateway CI failed
-Commit: e93216839ba81b026876bf0767b3470e9a178571
-Time: 2026-07-28T13:34:04Z
+Commit: 088efc3871fd5fa3ddd7790f31be9d62a754ca6c
+Time: 2026-07-28T13:34:40Z
 Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
 Resolving dependencies...
 Downloading packages...
@@ -55,8 +55,16 @@ Downloading packages...
 Changed 48 dependencies!
 1 package has newer versions incompatible with dependency constraints.
 Try `dart pub outdated` for more information.
-Changed lib/src/gateway.dart
-Changed lib/src/store.dart
-Changed lib/src/token.dart
-Changed test/store_test.dart
+Formatted lib/src/gateway.dart
+Formatted lib/src/store.dart
+Formatted lib/src/token.dart
+Formatted test/store_test.dart
 Formatted 6 files (4 changed) in 0.02 seconds.
+Analyzing realtime_gateway...
+
+  error - bin/server.dart:49:17 - The getter 'isSupported' isn't defined for the type 'ProcessSignal'. Try importing the library that defines 'isSupported', correcting the name to the name of an existing getter, or defining a getter or field named 'isSupported'. - undefined_getter
+warning - lib/src/gateway.dart:264:20 - The generic type 'Map<dynamic, dynamic>' should have explicit type arguments but doesn't. Use explicit type arguments for 'Map<dynamic, dynamic>'. - strict_raw_type
+warning - lib/src/store.dart:314:20 - The generic type 'Map<dynamic, dynamic>' should have explicit type arguments but doesn't. Use explicit type arguments for 'Map<dynamic, dynamic>'. - strict_raw_type
+   info - lib/src/store.dart:331:25 - Unnecessary braces in a string interpolation. Try removing the braces. - unnecessary_brace_in_string_interps
+
+4 issues found.
