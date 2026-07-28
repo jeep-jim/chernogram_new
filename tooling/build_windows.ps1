@@ -60,6 +60,9 @@ try {
   Invoke-LoggedCommand `
     -Name 'FIX 0.16.6 CLEAN TRANSPORT' `
     -Command 'python tooling/fix_v0166_clean_transport.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.7 BRAND MEDIA LIFECYCLE' `
+    -Command 'python tooling/fix_v0167_brand_media.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
