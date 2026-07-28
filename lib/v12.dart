@@ -863,6 +863,120 @@ class _ChernogramV12State extends State<ChernogramV12> {
     await _openTunnel(tunnel, autoInvite: true);
   }
 
+  Future<void> _createGroupFromDirect(CgTunnel source) async {
+    final profile = _profile;
+    if (profile == null || !mounted) return;
+    final name = TextEditingController(
+      text: widget.ru
+          ? 'Группа: ${source.displayName}'
+          : 'Group: ${source.displayName}',
+    );
+    var isPrivate = true;
+    final accepted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            18,
+            0,
+            18,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.ru
+                    ? 'Новая группа из переписки'
+                    : 'New group from conversation',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.ru
+                    ? 'История личной переписки будет скопирована в новый отдельный чат. Исходный личный чат останется без изменений.'
+                    : 'The direct conversation history will be copied into a new independent chat. The original direct chat remains unchanged.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: name,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: widget.ru ? 'Название группы' : 'Group name',
+                ),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: isPrivate,
+                secondary: Icon(
+                  isPrivate
+                      ? Icons.visibility_off_outlined
+                      : Icons.public_rounded,
+                ),
+                title: Text(
+                  isPrivate
+                      ? (widget.ru ? 'Приватная группа' : 'Private group')
+                      : (widget.ru ? 'Открытая группа' : 'Public group'),
+                ),
+                subtitle: Text(
+                  isPrivate
+                      ? (widget.ru
+                            ? 'Вход только по приглашению или QR.'
+                            : 'Join only through an invite or QR.')
+                      : (widget.ru
+                            ? 'Ссылку можно свободно пересылать.'
+                            : 'The invite can be freely shared.'),
+                ),
+                onChanged: (value) => setSheetState(() => isPrivate = value),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.group_add_rounded),
+                  label: Text(
+                    widget.ru ? 'Создать и пригласить' : 'Create and invite',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (accepted != true || !mounted) {
+      name.dispose();
+      return;
+    }
+    final displayName = name.text.trim().isEmpty
+        ? (widget.ru ? 'Новая группа' : 'New group')
+        : name.text.trim();
+    name.dispose();
+    final group = CgTunnel(
+      id: CgIds.random(18),
+      name: displayName,
+      isPrivate: isPrivate,
+      ownerId: profile.id,
+      secret: CgIds.random(42),
+      createdAt: DateTime.now(),
+      avatarBase64: source.avatarBase64,
+      messages: List<CgMessage>.from(source.messages),
+      permissions: const CgPermissions(canInvite: true),
+    );
+    setState(() => _tunnels = <CgTunnel>[group, ..._tunnels]);
+    await _saveTunnelsFast(_tunnels);
+    if (!mounted) return;
+    await _openTunnel(group, autoInvite: true);
+  }
+
   Future<void> _openTunnel(CgTunnel tunnel, {bool autoInvite = false}) async {
     final profile = _profile;
     if (profile == null || !mounted) return;
@@ -884,6 +998,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
           onDelete: _deleteTunnel,
           onForward: (message) => _forwardMessage(message, current.id),
           onContactSeen: _rememberContact,
+          onCreateGroupFromDirect: _createGroupFromDirect,
         ),
       ),
     );

@@ -40,6 +40,7 @@ class CgChatScreen extends StatefulWidget {
   final Future<void> Function(CgTunnel tunnel)? onDelete;
   final Future<void> Function(CgMessage message)? onForward;
   final ValueChanged<CgContact>? onContactSeen;
+  final Future<void> Function(CgTunnel source)? onCreateGroupFromDirect;
 
   const CgChatScreen({
     super.key,
@@ -51,6 +52,7 @@ class CgChatScreen extends StatefulWidget {
     this.onDelete,
     this.onForward,
     this.onContactSeen,
+    this.onCreateGroupFromDirect,
     this.autoInvite = false,
   });
 
@@ -1156,6 +1158,25 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   ),
                 ],
               ),
+              if (_tunnel.id.startsWith('dm_') &&
+                  widget.onCreateGroupFromDirect != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      unawaited(widget.onCreateGroupFromDirect!.call(_tunnel));
+                    },
+                    icon: const Icon(Icons.group_add_rounded),
+                    label: Text(
+                      widget.ru
+                          ? 'Создать группу из переписки'
+                          : 'Create group from this chat',
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -2070,220 +2091,225 @@ class _CgChatScreenState extends State<CgChatScreen> {
       body: DropTarget(
         enable: Platform.isWindows || Platform.isLinux || Platform.isMacOS,
         onDragDone: _handleDropped,
-        child: Column(
-          children: [
-            Expanded(
-              child: _tunnel.messages.isEmpty
-                  ? _EmptyChat(
-                      ru: widget.ru,
-                      onInvite: canInvite ? _showInvite : null,
-                    )
-                  : ListView.builder(
-                      controller: _scroll,
-                      physics: const ClampingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
-                      dragStartBehavior: DragStartBehavior.down,
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-                      itemCount: _tunnel.messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _tunnel.messages[index];
-                        final mine =
-                            message.authorId == widget.profile.id ||
-                            (message.authorId.isEmpty &&
-                                message.authorName == widget.profile.nickname);
-                        return Dismissible(
-                          key: ValueKey('swipe-${message.id}'),
-                          direction: message.deleted
-                              ? DismissDirection.none
-                              : DismissDirection.horizontal,
-                          confirmDismiss: (direction) async {
-                            if (direction == DismissDirection.startToEnd) {
-                              _replyTo(message);
-                            } else {
-                              await _forward(message);
-                            }
-                            return false;
-                          },
-                          background: _SwipeActionBackground(
-                            alignment: Alignment.centerLeft,
-                            icon: Icons.reply_rounded,
-                            label: widget.ru ? 'Ответить' : 'Reply',
-                          ),
-                          secondaryBackground: _SwipeActionBackground(
-                            alignment: Alignment.centerRight,
-                            icon: Icons.forward_rounded,
-                            label: widget.ru ? 'Переслать' : 'Forward',
-                          ),
-                          child: Row(
-                            mainAxisAlignment: mine
-                                ? MainAxisAlignment.end
-                                : MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (!mine) ...[
-                                _MessageAuthorAvatar(
-                                  message: message,
-                                  mine: false,
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Flexible(
-                                child: _MessageBubble(
-                                  message: message,
-                                  mine: mine,
-                                  privacyLens: widget.privacyLens,
-                                  ru: widget.ru,
-                                  onLongPress: () =>
-                                      _showMessageActions(message),
-                                  onEnsureAttachment: _ensureAttachment,
-                                  onPlayAudio: _playAttachment,
-                                  onDelete: _deleteMessage,
-                                  canDownload: _canDownload,
-                                ),
-                              ),
-                              if (mine) ...[
-                                const SizedBox(width: 6),
-                                _MessageAuthorAvatar(
-                                  message: message,
-                                  mine: true,
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_replyingTo != null) ...[
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest.withValues(
-                            alpha: .92,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
+        child: CgChatBackgroundContainer(
+          child: Column(
+            children: [
+              Expanded(
+                child: _tunnel.messages.isEmpty
+                    ? _EmptyChat(
+                        ru: widget.ru,
+                        onInvite: canInvite ? _showInvite : null,
+                      )
+                    : ListView.builder(
+                        controller: _scroll,
+                        physics: const ClampingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.reply_rounded, color: scheme.primary),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _replyingTo!.authorName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                    ),
+                        dragStartBehavior: DragStartBehavior.down,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+                        itemCount: _tunnel.messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _tunnel.messages[index];
+                          final mine =
+                              message.authorId == widget.profile.id ||
+                              (message.authorId.isEmpty &&
+                                  message.authorName ==
+                                      widget.profile.nickname);
+                          return Dismissible(
+                            key: ValueKey('swipe-${message.id}'),
+                            direction: message.deleted
+                                ? DismissDirection.none
+                                : DismissDirection.horizontal,
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.startToEnd) {
+                                _replyTo(message);
+                              } else {
+                                await _forward(message);
+                              }
+                              return false;
+                            },
+                            background: _SwipeActionBackground(
+                              alignment: Alignment.centerLeft,
+                              icon: Icons.reply_rounded,
+                              label: widget.ru ? 'Ответить' : 'Reply',
+                            ),
+                            secondaryBackground: _SwipeActionBackground(
+                              alignment: Alignment.centerRight,
+                              icon: Icons.forward_rounded,
+                              label: widget.ru ? 'Переслать' : 'Forward',
+                            ),
+                            child: Row(
+                              mainAxisAlignment: mine
+                                  ? MainAxisAlignment.end
+                                  : MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (!mine) ...[
+                                  _MessageAuthorAvatar(
+                                    message: message,
+                                    mine: false,
                                   ),
-                                  Text(
-                                    _replyingTo!.text.isNotEmpty
-                                        ? _replyingTo!.text
-                                        : (_replyingTo!.attachment?.name ?? ''),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 11),
+                                  const SizedBox(width: 6),
+                                ],
+                                Flexible(
+                                  child: _MessageBubble(
+                                    message: message,
+                                    mine: mine,
+                                    privacyLens: widget.privacyLens,
+                                    ru: widget.ru,
+                                    onLongPress: () =>
+                                        _showMessageActions(message),
+                                    onEnsureAttachment: _ensureAttachment,
+                                    onPlayAudio: _playAttachment,
+                                    onDelete: _deleteMessage,
+                                    canDownload: _canDownload,
+                                  ),
+                                ),
+                                if (mine) ...[
+                                  const SizedBox(width: 6),
+                                  _MessageAuthorAvatar(
+                                    message: message,
+                                    mine: true,
                                   ),
                                 ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_replyingTo != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest.withValues(
+                              alpha: .92,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.reply_rounded, color: scheme.primary),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _replyingTo!.authorName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text(
+                                      _replyingTo!.text.isNotEmpty
+                                          ? _replyingTo!.text
+                                          : (_replyingTo!.attachment?.name ??
+                                                ''),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              IconButton(
+                                onPressed: () =>
+                                    setState(() => _replyingTo = null),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      GlassPanel(
+                        padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                        borderRadius: BorderRadius.circular(22),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              tooltip: widget.ru ? 'Добавить' : 'Add',
+                              onPressed: _sendingFile
+                                  ? null
+                                  : _showAttachmentMenu,
+                              icon: _sendingFile
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.add_rounded),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _text,
+                                focusNode: _composerFocus,
+                                autofocus: false,
+                                onTapOutside: (_) => _composerFocus.unfocus(),
+                                minLines: 1,
+                                maxLines: 5,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                textInputAction: Platform.isWindows
+                                    ? TextInputAction.send
+                                    : TextInputAction.newline,
+                                enabled: _canWrite,
+                                onSubmitted: (_) => _sendText(),
+                                decoration: InputDecoration(
+                                  hintText: widget.ru ? 'Сообщение' : 'Message',
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 10),
-                            IconButton(
-                              onPressed: () =>
-                                  setState(() => _replyingTo = null),
-                              icon: const Icon(Icons.close_rounded),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: _hasText
+                                  ? IconButton.filled(
+                                      key: const ValueKey('send'),
+                                      onPressed: _sendText,
+                                      icon: const Icon(
+                                        Icons.arrow_upward_rounded,
+                                      ),
+                                    )
+                                  : CgVoiceRecordButton(
+                                      key: const ValueKey('voice'),
+                                      ru: widget.ru,
+                                      enabled: _canSendMedia,
+                                      onRecorded: _sendVoice,
+                                    ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                    GlassPanel(
-                      padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-                      borderRadius: BorderRadius.circular(22),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          IconButton(
-                            tooltip: widget.ru ? 'Добавить' : 'Add',
-                            onPressed: _sendingFile
-                                ? null
-                                : _showAttachmentMenu,
-                            icon: _sendingFile
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.add_rounded),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _text,
-                              focusNode: _composerFocus,
-                              autofocus: false,
-                              onTapOutside: (_) => _composerFocus.unfocus(),
-                              minLines: 1,
-                              maxLines: 5,
-                              textCapitalization: TextCapitalization.sentences,
-                              textInputAction: Platform.isWindows
-                                  ? TextInputAction.send
-                                  : TextInputAction.newline,
-                              enabled: _canWrite,
-                              onSubmitted: (_) => _sendText(),
-                              decoration: InputDecoration(
-                                hintText: widget.ru ? 'Сообщение' : 'Message',
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 10,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
-                            child: _hasText
-                                ? IconButton.filled(
-                                    key: const ValueKey('send'),
-                                    onPressed: _sendText,
-                                    icon: const Icon(
-                                      Icons.arrow_upward_rounded,
-                                    ),
-                                  )
-                                : CgVoiceRecordButton(
-                                    key: const ValueKey('voice'),
-                                    ru: widget.ru,
-                                    enabled: _canSendMedia,
-                                    onRecorded: _sendVoice,
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
