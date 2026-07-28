@@ -1,16 +1,16 @@
-name: Build APK
+name: Build Recovery APK
 
 on:
   push:
     branches:
-      - main
+      - rebuild/realtime-core
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: chernogram-apk-main
+  group: chernogram-recovery-apk
   cancel-in-progress: true
 
 env:
@@ -18,14 +18,15 @@ env:
 
 jobs:
   build:
-    name: Build Cernogram Release APK
+    name: Build Cernogram Recovery APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
-      - name: Checkout project
+      - name: Checkout recovery source
         uses: actions/checkout@v4
         with:
+          ref: rebuild/realtime-core
           fetch-depth: 0
 
       - name: Setup Java 17
@@ -41,7 +42,7 @@ jobs:
           key: chernogram-stable-signing-v2
           fail-on-cache-miss: false
 
-      - name: Restore repository key backup and verify certificate
+      - name: Restore key backup and verify certificate
         shell: bash
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
@@ -52,11 +53,11 @@ jobs:
             printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
             chmod 600 "$HOME/.android/debug.keystore"
           fi
-          test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
+          test -s "$HOME/.android/debug.keystore"
           keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
           ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
+          test "$ACTUAL" = "$EXPECTED"
 
       - name: Setup Flutter 3.44.8
         uses: subosito/flutter-action@v2
@@ -65,132 +66,67 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply all source patches through 0.16.9
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install pillow --disable-pip-version-check --quiet
-          python3 tooling/fix_v015_compile.py
-          python3 tooling/fix_v016_foundation.py
-          python3 tooling/fix_v0162_runtime.py
-          python3 tooling/fix_v0162_brand.py
-          python3 tooling/materialize_v0163_ringtone.py
-          python3 tooling/fix_v0163_realtime.py
-          python3 tooling/fix_v0164_feedback.py
-          python3 tooling/fix_v0165_reliability.py
-          python3 tooling/fix_v0166_clean_transport.py
-          python3 tooling/fix_v0167_brand_media.py
-          python3 tooling/fix_v0168_logo_windows.py
-          python3 tooling/fix_v0169_icon_crash_intro.py
-
-      - name: Validate and build release APK
+      - name: Validate and build
         shell: bash
         run: |
           set -o pipefail
           {
             flutter --version
             flutter pub get
-            dart format lib
+            dart format --output=none --set-exit-if-changed lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
             flutter build apk --release
-          } 2>&1 | tee ci-build.txt
+          } 2>&1 | tee recovery-build.txt
 
-      - name: Re-sign final APK and verify
+      - name: Re-sign and verify APK
         shell: bash
         run: |
           set -euo pipefail
           SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          test -n "$APKSIGNER"
           "$APKSIGNER" sign \
             --ks "$HOME/.android/debug.keystore" \
             --ks-key-alias androiddebugkey \
             --ks-pass pass:android \
             --key-pass pass:android \
-            --out chernogram.apk \
+            --out chernogram-recovery.apk \
             "$SOURCE_APK"
-          "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
-          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          "$APKSIGNER" verify --print-certs chernogram-recovery.apk | tee recovery-signature.txt
+          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' recovery-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
 
-      - name: Prepare update manifest
+      - name: Prepare recovery manifest
         shell: bash
         run: |
           set -euo pipefail
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
           VERSION_NAME=${VERSION_FULL%%+*}
           VERSION_CODE=${VERSION_FULL##*+}
-          APK_SHA256=$(sha256sum chernogram.apk | awk '{print $1}')
-          cat > update.json <<EOF
+          APK_SHA256=$(sha256sum chernogram-recovery.apk | awk '{print $1}')
+          cat > recovery-update.json <<EOF
           {
             "versionName": "${VERSION_NAME}",
             "versionCode": ${VERSION_CODE},
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/realtime-recovery-apk/chernogram-recovery.apk",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16.9: одинаковая полосатая маска с глазами на чёрном фоне для рабочего стола, splash и приложения; верхняя и нижняя половины встречаются при запуске, глаза оживают. Добавлен локальный журнал Dart/Flutter и Android-native аварий с отправкой из карточки версии.",
-            "notesEn": "Version 0.16.9 unifies the eyes-only striped mask on a black background across launcher, splash and app, adds a top-and-bottom assembly animation with an eye pulse, and adds shareable Dart/Flutter and Android native crash reports."
+            "notesRu": "Диагностическая foreground-сборка: отключён второй Android isolate, сокращено число публичных relay, устранена четырёхкратная отправка и исправлено игнорирование сетевого timeout. Иконка не изменялась.",
+            "notesEn": "Diagnostic foreground recovery build with the second Android isolate disabled, reduced public relay fan-out, duplicate publishing removed, and network timeout handling fixed. Branding is unchanged."
           }
           EOF
 
-      - name: Publish APK release
+      - name: Publish recovery prerelease
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          VERSION_NAME=${VERSION_FULL%%+*}
-          gh release delete latest-apk --cleanup-tag --yes || true
-          gh release create latest-apk chernogram.apk update.json \
-            --target main \
-            --title "Чернограм / Cernogram ${VERSION_NAME}" \
-            --notes "Единая маска с глазами на чёрном фоне, новая сборочная анимация из двух половин и встроенный отправляемый журнал аварий Android. APK подписан прежним постоянным ключом." \
+          gh release delete realtime-recovery-apk --cleanup-tag --yes || true
+          gh release create realtime-recovery-apk chernogram-recovery.apk recovery-update.json recovery-build.txt \
+            --target rebuild/realtime-core \
+            --title "Cernogram Recovery ${VERSION_FULL}" \
+            --notes "Foreground-only diagnostic build for testing message delivery, Android stability and call signaling without the duplicate background isolate. This is not the final realtime architecture." \
             --prerelease
-
-      - name: Save failure diagnostics
-        if: failure()
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          cp ci-build.txt /tmp/ci-build.txt 2>/dev/null || true
-          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
-          cp apk-signature.txt /tmp/apk-signature.txt 2>/dev/null || true
-          git fetch origin main
-          git reset --hard origin/main
-          {
-            echo 'GitHub Actions build failed'
-            echo "Commit: ${GITHUB_SHA}"
-            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            for file in /tmp/signing-key.txt /tmp/apk-signature.txt /tmp/ci-build.txt; do
-              if [ -f "$file" ]; then echo "===== $(basename "$file") ====="; cat "$file"; fi
-            done
-          } > CI_ERROR.txt
-          git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16.9 [skip ci]" || true
-          git push origin HEAD:main || true
-
-      - name: Mark APK ready
-        if: success()
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git reset --hard origin/main
-          cat > BUILD_STATUS.md <<EOF
-          APK ready
-          Commit: ${GITHUB_SHA}
-          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Version: 0.16.9+40
-          Certificate SHA-256: ${EXPECTED_CERT_SHA256}
-          Signature policy: final APK is explicitly re-signed and verified
-          Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
-          EOF
-          git add BUILD_STATUS.md
-          if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then git rm -f CI_ERROR.txt; fi
-          git commit -m "APK 0.16.9 готов с постоянной подписью [skip ci]" || true
-          git push origin HEAD:main || true
