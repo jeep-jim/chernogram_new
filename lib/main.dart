@@ -63,6 +63,9 @@ Future<void> main() async {
           systemStatusBarContrastEnforced: false,
         ),
       );
+      await ChernogramCrashReporter.breadcrumb(
+        'recovery foreground-only transport; background isolate disabled',
+      );
       await ChernogramCrashReporter.breadcrumb('runApp');
       runApp(const ChernogramApp());
     },

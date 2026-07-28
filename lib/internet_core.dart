@@ -22,11 +22,12 @@ class _PendingEnvelope {
 }
 
 class InternetTunnelSession {
+  // Temporary recovery transport. Keep one primary and one hot standby;
+  // broadcasting every packet to four public services caused radio load,
+  // duplicate cache replays and long UI stalls on Android.
   static const List<String> relayHosts = <String>[
     'ntfy.sh',
     'ntfy.jae.fi',
-    'ntfy.adminforge.de',
-    'ntfy.envs.net',
   ];
 
   final String tunnelId;
@@ -156,7 +157,7 @@ class InternetTunnelSession {
         scheme: 'wss',
         host: host,
         path: '/${_topic!}/ws',
-        queryParameters: const <String, String>{'since': '30s'},
+        queryParameters: const <String, String>{'since': '2m'},
       );
       final socket = await WebSocket.connect(uri.toString()).timeout(
         const Duration(milliseconds: 3200),
@@ -465,7 +466,7 @@ class InternetTunnelSession {
           break;
         }
       }
-      if (backup != null && kind != 'presence') {
+      if (backup != null && kind != 'presence' && !fastPacket) {
         unawaited(
           _publishEncrypted(
             backup,
@@ -518,7 +519,7 @@ class InternetTunnelSession {
     List<String> hosts,
     String encrypted,
   ) async {
-    final selected = hosts.take(4).toList(growable: false);
+    final selected = hosts.take(2).toList(growable: false);
     if (selected.isEmpty) return null;
     final completer = Completer<String?>();
     var completed = 0;

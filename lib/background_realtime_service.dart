@@ -50,8 +50,8 @@ Future<void> initializeChernogramRealtimeService() async {
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: chernogramRealtimeServiceEntryPoint,
-      autoStart: true,
-      autoStartOnBoot: true,
+      autoStart: false,
+      autoStartOnBoot: false,
       isForegroundMode: true,
       notificationChannelId: _foregroundChannelId,
       initialNotificationTitle: 'Чернограм',
@@ -64,7 +64,9 @@ Future<void> initializeChernogramRealtimeService() async {
       onBackground: chernogramRealtimeIosBackground,
     ),
   );
-  await service.startService();
+  // Recovery build: do not start a second Flutter isolate automatically.
+  // Foreground chat/calls use the main process only while the new push/Telecom
+  // background path is being built.
 }
 
 @pragma('vm:entry-point')
