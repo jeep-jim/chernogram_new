@@ -1,1 +1,1 @@
-Build Cernogram 0.16.7+38 after the final brand, splash, media and lifecycle patch parts are present.
+Build Cernogram 0.16.7+38 from the final verified short fragments.
