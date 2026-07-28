@@ -65,7 +65,7 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Apply all source patches through 0.16.8
+      - name: Apply all source patches through 0.16.9
         shell: bash
         run: |
           set -euo pipefail
@@ -81,6 +81,7 @@ jobs:
           python3 tooling/fix_v0166_clean_transport.py
           python3 tooling/fix_v0167_brand_media.py
           python3 tooling/fix_v0168_logo_windows.py
+          python3 tooling/fix_v0169_icon_crash_intro.py
 
       - name: Validate and build release APK
         shell: bash
@@ -129,8 +130,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16.8: сохранено существующее полосатое лицо, удалены только нос и рот, оставлены глаза и форма головы. Шапка, splash, Android-иконка и Windows ICO приведены к одному виду. Убрано тяжёлое GPU-размытие первого кадра Windows.",
-            "notesEn": "Version 0.16.8 keeps the existing striped head with eyes only, unifies the header, splash, Android icon and Windows ICO, and removes heavy first-frame GPU blur on Windows."
+            "notesRu": "Версия 0.16.9: одинаковая полосатая маска с глазами на чёрном фоне для рабочего стола, splash и приложения; верхняя и нижняя половины встречаются при запуске, глаза оживают. Добавлен локальный журнал Dart/Flutter и Android-native аварий с отправкой из карточки версии.",
+            "notesEn": "Version 0.16.9 unifies the eyes-only striped mask on a black background across launcher, splash and app, adds a top-and-bottom assembly animation with an eye pulse, and adds shareable Dart/Flutter and Android native crash reports."
           }
           EOF
 
@@ -146,7 +147,7 @@ jobs:
           gh release create latest-apk chernogram.apk update.json \
             --target main \
             --title "Чернограм / Cernogram ${VERSION_NAME}" \
-            --notes "Существующий полосатый знак сохранён: удалены только нос и рот, оставлены глаза и форма головы. Иконки унифицированы, Windows-заставка облегчена. APK подписан прежним ключом." \
+            --notes "Единая маска с глазами на чёрном фоне, новая сборочная анимация из двух половин и встроенный отправляемый журнал аварий Android. APK подписан прежним постоянным ключом." \
             --prerelease
 
       - name: Save failure diagnostics
@@ -169,7 +170,7 @@ jobs:
             done
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16.8 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.16.9 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK ready
@@ -184,12 +185,12 @@ jobs:
           APK ready
           Commit: ${GITHUB_SHA}
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Version: 0.16.8+39
+          Version: 0.16.9+40
           Certificate SHA-256: ${EXPECTED_CERT_SHA256}
           Signature policy: final APK is explicitly re-signed and verified
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
           EOF
           git add BUILD_STATUS.md
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then git rm -f CI_ERROR.txt; fi
-          git commit -m "APK 0.16.8 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.16.9 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
