@@ -1,0 +1,1 @@
+Build Cernogram 0.16.7+38 after all patch parts are present.
