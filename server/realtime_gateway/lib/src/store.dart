@@ -155,15 +155,15 @@ class GatewayJsonStore {
         crypto: Map<String, dynamic>.from(crypto),
       );
 
-      var chunkFile = _chunkFile(room, room.currentChunk);
-      var chunk = await _readEventChunk(chunkFile);
-      if (chunk.length >= maxEventsPerChunk) {
+      if (room.currentChunkEvents.length >= maxEventsPerChunk) {
         room.currentChunk++;
-        chunkFile = _chunkFile(room, room.currentChunk);
-        chunk = <Map<String, dynamic>>[];
+        room.currentChunkEvents = <Map<String, dynamic>>[];
       }
-      chunk.add(event.toJson());
-      await _writeJsonAtomic(chunkFile, chunk);
+      room.currentChunkEvents.add(event.toJson());
+      await _writeJsonAtomic(
+        _chunkFile(room, room.currentChunk),
+        room.currentChunkEvents,
+      );
       room.byPacketId[event.packetId] = event;
       await _writeRoomMeta(room);
       await _writeJsonAtomic(
@@ -268,6 +268,9 @@ class GatewayJsonStore {
       }
     }
     chunks.sort((left, right) => left.path.compareTo(right.path));
+
+    var highestChunk = 0;
+    var highestChunkEvents = <Map<String, dynamic>>[];
     for (final file in chunks) {
       final raw = await _readEventChunk(file);
       for (final item in raw) {
@@ -278,8 +281,20 @@ class GatewayJsonStore {
       }
       final match = RegExp(r'events_(\d{6})\.json$').firstMatch(file.path);
       final index = int.tryParse(match?.group(1) ?? '') ?? 1;
-      if (index > room.currentChunk) room.currentChunk = index;
+      if (index >= highestChunk) {
+        highestChunk = index;
+        highestChunkEvents = raw;
+      }
     }
+
+    if (highestChunk > room.currentChunk) room.currentChunk = highestChunk;
+    if (highestChunk == room.currentChunk) {
+      room.currentChunkEvents = highestChunkEvents;
+    } else {
+      room.currentChunkEvents =
+          await _readEventChunk(_chunkFile(room, room.currentChunk));
+    }
+
     _rooms[roomId] = room;
     await _writeRoomMeta(room);
     return room;
@@ -326,9 +341,9 @@ class GatewayJsonStore {
   Future<void> _writeJsonAtomic(File file, Object value) async {
     await file.parent.create(recursive: true);
     final temporary = File(
-      '${file.path}.tmp-${pid}-${DateTime.now().microsecondsSinceEpoch}',
+      '${file.path}.tmp-$pid-${DateTime.now().microsecondsSinceEpoch}',
     );
-    await temporary.writeAsString(jsonEncode(value), flush: true);
+    await temporary.writeAsString(jsonEncode(value));
     if (await file.exists()) await file.delete();
     await temporary.rename(file.path);
   }
@@ -353,6 +368,7 @@ class _RoomState {
       <String, StoredGatewayEvent>{};
   int lastRoomSeq = 0;
   int currentChunk = 1;
+  List<Map<String, dynamic>> currentChunkEvents = <Map<String, dynamic>>[];
 
   _RoomState({required this.roomId, required this.directory});
 }
