@@ -51,6 +51,9 @@ try {
   Invoke-LoggedCommand `
     -Name 'FIX 0.16.3 REALTIME' `
     -Command 'python tooling/fix_v0163_realtime.py'
+  Invoke-LoggedCommand `
+    -Name 'FIX 0.16.4 FEEDBACK' `
+    -Command 'python tooling/fix_v0164_feedback.py'
   Invoke-LoggedCommand -Name 'PUB GET' -Command 'flutter pub get'
   Invoke-LoggedCommand -Name 'FORMAT' -Command 'dart format lib'
   Invoke-LoggedCommand `
