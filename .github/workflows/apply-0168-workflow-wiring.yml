@@ -1,0 +1,70 @@
+name: Apply 0.16.8 workflow wiring
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire 0.16.8 into release workflows
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          apk = Path('.github/workflows/build.yml')
+          text = apk.read_text(encoding='utf-8')
+          text = text.replace(
+              'Apply interface, transport, brand and media fixes 0.16.7',
+              'Apply interface, transport, brand and media fixes 0.16.8',
+          )
+          marker = '            python3 tooling/fix_v0167_brand_media.py\n'
+          if 'fix_v0168_logo_windows.py' not in text:
+              text = text.replace(
+                  marker,
+                  marker + '            python3 tooling/fix_v0168_logo_windows.py\n',
+                  1,
+              )
+          text = text.replace(
+              '"notesRu": "Версия 0.16.7: один новый полосатый знак-лицо во всём приложении, новая загрузочная анимация, чистая шапка, название Cernogram на английском, миниатюры фото и видео, медиа больше не скрывается в текущей беседе, а Android использует один набор realtime-соединений без дублирования foreground/background.",',
+              '"notesRu": "Версия 0.16.8: у существующего полосатого лица убраны нос и рот, оставлены только глаза и форма головы; шапка, splash, Android-иконка и Windows ICO приведены к одному виду. Убрано тяжёлое GPU-размытие первого кадра Windows.",',
+          )
+          text = text.replace(
+              '"notesEn": "Version 0.16.7 introduces one striped face mark across the app, a new launch animation, a clean header, the English name Cernogram, photo and video thumbnails, visible media during the active conversation, and one Android realtime connection set without foreground/background duplication."',
+              '"notesEn": "Version 0.16.8 keeps the existing striped head with eyes only, unifies the header, splash, Android icon and Windows ICO, and removes the heavy first-frame GPU blur on Windows."',
+          )
+          text = text.replace(
+              '--notes "Единый новый знак и запуск без мелькания старых логотипов, чистая шапка, миниатюры медиа и исправленный Android lifecycle: foreground и background больше не держат дублирующие realtime-соединения. APK подписан прежним постоянным ключом."',
+              '--notes "Текущий полосатый знак сохранён: удалены только нос и рот, оставлены глаза и форма головы. Иконка и splash унифицированы, а Windows-заставка облегчена. APK подписан прежним постоянным ключом."',
+          )
+          text = text.replace('Сохранить ошибку сборки 0.16.7 [skip ci]', 'Сохранить ошибку сборки 0.16.8 [skip ci]')
+          text = text.replace('Version: 0.16.7+38', 'Version: 0.16.8+39')
+          text = text.replace('APK 0.16.7 готов с постоянной подписью [skip ci]', 'APK 0.16.8 готов с постоянной подписью [skip ci]')
+          apk.write_text(text, encoding='utf-8')
+
+          windows = Path('.github/workflows/windows-release.yml')
+          text = windows.read_text(encoding='utf-8')
+          smoke = '''\n      - name: Smoke-test Windows startup\n        shell: pwsh\n        run: |\n          $ErrorActionPreference = 'Stop'\n          $release = 'build/windows/x64/runner/Release'\n          $exe = Join-Path $release 'chernogram.exe'\n          if (-not (Test-Path $exe)) { throw 'chernogram.exe was not produced' }\n          $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru\n          Start-Sleep -Seconds 8\n          if ($process.HasExited) {\n            $code = $process.ExitCode\n            Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-5)} -ErrorAction SilentlyContinue |\n              Where-Object { $_.Message -match 'chernogram|flutter' } |\n              Select-Object -First 10 | Format-List * | Out-File windows-smoke.txt\n            throw "Windows app exited during startup smoke test with code $code"\n          }\n          Stop-Process -Id $process.Id -Force\n          'Windows startup smoke test passed' | Set-Content windows-smoke.txt\n'''
+          package_marker = '      - name: Package portable application and repair installer\n'
+          if 'Smoke-test Windows startup' not in text:
+              text = text.replace(package_marker, smoke + '\n' + package_marker, 1)
+          text = text.replace("foreach ($name in @('windows-build.txt', 'windows-package.txt', 'windows-release.txt'))", "foreach ($name in @('windows-build.txt', 'windows-smoke.txt', 'windows-package.txt', 'windows-release.txt'))")
+          windows.write_text(text, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-0168-workflow-wiring.yml
+          git add .github/workflows/build.yml .github/workflows/windows-release.yml
+          git commit -m "Подключить сборку и smoke-test 0.16.8"
+          git push origin HEAD:main
