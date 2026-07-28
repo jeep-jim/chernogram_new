@@ -88,7 +88,8 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
     final number = _digits(raw);
     if (number.isEmpty) return;
     final uri = Uri(scheme: 'tel', path: number);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -117,7 +118,10 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
               Text(
                 contact.displayName,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 14),
               for (final phone in contact.phones)
@@ -142,7 +146,9 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .54),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .54),
                 ),
               ),
             ],
@@ -162,38 +168,38 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(widget.ru ? 'Телефонная книга' : 'Phone book'),
-          actions: [
-            IconButton(
-              tooltip: widget.ru ? 'Обновить контакты' : 'Refresh contacts',
-              onPressed: _load,
-              icon: const Icon(Icons.refresh_rounded),
+    appBar: AppBar(
+      title: Text(widget.ru ? 'Телефонная книга' : 'Phone book'),
+      actions: [
+        IconButton(
+          tooltip: widget.ru ? 'Обновить контакты' : 'Refresh contacts',
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(48),
+        child: SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment<int>(
+              value: 0,
+              icon: const Icon(Icons.contacts_outlined),
+              label: Text(widget.ru ? 'Контакты' : 'Contacts'),
+            ),
+            ButtonSegment<int>(
+              value: 1,
+              icon: const Icon(Icons.dialpad_rounded),
+              label: Text(widget.ru ? 'Набор номера' : 'Dialer'),
             ),
           ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
-            child: SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: [
-                ButtonSegment<int>(
-                  value: 0,
-                  icon: const Icon(Icons.contacts_outlined),
-                  label: Text(widget.ru ? 'Контакты' : 'Contacts'),
-                ),
-                ButtonSegment<int>(
-                  value: 1,
-                  icon: const Icon(Icons.dialpad_rounded),
-                  label: Text(widget.ru ? 'Набор номера' : 'Dialer'),
-                ),
-              ],
-              selected: <int>{_tab},
-              onSelectionChanged: (value) => setState(() => _tab = value.first),
-            ),
-          ),
+          selected: <int>{_tab},
+          onSelectionChanged: (value) => setState(() => _tab = value.first),
         ),
-        body: _tab == 0 ? _contactsBody() : _dialerBody(),
-      );
+      ),
+    ),
+    body: _tab == 0 ? _contactsBody() : _dialerBody(),
+  );
 
   Widget _contactsBody() {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -244,7 +250,9 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
         Expanded(
           child: _visible.isEmpty
               ? Center(
-                  child: Text(widget.ru ? 'Контакты не найдены' : 'No contacts found'),
+                  child: Text(
+                    widget.ru ? 'Контакты не найдены' : 'No contacts found',
+                  ),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(8, 2, 8, 20),
@@ -283,7 +291,20 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
   }
 
   Widget _dialerBody() {
-    const keys = <String>['1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '0', '⌫'];
+    const keys = <String>[
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '+',
+      '0',
+      '⌫',
+    ];
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -297,7 +318,10 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
                   autofocus: false,
                   keyboardType: TextInputType.phone,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
                   decoration: InputDecoration(
                     hintText: '+7 900 000 00 00',
                     suffixIcon: IconButton(
@@ -323,10 +347,15 @@ class _CgDeviceContactsScreenState extends State<CgDeviceContactsScreen> {
                       onPressed: value == '⌫'
                           ? () {
                               if (_number.text.isEmpty) return;
-                              final next = _number.text.substring(0, _number.text.length - 1);
+                              final next = _number.text.substring(
+                                0,
+                                _number.text.length - 1,
+                              );
                               _number.value = TextEditingValue(
                                 text: next,
-                                selection: TextSelection.collapsed(offset: next.length),
+                                selection: TextSelection.collapsed(
+                                  offset: next.length,
+                                ),
                               );
                             }
                           : () => _appendDigit(value),

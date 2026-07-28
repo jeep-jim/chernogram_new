@@ -44,10 +44,7 @@ class CgNotificationService with WidgetsBindingObserver {
       appUserModelId: 'Chernogram.Desktop',
       guid: 'B6C33A77-38D4-4CA0-BE3A-B0C431E40F16',
     );
-    final settings = InitializationSettings(
-      android: android,
-      windows: windows,
-    );
+    final settings = InitializationSettings(android: android, windows: windows);
 
     try {
       await _plugin.initialize(
@@ -67,8 +64,10 @@ class CgNotificationService with WidgetsBindingObserver {
   static Future<void> requestCallPermissions() async {
     if (!Platform.isAndroid) return;
     try {
-      final android = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       await android?.requestNotificationsPermission();
       await android?.requestFullScreenIntentPermission();
     } catch (_) {}
@@ -103,7 +102,9 @@ class CgNotificationService with WidgetsBindingObserver {
     required String title,
     required String body,
   }) async {
-    if (!_initialized || messageId.isEmpty || !_shownMessageIds.add(messageId)) {
+    if (!_initialized ||
+        messageId.isEmpty ||
+        !_shownMessageIds.add(messageId)) {
       return;
     }
     if (_shownMessageIds.length > 1500) {

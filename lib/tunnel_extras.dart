@@ -40,12 +40,12 @@ class TunnelPermissions {
   }
 
   Map<String, dynamic> toJson() => {
-        'canWriteMessages': canWriteMessages,
-        'canSendMedia': canSendMedia,
-        'canDownload': canDownload,
-        'canInvite': canInvite,
-        'canSeeHistory': canSeeHistory,
-      };
+    'canWriteMessages': canWriteMessages,
+    'canSendMedia': canSendMedia,
+    'canDownload': canDownload,
+    'canInvite': canInvite,
+    'canSeeHistory': canSeeHistory,
+  };
 
   factory TunnelPermissions.fromJson(Map<String, dynamic> json) {
     return TunnelPermissions(
@@ -59,7 +59,8 @@ class TunnelPermissions {
 }
 
 class LocalTunnelExtrasStore {
-  static String _avatarKey(String profileId) => 'chernogram_avatar_v1_$profileId';
+  static String _avatarKey(String profileId) =>
+      'chernogram_avatar_v1_$profileId';
   static String _permissionsKey(String tunnelId) =>
       'chernogram_permissions_v1_$tunnelId';
 
@@ -326,8 +327,8 @@ Future<TunnelPermissions?> showTunnelPermissionsDialog(
                 Text(
                   ru ? 'Права собеседника' : 'Guest permissions',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -459,49 +460,48 @@ class _AvatarPickerScreenState extends State<_AvatarPickerScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _denied
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      widget.ru
-                          ? 'Разрешите доступ к фотографиям, чтобы выбрать локальную аватарку.'
-                          : 'Allow photo access to choose a local avatar.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(2),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 2,
-                    crossAxisSpacing: 2,
-                  ),
-                  itemCount: _assets.length,
-                  itemBuilder: (_, index) {
-                    final asset = _assets[index];
-                    return InkWell(
-                      onTap: () => Navigator.pop(context, asset),
-                      child: FutureBuilder<Uint8List?>(
-                        future: asset.thumbnailDataWithSize(
-                          const ThumbnailSize.square(260),
-                          quality: 80,
-                        ),
-                        builder: (_, snapshot) => snapshot.data == null
-                            ? const ColoredBox(
-                                color: ChernogramColors.surfaceHigh,
-                                child: Icon(Icons.image_outlined),
-                              )
-                            : Image.memory(
-                                snapshot.data!,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                              ),
-                      ),
-                    );
-                  },
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  widget.ru
+                      ? 'Разрешите доступ к фотографиям, чтобы выбрать локальную аватарку.'
+                      : 'Allow photo access to choose a local avatar.',
+                  textAlign: TextAlign.center,
                 ),
+              ),
+            )
+          : GridView.builder(
+              padding: const EdgeInsets.all(2),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 2,
+                crossAxisSpacing: 2,
+              ),
+              itemCount: _assets.length,
+              itemBuilder: (_, index) {
+                final asset = _assets[index];
+                return InkWell(
+                  onTap: () => Navigator.pop(context, asset),
+                  child: FutureBuilder<Uint8List?>(
+                    future: asset.thumbnailDataWithSize(
+                      const ThumbnailSize.square(260),
+                      quality: 80,
+                    ),
+                    builder: (_, snapshot) => snapshot.data == null
+                        ? const ColoredBox(
+                            color: ChernogramColors.surfaceHigh,
+                            child: Icon(Icons.image_outlined),
+                          )
+                        : Image.memory(
+                            snapshot.data!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

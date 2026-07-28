@@ -36,7 +36,9 @@ class CgCallAvatar extends StatelessWidget {
             border: Border.all(color: Colors.white24, width: 2),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: .28),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: .28),
                 blurRadius: 24,
               ),
             ],

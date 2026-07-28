@@ -13,9 +13,9 @@ class CgLocalSharedFile {
   const CgLocalSharedFile({required this.info, required this.path});
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        ...info.toJson(),
-        'path': path,
-      };
+    ...info.toJson(),
+    'path': path,
+  };
 
   factory CgLocalSharedFile.fromJson(Map<String, dynamic> json) =>
       CgLocalSharedFile(
@@ -79,7 +79,8 @@ class CgSharedLibraryStore {
         final size = await entity.length();
         if (size <= 0 || size > maxFileBytes) continue;
         final name = entity.path.split(Platform.pathSeparator).last;
-        final relative = entity.path.startsWith('${root.path}${Platform.pathSeparator}')
+        final relative =
+            entity.path.startsWith('${root.path}${Platform.pathSeparator}')
             ? entity.path.substring(root.path.length + 1)
             : name;
         final id = base64Url
@@ -106,7 +107,9 @@ class CgSharedLibraryStore {
     return files;
   }
 
-  static Future<List<CgLocalSharedFile>> loadTunnelFiles(String tunnelId) async {
+  static Future<List<CgLocalSharedFile>> loadTunnelFiles(
+    String tunnelId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tunnelKey(tunnelId));
     if (raw == null) return const <CgLocalSharedFile>[];
@@ -116,9 +119,8 @@ class CgSharedLibraryStore {
         return decoded
             .whereType<Map>()
             .map(
-              (item) => CgLocalSharedFile.fromJson(
-                Map<String, dynamic>.from(item),
-              ),
+              (item) =>
+                  CgLocalSharedFile.fromJson(Map<String, dynamic>.from(item)),
             )
             .where((item) => item.path.isNotEmpty)
             .toList();
@@ -127,10 +129,7 @@ class CgSharedLibraryStore {
     return const <CgLocalSharedFile>[];
   }
 
-  static Future<CgLocalSharedFile?> find(
-    String tunnelId,
-    String fileId,
-  ) async {
+  static Future<CgLocalSharedFile?> find(String tunnelId, String fileId) async {
     final files = await loadTunnelFiles(tunnelId);
     for (final item in files) {
       if (item.info.id == fileId) return item;
@@ -167,7 +166,10 @@ class CgSharedLibraryStore {
     for (final folder in await loadMusicFolders()) {
       final root = Directory(folder);
       if (!await root.exists()) continue;
-      await for (final entity in root.list(recursive: true, followLinks: false)) {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (result.length >= maxFiles) return result;
         if (entity is! File) continue;
         if (kindForName(entity.path) == 'audio') result.add(entity);

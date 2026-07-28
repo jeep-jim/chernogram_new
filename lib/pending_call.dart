@@ -24,27 +24,28 @@ class CgPendingCall {
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'callId': callId,
-        'tunnelId': tunnelId,
-        'fromId': fromId,
-        'fromName': fromName,
-        'video': video,
-        'group': group,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        if (avatarBase64 != null) 'avatarBase64': avatarBase64,
-      };
+    'callId': callId,
+    'tunnelId': tunnelId,
+    'fromId': fromId,
+    'fromName': fromName,
+    'video': video,
+    'group': group,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    if (avatarBase64 != null) 'avatarBase64': avatarBase64,
+  };
 
   factory CgPendingCall.fromJson(Map<String, dynamic> json) => CgPendingCall(
-        callId: json['callId']?.toString() ?? '',
-        tunnelId: json['tunnelId']?.toString() ?? '',
-        fromId: json['fromId']?.toString() ?? '',
-        fromName: json['fromName']?.toString() ?? 'user',
-        avatarBase64: json['avatarBase64']?.toString(),
-        video: json['video'] == true,
-        group: json['group'] == true,
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-            DateTime.now().toUtc(),
-      );
+    callId: json['callId']?.toString() ?? '',
+    tunnelId: json['tunnelId']?.toString() ?? '',
+    fromId: json['fromId']?.toString() ?? '',
+    fromName: json['fromName']?.toString() ?? 'user',
+    avatarBase64: json['avatarBase64']?.toString(),
+    video: json['video'] == true,
+    group: json['group'] == true,
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+        DateTime.now().toUtc(),
+  );
 }
 
 class CgPendingCallStore {

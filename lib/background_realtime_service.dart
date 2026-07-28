@@ -16,15 +16,13 @@ const String _foregroundChannelId = 'chernogram_realtime_service';
 const int _foregroundNotificationId = 991;
 const String _foregroundStateKey = 'cg_app_foreground_v1';
 
-
 Future<void> setChernogramAppForeground(bool foreground) async {
   if (!Platform.isAndroid) return;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_foregroundStateKey, foreground);
-  FlutterBackgroundService().invoke(
-    'appState',
-    <String, dynamic>{'foreground': foreground},
-  );
+  FlutterBackgroundService().invoke('appState', <String, dynamic>{
+    'foreground': foreground,
+  });
 }
 
 Future<void> initializeChernogramRealtimeService() async {
@@ -33,7 +31,8 @@ Future<void> initializeChernogramRealtimeService() async {
   final notifications = FlutterLocalNotificationsPlugin();
   await notifications
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+        AndroidFlutterLocalNotificationsPlugin
+      >()
       ?.createNotificationChannel(
         const AndroidNotificationChannel(
           _foregroundChannelId,
@@ -161,16 +160,16 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
     final action = signal['action']?.toString() ?? '';
     final group = action == 'group_call_invite';
     final callId = signal['callId']?.toString() ?? '';
-    final fromId = signal['from']?.toString() ??
-        signal['relaySender']?.toString() ??
-        '';
+    final fromId =
+        signal['from']?.toString() ?? signal['relaySender']?.toString() ?? '';
     if (callId.isEmpty ||
         fromId.isEmpty ||
         fromId == currentProfile.id ||
         !displayedCalls.add(callId)) {
       return;
     }
-    final fromName = signal['fromName']?.toString() ??
+    final fromName =
+        signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         tunnel.displayName;
     final video = signal['video'] == true;
@@ -199,13 +198,9 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
         ongoing: true,
         autoCancel: false,
         playSound: true,
-        sound: const RawResourceAndroidNotificationSound(
-          'chernogram_incoming',
-        ),
+        sound: const RawResourceAndroidNotificationSound('chernogram_incoming'),
         enableVibration: true,
-        vibrationPattern: Int64List.fromList(
-          <int>[0, 650, 350, 650, 350, 650],
-        ),
+        vibrationPattern: Int64List.fromList(<int>[0, 650, 350, 650, 350, 650]),
         visibility: NotificationVisibility.public,
       ),
     );
@@ -284,7 +279,9 @@ void chernogramRealtimeServiceEntryPoint(ServiceInstance service) async {
       if (currentProfile == null) return;
       final activeIds = tunnels.map((item) => item.id).toSet();
 
-      final stale = sessions.keys.where((id) => !activeIds.contains(id)).toList();
+      final stale = sessions.keys
+          .where((id) => !activeIds.contains(id))
+          .toList();
       for (final id in stale) {
         await subscriptions.remove(id)?.cancel();
         await sessions.remove(id)?.close();

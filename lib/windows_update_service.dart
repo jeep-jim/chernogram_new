@@ -63,9 +63,7 @@ class ChernogramWindowsUpdater {
             .timeout(const Duration(seconds: 18));
 
         if (response.statusCode != 200) {
-          throw HttpException(
-            'Update server returned ${response.statusCode}',
-          );
+          throw HttpException('Update server returned ${response.statusCode}');
         }
 
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -166,7 +164,9 @@ class ChernogramWindowsUpdater {
       if (manual && context.mounted) {
         _showError(
           context,
-          ru ? 'Сервер обновлений не ответил.' : 'The update server did not respond.',
+          ru
+              ? 'Сервер обновлений не ответил.'
+              : 'The update server did not respond.',
         );
       }
     } catch (error) {
@@ -212,9 +212,7 @@ class ChernogramWindowsUpdater {
         builder: (_) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(
-              ru ? 'Обновление Чернограма' : 'Updating Chernogram',
-            ),
+            title: Text(ru ? 'Обновление Чернограма' : 'Updating Chernogram'),
             content: ValueListenableBuilder<double>(
               valueListenable: progress,
               builder: (_, value, __) => Column(
@@ -247,20 +245,27 @@ class ChernogramWindowsUpdater {
 
     try {
       final temp = await getTemporaryDirectory();
-      final safeVersion = update.versionFull.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
-      zipFile = File('${temp.path}${Platform.pathSeparator}chernogram-$safeVersion.zip');
+      final safeVersion = update.versionFull.replaceAll(
+        RegExp(r'[^0-9A-Za-z._-]'),
+        '_',
+      );
+      zipFile = File(
+        '${temp.path}${Platform.pathSeparator}chernogram-$safeVersion.zip',
+      );
       if (await zipFile.exists()) await zipFile.delete();
 
-      status.value = ru ? 'Скачиваем новую версию…' : 'Downloading the new version…';
+      status.value = ru
+          ? 'Скачиваем новую версию…'
+          : 'Downloading the new version…';
       client = http.Client();
       final request = http.Request('GET', Uri.parse(update.portableUrl));
       request.headers.addAll(const <String, String>{
         'Cache-Control': 'no-cache',
         'Accept': 'application/zip, application/octet-stream',
       });
-      final response = await client.send(request).timeout(
-            const Duration(seconds: 25),
-          );
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 25));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException('Download server returned ${response.statusCode}');
       }
@@ -392,8 +397,9 @@ class ChernogramWindowsUpdater {
   }
 
   static List<int> _versionParts(String value) {
-    final match = RegExp(r'^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\+(\d+))?')
-        .firstMatch(value.trim());
+    final match = RegExp(
+      r'^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\+(\d+))?',
+    ).firstMatch(value.trim());
     if (match == null) return const <int>[0, 0, 0, 0];
     return <int>[
       int.tryParse(match.group(1) ?? '') ?? 0,
@@ -405,10 +411,7 @@ class ChernogramWindowsUpdater {
 
   static void _showError(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        content: Text(message),
-      ),
+      SnackBar(duration: const Duration(seconds: 8), content: Text(message)),
     );
   }
 

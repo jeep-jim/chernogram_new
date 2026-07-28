@@ -27,22 +27,21 @@ class CgMediaPermissions {
     bool? canShare,
     bool? canSave,
     bool? canIndex,
-  }) =>
-      CgMediaPermissions(
-        canPlay: canPlay ?? this.canPlay,
-        canDownload: canDownload ?? this.canDownload,
-        canShare: canShare ?? this.canShare,
-        canSave: canSave ?? this.canSave,
-        canIndex: canIndex ?? this.canIndex,
-      );
+  }) => CgMediaPermissions(
+    canPlay: canPlay ?? this.canPlay,
+    canDownload: canDownload ?? this.canDownload,
+    canShare: canShare ?? this.canShare,
+    canSave: canSave ?? this.canSave,
+    canIndex: canIndex ?? this.canIndex,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'canPlay': canPlay,
-        'canDownload': canDownload,
-        'canShare': canShare,
-        'canSave': canSave,
-        'canIndex': canIndex,
-      };
+    'canPlay': canPlay,
+    'canDownload': canDownload,
+    'canShare': canShare,
+    'canSave': canSave,
+    'canIndex': canIndex,
+  };
 
   factory CgMediaPermissions.fromJson(Map<String, dynamic> json) =>
       CgMediaPermissions(
@@ -87,52 +86,52 @@ class CgMusicTrack {
     CgMediaPermissions? permissions,
     bool? published,
     DateTime? addedAt,
-  }) =>
-      CgMusicTrack(
-        id: id ?? this.id,
-        title: title ?? this.title,
-        subtitle: subtitle ?? this.subtitle,
-        path: path ?? this.path,
-        source: source ?? this.source,
-        author: author ?? this.author,
-        permissions: permissions ?? this.permissions,
-        published: published ?? this.published,
-        addedAt: addedAt ?? this.addedAt,
-      );
+  }) => CgMusicTrack(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    subtitle: subtitle ?? this.subtitle,
+    path: path ?? this.path,
+    source: source ?? this.source,
+    author: author ?? this.author,
+    permissions: permissions ?? this.permissions,
+    published: published ?? this.published,
+    addedAt: addedAt ?? this.addedAt,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'title': title,
-        'subtitle': subtitle,
-        'path': path,
-        'source': source.name,
-        'author': author,
-        'permissions': permissions.toJson(),
-        'published': published,
-        'addedAt': addedAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'title': title,
+    'subtitle': subtitle,
+    'path': path,
+    'source': source.name,
+    'author': author,
+    'permissions': permissions.toJson(),
+    'published': published,
+    'addedAt': addedAt.toUtc().toIso8601String(),
+  };
 
   factory CgMusicTrack.fromJson(Map<String, dynamic> json) => CgMusicTrack(
-        id: json['id']?.toString().trim().isNotEmpty == true
-            ? json['id'].toString()
-            : CgIds.random(20),
-        title: json['title']?.toString() ?? 'Track',
-        subtitle: json['subtitle']?.toString() ?? '',
-        path: json['path']?.toString() ?? '',
-        source: CgMusicSource.values.firstWhere(
-          (item) => item.name == json['source']?.toString(),
-          orElse: () => CgMusicSource.device,
-        ),
-        author: json['author']?.toString() ?? '',
-        permissions: json['permissions'] is Map
-            ? CgMediaPermissions.fromJson(
-                Map<String, dynamic>.from(json['permissions'] as Map),
-              )
-            : const CgMediaPermissions(),
-        published: json['published'] == true,
-        addedAt: DateTime.tryParse(json['addedAt']?.toString() ?? '') ??
-            DateTime.now().toUtc(),
-      );
+    id: json['id']?.toString().trim().isNotEmpty == true
+        ? json['id'].toString()
+        : CgIds.random(20),
+    title: json['title']?.toString() ?? 'Track',
+    subtitle: json['subtitle']?.toString() ?? '',
+    path: json['path']?.toString() ?? '',
+    source: CgMusicSource.values.firstWhere(
+      (item) => item.name == json['source']?.toString(),
+      orElse: () => CgMusicSource.device,
+    ),
+    author: json['author']?.toString() ?? '',
+    permissions: json['permissions'] is Map
+        ? CgMediaPermissions.fromJson(
+            Map<String, dynamic>.from(json['permissions'] as Map),
+          )
+        : const CgMediaPermissions(),
+    published: json['published'] == true,
+    addedAt:
+        DateTime.tryParse(json['addedAt']?.toString() ?? '') ??
+        DateTime.now().toUtc(),
+  );
 }
 
 class CgPlaylist {
@@ -149,33 +148,34 @@ class CgPlaylist {
   });
 
   CgPlaylist copyWith({String? name, List<String>? trackIds}) => CgPlaylist(
-        id: id,
-        name: name ?? this.name,
-        trackIds: trackIds ?? this.trackIds,
-        createdAt: createdAt,
-      );
+    id: id,
+    name: name ?? this.name,
+    trackIds: trackIds ?? this.trackIds,
+    createdAt: createdAt,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'name': name,
-        'trackIds': trackIds,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'trackIds': trackIds,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
 
   factory CgPlaylist.fromJson(Map<String, dynamic> json) => CgPlaylist(
-        id: json['id']?.toString().trim().isNotEmpty == true
-            ? json['id'].toString()
-            : CgIds.random(16),
-        name: json['name']?.toString().trim().isNotEmpty == true
-            ? json['name'].toString()
-            : 'Playlist',
-        trackIds: ((json['trackIds'] as List?) ?? const <dynamic>[])
-            .map((item) => item.toString())
-            .where((item) => item.isNotEmpty)
-            .toList(),
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-            DateTime.now().toUtc(),
-      );
+    id: json['id']?.toString().trim().isNotEmpty == true
+        ? json['id'].toString()
+        : CgIds.random(16),
+    name: json['name']?.toString().trim().isNotEmpty == true
+        ? json['name'].toString()
+        : 'Playlist',
+    trackIds: ((json['trackIds'] as List?) ?? const <dynamic>[])
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
+        .toList(),
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+        DateTime.now().toUtc(),
+  );
 }
 
 class CgPlayerSnapshot {
@@ -194,28 +194,25 @@ class CgPlayerSnapshot {
   });
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'queue': queue.map((item) => item.toJson()).toList(),
-        'index': index,
-        'positionMs': position.inMilliseconds,
-        'loopMode': loopMode,
-        'shuffle': shuffle,
-      };
+    'queue': queue.map((item) => item.toJson()).toList(),
+    'index': index,
+    'positionMs': position.inMilliseconds,
+    'loopMode': loopMode,
+    'shuffle': shuffle,
+  };
 
   factory CgPlayerSnapshot.fromJson(Map<String, dynamic> json) =>
       CgPlayerSnapshot(
         queue: ((json['queue'] as List?) ?? const <dynamic>[])
             .whereType<Map>()
             .map(
-              (item) => CgMusicTrack.fromJson(
-                Map<String, dynamic>.from(item),
-              ),
+              (item) => CgMusicTrack.fromJson(Map<String, dynamic>.from(item)),
             )
             .where((item) => item.path.isNotEmpty)
             .toList(),
         index: int.tryParse(json['index']?.toString() ?? '') ?? 0,
         position: Duration(
-          milliseconds:
-              int.tryParse(json['positionMs']?.toString() ?? '') ?? 0,
+          milliseconds: int.tryParse(json['positionMs']?.toString() ?? '') ?? 0,
         ),
         loopMode: json['loopMode']?.toString() ?? 'off',
         shuffle: json['shuffle'] == true,
@@ -235,10 +232,7 @@ class CgMusicLibraryStore {
 
   static Future<void> saveTrack(CgMusicTrack track) async {
     final tracks = await loadSaved();
-    final next = track.copyWith(
-      source: CgMusicSource.saved,
-      published: false,
-    );
+    final next = track.copyWith(source: CgMusicSource.saved, published: false);
     final index = tracks.indexWhere((item) => item.path == next.path);
     if (index >= 0) {
       tracks[index] = next;
@@ -249,7 +243,8 @@ class CgMusicLibraryStore {
   }
 
   static Future<void> removeSaved(String trackId) async {
-    final tracks = await loadSaved()..removeWhere((item) => item.id == trackId);
+    final tracks = await loadSaved()
+      ..removeWhere((item) => item.id == trackId);
     await _saveTracks(_savedKey, tracks);
   }
 
@@ -287,11 +282,7 @@ class CgMusicLibraryStore {
       if (decoded is! List) return <CgPlaylist>[];
       return decoded
           .whereType<Map>()
-          .map(
-            (item) => CgPlaylist.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
-          )
+          .map((item) => CgPlaylist.fromJson(Map<String, dynamic>.from(item)))
           .toList();
     } catch (_) {
       return <CgPlaylist>[];
@@ -322,7 +313,8 @@ class CgMusicLibraryStore {
   }
 
   static Future<void> removePlaylist(String id) async {
-    final playlists = await loadPlaylists()..removeWhere((item) => item.id == id);
+    final playlists = await loadPlaylists()
+      ..removeWhere((item) => item.id == id);
     await savePlaylists(playlists);
   }
 
@@ -367,11 +359,7 @@ class CgMusicLibraryStore {
       if (decoded is! List) return <CgMusicTrack>[];
       return decoded
           .whereType<Map>()
-          .map(
-            (item) => CgMusicTrack.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
-          )
+          .map((item) => CgMusicTrack.fromJson(Map<String, dynamic>.from(item)))
           .where((item) => item.path.isNotEmpty)
           .toList();
     } catch (_) {
@@ -379,10 +367,7 @@ class CgMusicLibraryStore {
     }
   }
 
-  static Future<void> _saveTracks(
-    String key,
-    List<CgMusicTrack> tracks,
-  ) async {
+  static Future<void> _saveTracks(String key, List<CgMusicTrack> tracks) async {
     final prefs = await SharedPreferences.getInstance();
     final tail = tracks.length > 500
         ? tracks.sublist(tracks.length - 500)

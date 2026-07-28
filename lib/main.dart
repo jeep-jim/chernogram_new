@@ -44,7 +44,9 @@ Future<void> main() async {
           androidNotificationChannelName: 'Музыка Чернограма',
           androidNotificationOngoing: true,
         );
-        await ChernogramCrashReporter.breadcrumb('audio background init complete');
+        await ChernogramCrashReporter.breadcrumb(
+          'audio background init complete',
+        );
       } catch (error, stack) {
         await ChernogramCrashReporter.recordError(
           error,
@@ -71,11 +73,7 @@ Future<void> main() async {
     },
     (error, stack) {
       unawaited(
-        ChernogramCrashReporter.recordError(
-          error,
-          stack,
-          source: 'ROOT_ZONE',
-        ),
+        ChernogramCrashReporter.recordError(error, stack, source: 'ROOT_ZONE'),
       );
     },
   );
@@ -151,11 +149,7 @@ class _ChernogramAppState extends State<ChernogramApp>
         return;
       }
       unawaited(
-        ChernogramAppUpdater.checkAndPrompt(
-          context,
-          ru: _ru!,
-          manual: false,
-        ),
+        ChernogramAppUpdater.checkAndPrompt(context, ru: _ru!, manual: false),
       );
     });
   }
@@ -201,33 +195,26 @@ class _ChernogramAppState extends State<ChernogramApp>
       darkTheme: chernogramTheme(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       home: !ready
-          ? const Scaffold(
-              body: Center(
-                child: ChernogramLogo(size: 112),
-              ),
-            )
+          ? const Scaffold(body: Center(child: ChernogramLogo(size: 112)))
           : !_introDone
-              ? ChernogramAnimatedIntro(
-                  ru: _ru!,
-                  onDone: _finishIntro,
-                )
-              : Builder(
-                  builder: (context) => ChernogramV12(
-                    ru: _ru!,
-                    darkMode: _darkMode,
-                    onToggleTheme: _toggleTheme,
-                    onChangeLanguage: _toggleLanguage,
-                    onCheckUpdates: () {
-                      unawaited(
-                        ChernogramAppUpdater.checkAndPrompt(
-                          context,
-                          ru: _ru!,
-                          manual: true,
-                        ),
-                      );
-                    },
-                  ),
-                ),
+          ? ChernogramAnimatedIntro(ru: _ru!, onDone: _finishIntro)
+          : Builder(
+              builder: (context) => ChernogramV12(
+                ru: _ru!,
+                darkMode: _darkMode,
+                onToggleTheme: _toggleTheme,
+                onChangeLanguage: _toggleLanguage,
+                onCheckUpdates: () {
+                  unawaited(
+                    ChernogramAppUpdater.checkAndPrompt(
+                      context,
+                      ru: _ru!,
+                      manual: true,
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

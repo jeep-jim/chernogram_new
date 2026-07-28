@@ -30,18 +30,14 @@ class ChernogramCrashReporter {
   static Future<void> breadcrumb(String message) =>
       _append('BREADCRUMB', message, null);
 
-  static Future<void> recordFlutterError(FlutterErrorDetails details) => _append(
-        'FLUTTER',
-        details.exceptionAsString(),
-        details.stack,
-      );
+  static Future<void> recordFlutterError(FlutterErrorDetails details) =>
+      _append('FLUTTER', details.exceptionAsString(), details.stack);
 
   static Future<void> recordError(
     Object error,
     StackTrace stack, {
     String source = 'DART',
-  }) =>
-      _append(source, error.toString(), stack);
+  }) => _append(source, error.toString(), stack);
 
   static Future<void> _append(
     String source,
@@ -52,14 +48,20 @@ class ChernogramCrashReporter {
     final file = _dartLog;
     if (file == null) return;
     final entry = StringBuffer()
-      ..writeln('===== ${DateTime.now().toUtc().toIso8601String()} $source =====')
+      ..writeln(
+        '===== ${DateTime.now().toUtc().toIso8601String()} $source =====',
+      )
       ..writeln(message);
     if (stack != null) entry.writeln(stack);
     entry.writeln();
     _writeQueue = _writeQueue.then((_) async {
       try {
         await file.parent.create(recursive: true);
-        await file.writeAsString(entry.toString(), mode: FileMode.append, flush: true);
+        await file.writeAsString(
+          entry.toString(),
+          mode: FileMode.append,
+          flush: true,
+        );
       } catch (_) {}
     });
     await _writeQueue;

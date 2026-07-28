@@ -50,8 +50,9 @@ class CgStorageStats {
 }
 
 class CgMediaStore {
-  static const MethodChannel _storageChannel =
-      MethodChannel('chernogram/storage');
+  static const MethodChannel _storageChannel = MethodChannel(
+    'chernogram/storage',
+  );
 
   static Future<Directory> rootDirectory() async {
     final support = await getApplicationSupportDirectory();
@@ -124,16 +125,11 @@ class CgMediaStore {
     }
     final raw = attachment.dataBase64;
     if (raw == null || raw.isEmpty) {
-      return message.copyWith(
-        attachment: attachment.copyWith(clearData: true),
-      );
+      return message.copyWith(attachment: attachment.copyWith(clearData: true));
     }
     final file = await ensureFile(attachment);
     return message.copyWith(
-      attachment: attachment.copyWith(
-        localPath: file?.path,
-        clearData: true,
-      ),
+      attachment: attachment.copyWith(localPath: file?.path, clearData: true),
     );
   }
 
@@ -164,10 +160,7 @@ class CgMediaStore {
     return result;
   }
 
-  static CgMessage preserveLocalPurge(
-    CgMessage? existing,
-    CgMessage incoming,
-  ) {
+  static CgMessage preserveLocalPurge(CgMessage? existing, CgMessage incoming) {
     if (existing?.meta['localPurged'] != true ||
         existing?.attachment?.id != incoming.attachment?.id) {
       return incoming;
@@ -278,11 +271,7 @@ class CgMediaStore {
         mediaBytes: media,
       );
     } catch (_) {
-      return CgStorageStats(
-        freeBytes: -1,
-        totalBytes: -1,
-        mediaBytes: media,
-      );
+      return CgStorageStats(freeBytes: -1, totalBytes: -1, mediaBytes: media);
     }
   }
 
@@ -458,7 +447,9 @@ class _CgVoiceRecordButtonState extends State<CgVoiceRecordButton> {
                 Expanded(
                   child: Text(
                     _cancel
-                        ? (widget.ru ? 'Отпустите — отмена' : 'Release to cancel')
+                        ? (widget.ru
+                              ? 'Отпустите — отмена'
+                              : 'Release to cancel')
                         : '$label  ← ${widget.ru ? 'отмена' : 'cancel'}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -525,7 +516,8 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
   }
 
   Future<void> _prepareLocalPreview() async {
-    final file = await CgMediaStore.existingFile(widget.attachment) ??
+    final file =
+        await CgMediaStore.existingFile(widget.attachment) ??
         await CgMediaStore.ensureFile(widget.attachment);
     if (file == null || !mounted) return;
     _file = file;
@@ -641,19 +633,19 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
   }
 
   Widget _imagePreview(File file) => GestureDetector(
-        onTap: _showImage,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Image.file(
-            file,
-            width: 286,
-            height: 214,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-            cacheWidth: 760,
-          ),
-        ),
-      );
+    onTap: _showImage,
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Image.file(
+        file,
+        width: 286,
+        height: 214,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        cacheWidth: 760,
+      ),
+    ),
+  );
 
   Widget _videoPreview(VideoPlayerController controller) {
     final preview = Stack(
@@ -676,7 +668,11 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
             color: Colors.black.withValues(alpha: .56),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 31),
+          child: const Icon(
+            Icons.play_arrow_rounded,
+            color: Colors.white,
+            size: 31,
+          ),
         ),
       ],
     );
@@ -729,12 +725,12 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
     final icon = CgMediaStore.isAudio(attachment)
         ? Icons.headphones_rounded
         : attachment.kind == 'image'
-            ? Icons.image_outlined
-            : CgMediaStore.isVideo(attachment)
-                ? Icons.play_circle_outline_rounded
-                : attachment.kind == 'archive'
-                    ? Icons.folder_zip_outlined
-                    : Icons.insert_drive_file_outlined;
+        ? Icons.image_outlined
+        : CgMediaStore.isVideo(attachment)
+        ? Icons.play_circle_outline_rounded
+        : attachment.kind == 'archive'
+        ? Icons.folder_zip_outlined
+        : Icons.insert_drive_file_outlined;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -744,10 +740,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
           constraints: const BoxConstraints(minWidth: 230, maxWidth: 300),
           padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: .45),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: .45),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
@@ -768,7 +763,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
                   children: [
                     Text(
                       attachment.kind == 'voice'
-                          ? (widget.ru ? 'Голосовое сообщение' : 'Voice message')
+                          ? (widget.ru
+                                ? 'Голосовое сообщение'
+                                : 'Voice message')
                           : attachment.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -779,10 +776,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
                       '${CgMediaStore.fileSize(attachment.size)} • ${widget.ru ? 'нажмите, чтобы открыть' : 'tap to open'}',
                       style: TextStyle(
                         fontSize: 10,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: .56),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: .56),
                       ),
                     ),
                   ],
@@ -824,7 +820,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
                         ),
                         title: Text(
                           widget.ru ? 'Удалить сообщение' : 'Delete message',
-                          style: const TextStyle(color: ChernogramColors.danger),
+                          style: const TextStyle(
+                            color: ChernogramColors.danger,
+                          ),
                         ),
                       ),
                     ),
@@ -889,14 +887,14 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
   }
 
   List<CgMediaItem> get _visible => _items.where((item) {
-        if (_filter == 'all') return true;
-        if (_filter == 'audio') return CgMediaStore.isAudio(item.attachment);
-        if (_filter == 'video') return CgMediaStore.isVideo(item.attachment);
-        if (_filter == 'image') return item.attachment.kind == 'image';
-        return !CgMediaStore.isAudio(item.attachment) &&
-            !CgMediaStore.isVideo(item.attachment) &&
-            item.attachment.kind != 'image';
-      }).toList();
+    if (_filter == 'all') return true;
+    if (_filter == 'audio') return CgMediaStore.isAudio(item.attachment);
+    if (_filter == 'video') return CgMediaStore.isVideo(item.attachment);
+    if (_filter == 'image') return item.attachment.kind == 'image';
+    return !CgMediaStore.isAudio(item.attachment) &&
+        !CgMediaStore.isVideo(item.attachment) &&
+        item.attachment.kind != 'image';
+  }).toList();
 
   Future<void> _play(CgMediaItem item) async {
     final file = await CgMediaStore.ensureFile(item.attachment);
@@ -954,7 +952,9 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(widget.ru ? 'Удалить локальный файл?' : 'Delete local file?'),
+        title: Text(
+          widget.ru ? 'Удалить локальный файл?' : 'Delete local file?',
+        ),
         content: Text(
           widget.ru
               ? 'Файл исчезнет с этого устройства, но текст сообщения останется в истории.'
@@ -988,7 +988,11 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(widget.ru ? 'Очистить все локальные файлы?' : 'Clear all local files?'),
+        title: Text(
+          widget.ru
+              ? 'Очистить все локальные файлы?'
+              : 'Clear all local files?',
+        ),
         content: Text(
           widget.ru
               ? 'Фото, видео, аудио и документы удалятся с устройства. Сообщения и названия файлов останутся.'
@@ -1055,7 +1059,9 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
                       Expanded(
                         child: Text(
                           stats == null
-                              ? (widget.ru ? 'Считаем место…' : 'Calculating storage…')
+                              ? (widget.ru
+                                    ? 'Считаем место…'
+                                    : 'Calculating storage…')
                               : '${widget.ru ? 'Медиа' : 'Media'}: ${CgMediaStore.fileSize(stats.mediaBytes)}',
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
@@ -1077,23 +1083,44 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
-              children: <(String, String, IconData)>[
-                ('all', widget.ru ? 'Все' : 'All', Icons.folder_copy_outlined),
-                ('image', widget.ru ? 'Фото' : 'Photos', Icons.photo_outlined),
-                ('video', widget.ru ? 'Видео' : 'Video', Icons.movie_outlined),
-                ('audio', widget.ru ? 'Музыка' : 'Audio', Icons.headphones_outlined),
-                ('files', widget.ru ? 'Файлы' : 'Files', Icons.description_outlined),
-              ].map((entry) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 7),
-                  child: FilterChip(
-                    selected: _filter == entry.$1,
-                    avatar: Icon(entry.$3, size: 18),
-                    label: Text(entry.$2),
-                    onSelected: (_) => setState(() => _filter = entry.$1),
-                  ),
-                );
-              }).toList(),
+              children:
+                  <(String, String, IconData)>[
+                    (
+                      'all',
+                      widget.ru ? 'Все' : 'All',
+                      Icons.folder_copy_outlined,
+                    ),
+                    (
+                      'image',
+                      widget.ru ? 'Фото' : 'Photos',
+                      Icons.photo_outlined,
+                    ),
+                    (
+                      'video',
+                      widget.ru ? 'Видео' : 'Video',
+                      Icons.movie_outlined,
+                    ),
+                    (
+                      'audio',
+                      widget.ru ? 'Музыка' : 'Audio',
+                      Icons.headphones_outlined,
+                    ),
+                    (
+                      'files',
+                      widget.ru ? 'Файлы' : 'Files',
+                      Icons.description_outlined,
+                    ),
+                  ].map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 7),
+                      child: FilterChip(
+                        selected: _filter == entry.$1,
+                        avatar: Icon(entry.$3, size: 18),
+                        label: Text(entry.$2),
+                        onSelected: (_) => setState(() => _filter = entry.$1),
+                      ),
+                    );
+                  }).toList(),
             ),
           ),
           const SizedBox(height: 8),
@@ -1101,68 +1128,76 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
             child: _busy
                 ? const Center(child: CircularProgressIndicator())
                 : _visible.isEmpty
-                    ? Center(
-                        child: Text(widget.ru ? 'Файлов пока нет' : 'No files yet'),
-                      )
-                    : ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          12,
-                          4,
-                          12,
-                          _playing == null ? 24 : 112,
+                ? Center(
+                    child: Text(widget.ru ? 'Файлов пока нет' : 'No files yet'),
+                  )
+                : ListView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      12,
+                      4,
+                      12,
+                      _playing == null ? 24 : 112,
+                    ),
+                    itemCount: _visible.length,
+                    itemBuilder: (_, index) {
+                      final item = _visible[index];
+                      return Card(
+                        child: ListTile(
+                          onTap: () => _open(item),
+                          leading: _MediaLeading(item: item),
+                          title: Text(
+                            item.attachment.kind == 'voice'
+                                ? (widget.ru
+                                      ? 'Голосовое сообщение'
+                                      : 'Voice message')
+                                : item.attachment.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          subtitle: Text(
+                            '${item.tunnelName} • ${CgMediaStore.fileSize(item.attachment.size)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            onSelected: (value) {
+                              if (value == 'share') {
+                                CgMediaStore.share(item.attachment);
+                              } else if (value == 'delete') {
+                                _delete(item);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'share',
+                                child: ListTile(
+                                  leading: const Icon(Icons.share_outlined),
+                                  title: Text(
+                                    widget.ru ? 'Поделиться' : 'Share',
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: ListTile(
+                                  leading: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: ChernogramColors.danger,
+                                  ),
+                                  title: Text(
+                                    widget.ru
+                                        ? 'Удалить локально'
+                                        : 'Delete locally',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        itemCount: _visible.length,
-                        itemBuilder: (_, index) {
-                          final item = _visible[index];
-                          return Card(
-                            child: ListTile(
-                              onTap: () => _open(item),
-                              leading: _MediaLeading(item: item),
-                              title: Text(
-                                item.attachment.kind == 'voice'
-                                    ? (widget.ru ? 'Голосовое сообщение' : 'Voice message')
-                                    : item.attachment.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                              subtitle: Text(
-                                '${item.tunnelName} • ${CgMediaStore.fileSize(item.attachment.size)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'share') {
-                                    CgMediaStore.share(item.attachment);
-                                  } else if (value == 'delete') {
-                                    _delete(item);
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  PopupMenuItem(
-                                    value: 'share',
-                                    child: ListTile(
-                                      leading: const Icon(Icons.share_outlined),
-                                      title: Text(widget.ru ? 'Поделиться' : 'Share'),
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: ListTile(
-                                      leading: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        color: ChernogramColors.danger,
-                                      ),
-                                      title: Text(widget.ru ? 'Удалить локально' : 'Delete locally'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -1198,32 +1233,45 @@ class _CgMediaLibraryScreenState extends State<CgMediaLibraryScreen> {
                           children: [
                             Text(
                               _playing!.attachment.kind == 'voice'
-                                  ? (widget.ru ? 'Голосовое сообщение' : 'Voice message')
+                                  ? (widget.ru
+                                        ? 'Голосовое сообщение'
+                                        : 'Voice message')
                                   : _playing!.attachment.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w900),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                             StreamBuilder<Duration>(
                               stream: _player.positionStream,
-                              builder: (_, position) => StreamBuilder<Duration?>(
-                                stream: _player.durationStream,
-                                builder: (_, duration) {
-                                  final total = duration.data ?? Duration.zero;
-                                  final current = position.data ?? Duration.zero;
-                                  final max = math.max(1, total.inMilliseconds).toDouble();
-                                  return Slider(
-                                    min: 0,
-                                    max: max,
-                                    value: current.inMilliseconds.clamp(0, max.toInt()).toDouble(),
-                                    onChanged: total == Duration.zero
-                                        ? null
-                                        : (value) => _player.seek(
-                                              Duration(milliseconds: value.round()),
-                                            ),
-                                  );
-                                },
-                              ),
+                              builder: (_, position) =>
+                                  StreamBuilder<Duration?>(
+                                    stream: _player.durationStream,
+                                    builder: (_, duration) {
+                                      final total =
+                                          duration.data ?? Duration.zero;
+                                      final current =
+                                          position.data ?? Duration.zero;
+                                      final max = math
+                                          .max(1, total.inMilliseconds)
+                                          .toDouble();
+                                      return Slider(
+                                        min: 0,
+                                        max: max,
+                                        value: current.inMilliseconds
+                                            .clamp(0, max.toInt())
+                                            .toDouble(),
+                                        onChanged: total == Duration.zero
+                                            ? null
+                                            : (value) => _player.seek(
+                                                Duration(
+                                                  milliseconds: value.round(),
+                                                ),
+                                              ),
+                                      );
+                                    },
+                                  ),
                             ),
                           ],
                         ),
@@ -1265,7 +1313,8 @@ class _MediaLeadingState extends State<_MediaLeading> {
 
   Future<void> _prepare() async {
     final attachment = widget.item.attachment;
-    final file = await CgMediaStore.existingFile(attachment) ??
+    final file =
+        await CgMediaStore.existingFile(attachment) ??
         await CgMediaStore.ensureFile(attachment);
     if (file == null || !mounted) return;
     _file = file;
@@ -1329,7 +1378,11 @@ class _MediaLeadingState extends State<_MediaLeading> {
                 ),
               ),
               const Center(
-                child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 25),
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 25,
+                ),
               ),
             ],
           ),
@@ -1341,10 +1394,10 @@ class _MediaLeadingState extends State<_MediaLeading> {
         CgMediaStore.isAudio(attachment)
             ? Icons.graphic_eq_rounded
             : CgMediaStore.isVideo(attachment)
-                ? Icons.play_arrow_rounded
-                : attachment.kind == 'image'
-                    ? Icons.image_outlined
-                    : Icons.description_outlined,
+            ? Icons.play_arrow_rounded
+            : attachment.kind == 'image'
+            ? Icons.image_outlined
+            : Icons.description_outlined,
       ),
     );
   }
@@ -1358,18 +1411,18 @@ class CgImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        body: InteractiveViewer(
-          minScale: .5,
-          maxScale: 5,
-          child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
-        ),
-      );
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    body: InteractiveViewer(
+      minScale: .5,
+      maxScale: 5,
+      child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+    ),
+  );
 }
 
 class CgVideoPlayerScreen extends StatefulWidget {
@@ -1411,59 +1464,58 @@ class _CgVideoPlayerScreenState extends State<CgVideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        body: Center(
-          child: !_ready
-              ? const CircularProgressIndicator()
-              : GestureDetector(
-                  onTap: () => setState(() {
-                    _controller.value.isPlaying
-                        ? _controller.pause()
-                        : _controller.play();
-                  }),
-                  child: widget.circle
-                      ? ClipOval(
-                          child: SizedBox.square(
-                            dimension: math.min(
-                              MediaQuery.sizeOf(context).width - 34,
-                              420.0,
-                            ).toDouble(),
-                            child: FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _controller.value.size.width,
-                                height: _controller.value.size.height,
-                                child: VideoPlayer(_controller),
-                              ),
-                            ),
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    body: Center(
+      child: !_ready
+          ? const CircularProgressIndicator()
+          : GestureDetector(
+              onTap: () => setState(() {
+                _controller.value.isPlaying
+                    ? _controller.pause()
+                    : _controller.play();
+              }),
+              child: widget.circle
+                  ? ClipOval(
+                      child: SizedBox.square(
+                        dimension: math
+                            .min(MediaQuery.sizeOf(context).width - 34, 420.0)
+                            .toDouble(),
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _controller.value.size.width,
+                            height: _controller.value.size.height,
+                            child: VideoPlayer(_controller),
                           ),
-                        )
-                      : AspectRatio(
-                          aspectRatio: _controller.value.aspectRatio,
-                          child: VideoPlayer(_controller),
                         ),
-                ),
-        ),
-        floatingActionButton: _ready
-            ? FloatingActionButton(
-                onPressed: () => setState(() {
-                  _controller.value.isPlaying
-                      ? _controller.pause()
-                      : _controller.play();
-                }),
-                child: Icon(
-                  _controller.value.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                ),
-              )
-            : null,
-      );
+                      ),
+                    )
+                  : AspectRatio(
+                      aspectRatio: _controller.value.aspectRatio,
+                      child: VideoPlayer(_controller),
+                    ),
+            ),
+    ),
+    floatingActionButton: _ready
+        ? FloatingActionButton(
+            onPressed: () => setState(() {
+              _controller.value.isPlaying
+                  ? _controller.pause()
+                  : _controller.play();
+            }),
+            child: Icon(
+              _controller.value.isPlaying
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
+            ),
+          )
+        : null,
+  );
 }
 
 class CgCircleRecorderScreen extends StatefulWidget {
@@ -1598,7 +1650,8 @@ class _CgCircleRecorderScreenState extends State<CgCircleRecorderScreen>
       context,
       CgAttachment(
         id: id,
-        name: 'Кружок ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}.mp4',
+        name:
+            'Кружок ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}.mp4',
         size: bytes.length,
         kind: 'circle',
         dataBase64: base64Encode(bytes),
@@ -1617,111 +1670,112 @@ class _CgCircleRecorderScreenState extends State<CgCircleRecorderScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: const Color(0xFF050711),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          title: Text(widget.ru ? 'Записать кружок' : 'Record a circle'),
-        ),
-        body: Center(
-          child: _busy
-              ? const CircularProgressIndicator()
-              : _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Builder(
-                          builder: (context) {
-                            final diameter = math.min(
-                              MediaQuery.sizeOf(context).width - 48,
-                              410.0,
-                            ).toDouble();
-                            final progress = (_elapsed.inMilliseconds / 60000)
-                                .clamp(0.0, 1.0);
-                            return SizedBox.square(
-                              dimension: diameter + 14,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  ClipOval(
-                                    child: SizedBox.square(
-                                      dimension: diameter,
-                                      child: CameraPreview(_controller!),
-                                    ),
+    backgroundColor: const Color(0xFF050711),
+    appBar: AppBar(
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      title: Text(widget.ru ? 'Записать кружок' : 'Record a circle'),
+    ),
+    body: Center(
+      child: _busy
+          ? const CircularProgressIndicator()
+          : _error != null
+          ? Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white),
+              ),
+            )
+          : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Builder(
+                  builder: (context) {
+                    final diameter = math
+                        .min(MediaQuery.sizeOf(context).width - 48, 410.0)
+                        .toDouble();
+                    final progress = (_elapsed.inMilliseconds / 60000).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    return SizedBox.square(
+                      dimension: diameter + 14,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          ClipOval(
+                            child: SizedBox.square(
+                              dimension: diameter,
+                              child: CameraPreview(_controller!),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: CircularProgressIndicator(
+                              value: _recording ? progress : 0,
+                              strokeWidth: 7,
+                              backgroundColor: Colors.white24,
+                            ),
+                          ),
+                          if (_recording)
+                            Positioned(
+                              bottom: 18,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '${60 - _elapsed.inSeconds} сек',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
                                   ),
-                                  Positioned.fill(
-                                    child: CircularProgressIndicator(
-                                      value: _recording ? progress : 0,
-                                      strokeWidth: 7,
-                                      backgroundColor: Colors.white24,
-                                    ),
-                                  ),
-                                  if (_recording)
-                                    Positioned(
-                                      bottom: 18,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(999),
-                                        ),
-                                        child: Text(
-                                          '${60 - _elapsed.inSeconds} сек',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          '${_elapsed.inMinutes.toString().padLeft(2, '0')}:${(_elapsed.inSeconds % 60).toString().padLeft(2, '0')}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: _toggleRecord,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            width: _recording ? 74 : 82,
-                            height: _recording ? 74 : 82,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _recording
-                                  ? ChernogramColors.danger
-                                  : Theme.of(context).colorScheme.primary,
-                              border: Border.all(color: Colors.white, width: 5),
                             ),
-                            child: Icon(
-                              _recording ? Icons.stop_rounded : Icons.videocam_rounded,
-                              color: Colors.white,
-                              size: 34,
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  '${_elapsed.inMinutes.toString().padLeft(2, '0')}:${(_elapsed.inSeconds % 60).toString().padLeft(2, '0')}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: _toggleRecord,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: _recording ? 74 : 82,
+                    height: _recording ? 74 : 82,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _recording
+                          ? ChernogramColors.danger
+                          : Theme.of(context).colorScheme.primary,
+                      border: Border.all(color: Colors.white, width: 5),
                     ),
-        ),
-      );
+                    child: Icon(
+                      _recording ? Icons.stop_rounded : Icons.videocam_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    ),
+  );
 }

@@ -169,10 +169,8 @@ class ChernogramAppMonitor {
 
     if (message.authorId != profile.id) {
       _rememberContact(tunnelId, message.authorId, message.authorName);
-      final fresh = DateTime.now()
-              .difference(message.sentAt.toLocal())
-              .inSeconds
-              .abs() <=
+      final fresh =
+          DateTime.now().difference(message.sentAt.toLocal()).inSeconds.abs() <=
           30;
       if (playSound && fresh && CgMessageSoundRegistry.claim(message.id)) {
         unawaited(ChernogramSound.playMessage());
@@ -224,8 +222,7 @@ class ChernogramAppMonitor {
         name: data['name']?.toString() ?? tunnel.name,
         isPrivate: data['isPrivate'] != false,
         secret: data['secret']?.toString() ?? tunnel.secret,
-        avatarBase64:
-            data['avatarBase64']?.toString() ?? tunnel.avatarBase64,
+        avatarBase64: data['avatarBase64']?.toString() ?? tunnel.avatarBase64,
         revision: revision,
       );
       _tunnels[tunnelId] = updated;
@@ -278,9 +275,8 @@ class ChernogramAppMonitor {
       return;
     }
 
-    final from = signal['from']?.toString() ??
-        signal['relaySender']?.toString() ??
-        '';
+    final from =
+        signal['from']?.toString() ?? signal['relaySender']?.toString() ?? '';
     if (from.isEmpty || from == profile.id || _dialogOpen) return;
 
     final context = chernogramNavigatorKey.currentContext;
@@ -288,7 +284,8 @@ class ChernogramAppMonitor {
     if (context == null || navigator == null) return;
     if (!CgSignalRegistry.claim(callId)) return;
 
-    final fromName = signal['fromName']?.toString() ??
+    final fromName =
+        signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         (_ru ? 'Собеседник' : 'Peer');
     final video = signal['video'] == true;
@@ -311,23 +308,23 @@ class ChernogramAppMonitor {
             fallbackIcon: group
                 ? Icons.groups_2_rounded
                 : video
-                    ? Icons.videocam_rounded
-                    : Icons.call_rounded,
+                ? Icons.videocam_rounded
+                : Icons.call_rounded,
           ),
           title: Text(
             group
                 ? (video
-                    ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
-                    : (_ru ? 'Групповой звонок' : 'Group call'))
+                      ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
+                      : (_ru ? 'Групповой звонок' : 'Group call'))
                 : (video
-                    ? (_ru ? 'Видеозвонок' : 'Video call')
-                    : (_ru ? 'Аудиозвонок' : 'Audio call')),
+                      ? (_ru ? 'Видеозвонок' : 'Video call')
+                      : (_ru ? 'Аудиозвонок' : 'Audio call')),
           ),
           content: Text(
             group
                 ? (_ru
-                    ? '$fromName приглашает в звонок до 6 участников.'
-                    : '$fromName invites you to a call for up to 6 participants.')
+                      ? '$fromName приглашает в звонок до 6 участников.'
+                      : '$fromName invites you to a call for up to 6 participants.')
                 : (_ru ? '$fromName звонит вам' : '$fromName is calling you'),
             textAlign: TextAlign.center,
           ),

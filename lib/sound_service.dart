@@ -31,10 +31,10 @@ class ChernogramSound {
       _incomingPlayer = null;
     }
     try {
-      await _channel.invokeMethod<void>(
-        'startIncomingCall',
-        <String, dynamic>{'video': video, 'customSound': customStarted},
-      );
+      await _channel.invokeMethod<void>('startIncomingCall', <String, dynamic>{
+        'video': video,
+        'customSound': customStarted,
+      });
     } catch (_) {
       if (!customStarted) await SystemSound.play(SystemSoundType.alert);
     }

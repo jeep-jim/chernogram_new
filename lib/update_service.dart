@@ -75,9 +75,7 @@ class ChernogramUpdater {
             .timeout(const Duration(seconds: 18));
 
         if (response.statusCode != 200) {
-          throw HttpException(
-            'Update server returned ${response.statusCode}',
-          );
+          throw HttpException('Update server returned ${response.statusCode}');
         }
 
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -247,9 +245,7 @@ class ChernogramUpdater {
         builder: (_) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(
-              ru ? 'Обновление Чернограма' : 'Updating Chernogram',
-            ),
+            title: Text(ru ? 'Обновление Чернограма' : 'Updating Chernogram'),
             content: ValueListenableBuilder<double>(
               valueListenable: progress,
               builder: (_, value, __) => Column(
@@ -279,10 +275,7 @@ class ChernogramUpdater {
     try {
       final destination = 'chernogram-update-${update.versionCode}.apk';
       final stream = update.sha256.isEmpty
-          ? OtaUpdate().execute(
-              update.apkUrl,
-              destinationFilename: destination,
-            )
+          ? OtaUpdate().execute(update.apkUrl, destinationFilename: destination)
           : OtaUpdate().execute(
               update.apkUrl,
               destinationFilename: destination,
@@ -404,21 +397,13 @@ class ChernogramUpdater {
     }
   }
 
-  static void _showError(
-    BuildContext context,
-    bool ru,
-    String message,
-  ) {
+  static void _showError(BuildContext context, bool ru, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         action: SnackBarAction(
           label: ru ? 'Повторить' : 'Retry',
-          onPressed: () => checkAndPrompt(
-            context,
-            ru: ru,
-            manual: true,
-          ),
+          onPressed: () => checkAndPrompt(context, ru: ru, manual: true),
         ),
       ),
     );

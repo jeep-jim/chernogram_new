@@ -18,24 +18,24 @@ class LanTunnelEndpoint {
   });
 
   Uri socketUri({required String peerId, required String nickname}) => Uri(
-        scheme: 'ws',
-        host: host,
-        port: port,
-        path: '/ws',
-        queryParameters: {
-          'tunnel': tunnelId,
-          'secret': secret,
-          'peer': peerId,
-          'name': nickname,
-        },
-      );
+    scheme: 'ws',
+    host: host,
+    port: port,
+    path: '/ws',
+    queryParameters: {
+      'tunnel': tunnelId,
+      'secret': secret,
+      'peer': peerId,
+      'name': nickname,
+    },
+  );
 
   Map<String, dynamic> toJson() => {
-        'host': host,
-        'port': port,
-        'tunnelId': tunnelId,
-        'secret': secret,
-      };
+    'host': host,
+    'port': port,
+    'tunnelId': tunnelId,
+    'secret': secret,
+  };
 
   factory LanTunnelEndpoint.fromJson(Map<String, dynamic> json) {
     return LanTunnelEndpoint(
@@ -97,7 +97,10 @@ class LanTunnelDirectory {
 
   static Future<void> save(LanTunnelEndpoint endpoint) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key(endpoint.tunnelId), jsonEncode(endpoint.toJson()));
+    await prefs.setString(
+      _key(endpoint.tunnelId),
+      jsonEncode(endpoint.toJson()),
+    );
   }
 
   static Future<LanTunnelEndpoint?> load(String tunnelId) async {
@@ -207,7 +210,11 @@ class LanTunnelSession {
 
   Future<void> _startServer() async {
     final address = await _bestLanAddress();
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, 0, shared: true);
+    final server = await HttpServer.bind(
+      InternetAddress.anyIPv4,
+      0,
+      shared: true,
+    );
     _server = server;
     _endpoint = LanTunnelEndpoint(
       host: address,
@@ -229,7 +236,8 @@ class LanTunnelSession {
       return;
     }
     final query = request.uri.queryParameters;
-    final valid = request.uri.path == '/ws' &&
+    final valid =
+        request.uri.path == '/ws' &&
         WebSocketTransformer.isUpgradeRequest(request) &&
         query['tunnel'] == tunnelId &&
         query['secret'] == secret;
@@ -382,7 +390,8 @@ class LanTunnelSession {
     final socket = _client;
     if (socket == null) {
       final id = message['id']?.toString() ?? '';
-      if (id.isNotEmpty) _pendingMessages[id] = Map<String, dynamic>.from(message);
+      if (id.isNotEmpty)
+        _pendingMessages[id] = Map<String, dynamic>.from(message);
       _emit('status', {'state': 'queued'});
       return;
     }
@@ -499,7 +508,9 @@ class LanTunnelSession {
       }
     }
     if (addresses.isEmpty) {
-      throw StateError('No local IPv4 address. Connect both phones to one Wi-Fi.');
+      throw StateError(
+        'No local IPv4 address. Connect both phones to one Wi-Fi.',
+      );
     }
     addresses.sort((a, b) {
       final aPrivate = _isPrivateIpv4(a) ? 0 : 1;

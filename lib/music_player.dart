@@ -23,7 +23,9 @@ class CgMusicHub {
       ValueNotifier<List<CgMusicTrack>>(const <CgMusicTrack>[]);
   final ValueNotifier<String?> activeTrackId = ValueNotifier<String?>(null);
   final ValueNotifier<bool> shuffleEnabled = ValueNotifier<bool>(false);
-  final ValueNotifier<LoopMode> loopMode = ValueNotifier<LoopMode>(LoopMode.off);
+  final ValueNotifier<LoopMode> loopMode = ValueNotifier<LoopMode>(
+    LoopMode.off,
+  );
 
   StreamSubscription<int?>? _indexSubscription;
   StreamSubscription<Duration>? _positionSubscription;
@@ -116,9 +118,12 @@ class CgMusicHub {
     await initialize();
     if (tracks.isEmpty) return;
     final existing = queue.value;
-    final sameQueue = existing.length == tracks.length &&
-        List<int>.generate(tracks.length, (index) => index)
-            .every((index) => existing[index].path == tracks[index].path);
+    final sameQueue =
+        existing.length == tracks.length &&
+        List<int>.generate(
+          tracks.length,
+          (index) => index,
+        ).every((index) => existing[index].path == tracks[index].path);
     final safeIndex = initialIndex.clamp(0, tracks.length - 1).toInt();
     if (!sameQueue) {
       queue.value = List<CgMusicTrack>.unmodifiable(tracks);
@@ -150,17 +155,16 @@ class CgMusicHub {
     required String title,
     required String subtitle,
     required String path,
-  }) =>
-      playSingle(
-        CgMusicTrack(
-          id: id,
-          title: title,
-          subtitle: subtitle,
-          path: path,
-          source: CgMusicSource.chats,
-          addedAt: DateTime.now().toUtc(),
-        ),
-      );
+  }) => playSingle(
+    CgMusicTrack(
+      id: id,
+      title: title,
+      subtitle: subtitle,
+      path: path,
+      source: CgMusicSource.chats,
+      addedAt: DateTime.now().toUtc(),
+    ),
+  );
 
   Future<void> next() async {
     await initialize();
@@ -198,7 +202,9 @@ class CgMusicHub {
   Future<void> stopAndClear() async {
     _persistTimer?.cancel();
     await player.stop();
-    await player.setAudioSource(AudioSource.asset('assets/audio/chernogram_incoming.mp3'));
+    await player.setAudioSource(
+      AudioSource.asset('assets/audio/chernogram_incoming.mp3'),
+    );
     await player.stop();
     queue.value = const <CgMusicTrack>[];
     activeTrackId.value = null;
@@ -232,10 +238,10 @@ class CgMusicHub {
   }
 
   LoopMode _parseLoop(String value) => switch (value) {
-        'one' => LoopMode.one,
-        'all' => LoopMode.all,
-        _ => LoopMode.off,
-      };
+    'one' => LoopMode.one,
+    'all' => LoopMode.all,
+    _ => LoopMode.off,
+  };
 }
 
 class CgMusicPlayerScreen extends StatefulWidget {
@@ -288,7 +294,8 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
     for (final tunnel in widget.tunnels) {
       for (final message in tunnel.messages) {
         final attachment = message.attachment;
-        final voice = message.type == 'voice' ||
+        final voice =
+            message.type == 'voice' ||
             message.type == 'voice_note' ||
             message.meta['voice'] == true ||
             message.meta['voiceNote'] == true ||
@@ -355,8 +362,11 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
             subtitle: widget.ru ? 'На устройстве' : 'On device',
             path: file.path,
             source: CgMusicSource.device,
-            addedAt: DateTime.fromMillisecondsSinceEpoch(asset.createDateSecond * 1000)
-                .toUtc(),
+            addedAt: asset.createDateSecond == null
+                ? DateTime.now().toUtc()
+                : DateTime.fromMillisecondsSinceEpoch(
+                    asset.createDateSecond! * 1000,
+                  ).toUtc(),
           ),
         );
       } catch (_) {}
@@ -419,7 +429,9 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
     final query = _search.text.trim().toLowerCase();
     Iterable<CgMusicTrack> result = _tracks;
     if (_playlistId != null) {
-      final playlist = _playlists.where((item) => item.id == _playlistId).firstOrNull;
+      final playlist = _playlists
+          .where((item) => item.id == _playlistId)
+          .firstOrNull;
       final ids = playlist?.trackIds.toSet() ?? <String>{};
       result = result.where((track) => ids.contains(track.id));
     } else if (query.isEmpty || !_globalSearch) {
@@ -427,7 +439,8 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
     }
     if (query.isNotEmpty) {
       result = result.where(
-        (track) => track.title.toLowerCase().contains(query) ||
+        (track) =>
+            track.title.toLowerCase().contains(query) ||
             track.subtitle.toLowerCase().contains(query) ||
             track.author.toLowerCase().contains(query),
       );
@@ -534,7 +547,10 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
               children: [
                 Text(
                   widget.ru ? 'Опубликовать трек' : 'Publish track',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -544,19 +560,28 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(widget.ru ? 'Разрешить скачивание' : 'Allow download'),
+                  title: Text(
+                    widget.ru ? 'Разрешить скачивание' : 'Allow download',
+                  ),
                   value: canDownload,
-                  onChanged: (value) => setSheetState(() => canDownload = value),
+                  onChanged: (value) =>
+                      setSheetState(() => canDownload = value),
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(widget.ru ? 'Разрешить делиться' : 'Allow sharing'),
+                  title: Text(
+                    widget.ru ? 'Разрешить делиться' : 'Allow sharing',
+                  ),
                   value: canShare,
                   onChanged: (value) => setSheetState(() => canShare = value),
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(widget.ru ? 'Разрешить «Добавить к себе»' : 'Allow save to library'),
+                  title: Text(
+                    widget.ru
+                        ? 'Разрешить «Добавить к себе»'
+                        : 'Allow save to library',
+                  ),
                   value: canSave,
                   onChanged: (value) => setSheetState(() => canSave = value),
                 ),
@@ -602,12 +627,16 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
             if (track.permissions.canSave)
               ListTile(
                 leading: const Icon(Icons.add_circle_outline_rounded),
-                title: Text(widget.ru ? 'Добавить к себе' : 'Add to my library'),
+                title: Text(
+                  widget.ru ? 'Добавить к себе' : 'Add to my library',
+                ),
                 onTap: () => Navigator.pop(context, 'save'),
               ),
             ListTile(
               leading: const Icon(Icons.playlist_add_rounded),
-              title: Text(widget.ru ? 'Добавить в плейлист' : 'Add to playlist'),
+              title: Text(
+                widget.ru ? 'Добавить в плейлист' : 'Add to playlist',
+              ),
               onTap: () => Navigator.pop(context, 'playlist'),
             ),
             if (track.permissions.canShare)
@@ -618,18 +647,27 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
               ),
             if (track.source != CgMusicSource.public)
               ListTile(
-                leading: Icon(published ? Icons.public_off_rounded : Icons.public_rounded),
+                leading: Icon(
+                  published ? Icons.public_off_rounded : Icons.public_rounded,
+                ),
                 title: Text(
                   published
-                      ? (widget.ru ? 'Убрать из публичного поиска' : 'Remove from public search')
-                      : (widget.ru ? 'Опубликовать в поиске' : 'Publish to search'),
+                      ? (widget.ru
+                            ? 'Убрать из публичного поиска'
+                            : 'Remove from public search')
+                      : (widget.ru
+                            ? 'Опубликовать в поиске'
+                            : 'Publish to search'),
                 ),
-                onTap: () => Navigator.pop(context, published ? 'unpublish' : 'publish'),
+                onTap: () =>
+                    Navigator.pop(context, published ? 'unpublish' : 'publish'),
               ),
             if (track.source == CgMusicSource.saved)
               ListTile(
                 leading: const Icon(Icons.delete_outline_rounded),
-                title: Text(widget.ru ? 'Удалить из сохранённого' : 'Remove from saved'),
+                title: Text(
+                  widget.ru ? 'Удалить из сохранённого' : 'Remove from saved',
+                ),
                 onTap: () => Navigator.pop(context, 'removeSaved'),
               ),
           ],
@@ -669,7 +707,10 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
               const SizedBox(height: 12),
               Text(
                 widget.ru ? 'Распознавание музыки' : 'Music recognition',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -689,7 +730,11 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                   });
                 },
                 icon: const Icon(Icons.public_rounded),
-                label: Text(widget.ru ? 'Открыть публичный каталог' : 'Open public catalog'),
+                label: Text(
+                  widget.ru
+                      ? 'Открыть публичный каталог'
+                      : 'Open public catalog',
+                ),
               ),
             ],
           ),
@@ -699,20 +744,20 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
   }
 
   String _sourceLabel(CgMusicSource source) => switch (source) {
-        CgMusicSource.device => widget.ru ? 'Устройство' : 'Device',
-        CgMusicSource.chats => widget.ru ? 'Из чатов' : 'Chats',
-        CgMusicSource.folders => widget.ru ? 'Папки' : 'Folders',
-        CgMusicSource.saved => widget.ru ? 'Сохранённое' : 'Saved',
-        CgMusicSource.public => widget.ru ? 'Публичное' : 'Public',
-      };
+    CgMusicSource.device => widget.ru ? 'Устройство' : 'Device',
+    CgMusicSource.chats => widget.ru ? 'Из чатов' : 'Chats',
+    CgMusicSource.folders => widget.ru ? 'Папки' : 'Folders',
+    CgMusicSource.saved => widget.ru ? 'Сохранённое' : 'Saved',
+    CgMusicSource.public => widget.ru ? 'Публичное' : 'Public',
+  };
 
   IconData _sourceIcon(CgMusicSource source) => switch (source) {
-        CgMusicSource.device => Icons.smartphone_rounded,
-        CgMusicSource.chats => Icons.forum_outlined,
-        CgMusicSource.folders => Icons.folder_outlined,
-        CgMusicSource.saved => Icons.bookmark_outline_rounded,
-        CgMusicSource.public => Icons.public_rounded,
-      };
+    CgMusicSource.device => Icons.smartphone_rounded,
+    CgMusicSource.chats => Icons.forum_outlined,
+    CgMusicSource.folders => Icons.folder_outlined,
+    CgMusicSource.saved => Icons.bookmark_outline_rounded,
+    CgMusicSource.public => Icons.public_rounded,
+  };
 
   int _count(CgMusicSource source) =>
       _tracks.where((item) => item.source == source).length;
@@ -765,9 +810,12 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                       tooltip: widget.ru
                           ? 'Искать во всех источниках'
                           : 'Search all sources',
-                      onPressed: () => setState(() => _globalSearch = !_globalSearch),
+                      onPressed: () =>
+                          setState(() => _globalSearch = !_globalSearch),
                       icon: Icon(
-                        _globalSearch ? Icons.travel_explore_rounded : Icons.filter_alt_outlined,
+                        _globalSearch
+                            ? Icons.travel_explore_rounded
+                            : Icons.filter_alt_outlined,
                         color: _globalSearch ? scheme.primary : null,
                       ),
                     ),
@@ -817,9 +865,13 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                   return InputChip(
                     selected: _playlistId == playlist.id,
                     avatar: const Icon(Icons.queue_music_rounded, size: 17),
-                    label: Text('${playlist.name} · ${playlist.trackIds.length}'),
+                    label: Text(
+                      '${playlist.name} · ${playlist.trackIds.length}',
+                    ),
                     onPressed: () => setState(() {
-                      _playlistId = _playlistId == playlist.id ? null : playlist.id;
+                      _playlistId = _playlistId == playlist.id
+                          ? null
+                          : playlist.id;
                     }),
                     onDeleted: () async {
                       await CgMusicLibraryStore.removePlaylist(playlist.id);
@@ -856,74 +908,80 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _visible.isEmpty
-                    ? _EmptyMusic(
-                        ru: widget.ru,
-                        message: _permissionError,
-                        source: _source,
-                        onAddFolder: _addFolder,
-                      )
-                    : ValueListenableBuilder<String?>(
-                        valueListenable: _hub.activeTrackId,
-                        builder: (context, activeId, _) => ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(8, 2, 8, 210),
-                          itemCount: _visible.length,
-                          itemBuilder: (context, index) {
-                            final track = _visible[index];
-                            final active = activeId == track.id;
-                            return Material(
-                              color: active
-                                  ? scheme.primary.withValues(alpha: .11)
-                                  : Colors.transparent,
+                ? _EmptyMusic(
+                    ru: widget.ru,
+                    message: _permissionError,
+                    source: _source,
+                    onAddFolder: _addFolder,
+                  )
+                : ValueListenableBuilder<String?>(
+                    valueListenable: _hub.activeTrackId,
+                    builder: (context, activeId, _) => ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(8, 2, 8, 210),
+                      itemCount: _visible.length,
+                      itemBuilder: (context, index) {
+                        final track = _visible[index];
+                        final active = activeId == track.id;
+                        return Material(
+                          color: active
+                              ? scheme.primary.withValues(alpha: .11)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(15),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
-                              child: ListTile(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                onTap: track.permissions.canPlay ? () => _play(track) : null,
-                                leading: StreamBuilder<PlayerState>(
-                                  stream: _hub.player.playerStateStream,
-                                  builder: (context, state) => SizedBox(
-                                    width: 44,
-                                    height: 44,
-                                    child: active
-                                        ? _MaskEqualizer(
-                                            active: state.data?.playing == true,
-                                            size: 42,
-                                          )
-                                        : DecoratedBox(
-                                            decoration: BoxDecoration(
-                                              color: scheme.surfaceContainerHighest,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Icon(
-                                              _sourceIcon(track.source),
-                                              color: scheme.primary,
-                                            ),
+                            ),
+                            onTap: track.permissions.canPlay
+                                ? () => _play(track)
+                                : null,
+                            leading: StreamBuilder<PlayerState>(
+                              stream: _hub.player.playerStateStream,
+                              builder: (context, state) => SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: active
+                                    ? _MaskEqualizer(
+                                        active: state.data?.playing == true,
+                                        size: 42,
+                                      )
+                                    : DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: scheme.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
                                           ),
-                                  ),
-                                ),
-                                title: Text(
-                                  track.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                                subtitle: Text(
-                                  track.author.isEmpty
-                                      ? track.subtitle
-                                      : '${track.author} · ${track.subtitle}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                trailing: IconButton(
-                                  onPressed: () => _trackMenu(track),
-                                  icon: const Icon(Icons.more_vert_rounded),
-                                ),
+                                        ),
+                                        child: Icon(
+                                          _sourceIcon(track.source),
+                                          color: scheme.primary,
+                                        ),
+                                      ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
+                            ),
+                            title: Text(
+                              track.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              track.author.isEmpty
+                                  ? track.subtitle
+                                  : '${track.author} · ${track.subtitle}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              onPressed: () => _trackMenu(track),
+                              icon: const Icon(Icons.more_vert_rounded),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -947,33 +1005,35 @@ class _EmptyMusic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.library_music_outlined,
-                size: 68,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .18),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message ?? (ru ? 'В этом разделе пока пусто' : 'Nothing here yet'),
-                textAlign: TextAlign.center,
-              ),
-              if (source == CgMusicSource.folders) ...[
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: onAddFolder,
-                  icon: const Icon(Icons.folder_open_rounded),
-                  label: Text(ru ? 'Добавить папку с музыкой' : 'Add music folder'),
-                ),
-              ],
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.library_music_outlined,
+            size: 68,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: .18),
           ),
-        ),
-      );
+          const SizedBox(height: 12),
+          Text(
+            message ?? (ru ? 'В этом разделе пока пусто' : 'Nothing here yet'),
+            textAlign: TextAlign.center,
+          ),
+          if (source == CgMusicSource.folders) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onAddFolder,
+              icon: const Icon(Icons.folder_open_rounded),
+              label: Text(ru ? 'Добавить папку с музыкой' : 'Add music folder'),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 class _MusicNowPlaying extends StatefulWidget {
@@ -1047,7 +1107,9 @@ class _MusicNowPlayingState extends State<_MusicNowPlaying> {
                                 track.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w900),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
                               ),
                               Text(
                                 track.author.isEmpty
@@ -1071,53 +1133,73 @@ class _MusicNowPlayingState extends State<_MusicNowPlaying> {
                       stream: hub.player.positionStream,
                       builder: (context, positionSnapshot) =>
                           StreamBuilder<Duration?>(
-                        stream: hub.player.durationStream,
-                        builder: (context, durationSnapshot) {
-                          final total = durationSnapshot.data ?? Duration.zero;
-                          final position = positionSnapshot.data ?? Duration.zero;
-                          final maxValue = math.max(1, total.inMilliseconds).toDouble();
-                          final right = _remaining ? position - total : total;
-                          return Column(
-                            children: [
-                              Slider(
-                                min: 0,
-                                max: maxValue,
-                                value: position.inMilliseconds
-                                    .clamp(0, maxValue.toInt())
-                                    .toDouble(),
-                                onChanged: total == Duration.zero
-                                    ? null
-                                    : (value) => hub.player.seek(
-                                          Duration(milliseconds: value.round()),
-                                        ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(_time(position), style: const TextStyle(fontSize: 10)),
-                                    InkWell(
-                                      onTap: () => setState(() => _remaining = !_remaining),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
-                                        ),
-                                        child: Text(
-                                          _time(right),
+                            stream: hub.player.durationStream,
+                            builder: (context, durationSnapshot) {
+                              final total =
+                                  durationSnapshot.data ?? Duration.zero;
+                              final position =
+                                  positionSnapshot.data ?? Duration.zero;
+                              final maxValue = math
+                                  .max(1, total.inMilliseconds)
+                                  .toDouble();
+                              final right = _remaining
+                                  ? position - total
+                                  : total;
+                              return Column(
+                                children: [
+                                  Slider(
+                                    min: 0,
+                                    max: maxValue,
+                                    value: position.inMilliseconds
+                                        .clamp(0, maxValue.toInt())
+                                        .toDouble(),
+                                    onChanged: total == Duration.zero
+                                        ? null
+                                        : (value) => hub.player.seek(
+                                            Duration(
+                                              milliseconds: value.round(),
+                                            ),
+                                          ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _time(position),
                                           style: const TextStyle(fontSize: 10),
                                         ),
-                                      ),
+                                        InkWell(
+                                          onTap: () => setState(
+                                            () => _remaining = !_remaining,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 2,
+                                            ),
+                                            child: Text(
+                                              _time(right),
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1125,7 +1207,9 @@ class _MusicNowPlayingState extends State<_MusicNowPlaying> {
                         ValueListenableBuilder<bool>(
                           valueListenable: hub.shuffleEnabled,
                           builder: (context, active, _) => IconButton(
-                            tooltip: widget.ru ? 'Случайный порядок' : 'Shuffle',
+                            tooltip: widget.ru
+                                ? 'Случайный порядок'
+                                : 'Shuffle',
                             onPressed: hub.toggleShuffle,
                             icon: Icon(
                               Icons.shuffle_rounded,
@@ -1135,7 +1219,10 @@ class _MusicNowPlayingState extends State<_MusicNowPlaying> {
                         ),
                         IconButton(
                           onPressed: hub.previous,
-                          icon: const Icon(Icons.skip_previous_rounded, size: 30),
+                          icon: const Icon(
+                            Icons.skip_previous_rounded,
+                            size: 30,
+                          ),
                         ),
                         StreamBuilder<PlayerState>(
                           stream: hub.player.playerStateStream,
@@ -1164,7 +1251,9 @@ class _MusicNowPlayingState extends State<_MusicNowPlaying> {
                               mode == LoopMode.one
                                   ? Icons.repeat_one_rounded
                                   : Icons.repeat_rounded,
-                              color: mode == LoopMode.off ? null : scheme.primary,
+                              color: mode == LoopMode.off
+                                  ? null
+                                  : scheme.primary,
                             ),
                           ),
                         ),
@@ -1227,17 +1316,17 @@ class _MaskEqualizerState extends State<_MaskEqualizer>
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
-        dimension: widget.size,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) => CustomPaint(
-            painter: _MaskEqualizerPainter(
-              phase: _controller.value,
-              active: widget.active,
-            ),
-          ),
+    dimension: widget.size,
+    child: AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => CustomPaint(
+        painter: _MaskEqualizerPainter(
+          phase: _controller.value,
+          active: widget.active,
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _MaskEqualizerPainter extends CustomPainter {
@@ -1279,10 +1368,18 @@ class _MaskEqualizerPainter extends CustomPainter {
         final gapStart = size.height * .38;
         final gapEnd = size.height * .45;
         if (top < gapStart) {
-          canvas.drawLine(Offset(x, top), Offset(x, math.min(bottom, gapStart)), paint);
+          canvas.drawLine(
+            Offset(x, top),
+            Offset(x, math.min(bottom, gapStart)),
+            paint,
+          );
         }
         if (bottom > gapEnd) {
-          canvas.drawLine(Offset(x, math.max(top, gapEnd)), Offset(x, bottom), paint);
+          canvas.drawLine(
+            Offset(x, math.max(top, gapEnd)),
+            Offset(x, bottom),
+            paint,
+          );
         }
       } else {
         canvas.drawLine(Offset(x, top), Offset(x, bottom), paint);

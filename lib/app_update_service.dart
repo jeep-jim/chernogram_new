@@ -20,10 +20,6 @@ class ChernogramAppUpdater {
       return;
     }
 
-    await ChernogramUpdater.checkAndPrompt(
-      context,
-      ru: ru,
-      manual: manual,
-    );
+    await ChernogramUpdater.checkAndPrompt(context, ru: ru, manual: manual);
   }
 }

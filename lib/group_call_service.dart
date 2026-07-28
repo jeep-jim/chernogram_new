@@ -69,8 +69,7 @@ class _GroupPeer {
   }
 }
 
-class _ChernogramGroupCallScreenState
-    extends State<ChernogramGroupCallScreen> {
+class _ChernogramGroupCallScreenState extends State<ChernogramGroupCallScreen> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final Map<String, _GroupPeer> _peers = <String, _GroupPeer>{};
 
@@ -127,7 +126,8 @@ class _ChernogramGroupCallScreenState
       _localRenderer.srcObject = stream;
       _localStream = stream;
 
-      final session = InternetRelay.session(widget.tunnelId) ??
+      final session =
+          InternetRelay.session(widget.tunnelId) ??
           await InternetRelay.open(
             tunnelId: widget.tunnelId,
             secret: widget.secret,
@@ -157,11 +157,13 @@ class _ChernogramGroupCallScreenState
       });
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 4), (_) {
         if (_ended) return;
-        unawaited(_send({
-          'action': 'group_join',
-          'fromName': widget.nickname,
-          'video': widget.video,
-        }));
+        unawaited(
+          _send({
+            'action': 'group_join',
+            'fromName': widget.nickname,
+            'video': widget.video,
+          }),
+        );
       });
       _recoveryTimer = Timer.periodic(const Duration(seconds: 6), (_) {
         if (!_ended) unawaited(_recoverPeers());
@@ -189,15 +191,14 @@ class _ChernogramGroupCallScreenState
     final data = event.data;
     if (data['callId']?.toString() != widget.callId) return;
     final target = data['target']?.toString();
-    if (target != null &&
-        target.isNotEmpty &&
-        target != widget.profileId) {
+    if (target != null && target.isNotEmpty && target != widget.profileId) {
       return;
     }
     final remoteId =
         data['from']?.toString() ?? data['relaySender']?.toString() ?? '';
     if (remoteId.isEmpty || remoteId == widget.profileId) return;
-    final remoteName = data['fromName']?.toString() ??
+    final remoteName =
+        data['fromName']?.toString() ??
         data['relaySenderName']?.toString() ??
         'user';
     final action = data['action']?.toString() ?? '';
@@ -237,10 +238,7 @@ class _ChernogramGroupCallScreenState
 
   Future<void> _handleJoin(String remoteId, String remoteName) async {
     if (!_peers.containsKey(remoteId) && _peers.length >= 5) {
-      await _send({
-        'action': 'group_full',
-        'target': remoteId,
-      });
+      await _send({'action': 'group_full', 'target': remoteId});
       return;
     }
     await _ensurePeer(remoteId, remoteName);
@@ -308,13 +306,15 @@ class _ChernogramGroupCallScreenState
     connection.onIceCandidate = (candidate) {
       final value = candidate.candidate;
       if (value == null || value.isEmpty) return;
-      unawaited(_send({
-        'action': 'group_ice',
-        'target': id,
-        'candidate': value,
-        'sdpMid': candidate.sdpMid,
-        'sdpMLineIndex': candidate.sdpMLineIndex,
-      }));
+      unawaited(
+        _send({
+          'action': 'group_ice',
+          'target': id,
+          'candidate': value,
+          'sdpMid': candidate.sdpMid,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+        }),
+      );
     };
     connection.onTrack = (event) {
       if (event.streams.isEmpty) return;
@@ -335,8 +335,7 @@ class _ChernogramGroupCallScreenState
           state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         peer.connected = false;
         unawaited(_recoverPeer(peer));
-      } else if (state ==
-          RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
         peer.connected = false;
       }
       setState(() {});
@@ -352,10 +351,7 @@ class _ChernogramGroupCallScreenState
     return peer;
   }
 
-  Future<void> _maybeOffer(
-    String remoteId, {
-    bool iceRestart = false,
-  }) async {
+  Future<void> _maybeOffer(String remoteId, {bool iceRestart = false}) async {
     final peer = _peers[remoteId];
     if (peer == null) return;
     if (widget.profileId.compareTo(remoteId) >= 0) return;
@@ -451,8 +447,7 @@ class _ChernogramGroupCallScreenState
     final peer = await _ensurePeer(remoteId, remoteName);
     final value = data['candidate']?.toString();
     if (value == null || value.isEmpty) return;
-    final signature =
-        '$value|${data['sdpMid']}|${data['sdpMLineIndex']}';
+    final signature = '$value|${data['sdpMid']}|${data['sdpMLineIndex']}';
     if (!peer.seenCandidates.add(signature)) return;
     final candidate = RTCIceCandidate(
       value,
@@ -583,9 +578,9 @@ class _ChernogramGroupCallScreenState
   Future<void> _hangUp() async {
     if (_ended) return;
     unawaited(
-      _send({'action': 'group_leave'})
-          .timeout(const Duration(milliseconds: 700))
-          .catchError((_) {}),
+      _send({
+        'action': 'group_leave',
+      }).timeout(const Duration(milliseconds: 700)).catchError((_) {}),
     );
     _finish();
   }
@@ -712,8 +707,9 @@ class _ChernogramGroupCallScreenState
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final columns =
-                        constraints.maxWidth > constraints.maxHeight ? 3 : 2;
+                    final columns = constraints.maxWidth > constraints.maxHeight
+                        ? 3
+                        : 2;
                     return GridView.builder(
                       padding: const EdgeInsets.all(10),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -812,77 +808,73 @@ class _GroupVideoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(
-              color: const Color(0xFF151C32),
-              child: data.videoEnabled
-                  ? RTCVideoView(
-                      data.renderer,
-                      mirror: data.local,
-                      objectFit:
-                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    )
-                  : Center(
-                      child: CircleAvatar(
-                        radius: 34,
-                        backgroundColor: const Color(0xFF7C5CFF),
-                        child: Text(
-                          data.name.isEmpty
-                              ? '?'
-                              : data.name[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+    borderRadius: BorderRadius.circular(22),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Container(
+          color: const Color(0xFF151C32),
+          child: data.videoEnabled
+              ? RTCVideoView(
+                  data.renderer,
+                  mirror: data.local,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                )
+              : Center(
+                  child: CircleAvatar(
+                    radius: 34,
+                    backgroundColor: const Color(0xFF7C5CFF),
+                    child: Text(
+                      data.name.isEmpty ? '?' : data.name[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-            ),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 8,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: .48),
-                  borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        data.local ? '${data.name} • вы' : data.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      data.connected
-                          ? Icons.graphic_eq_rounded
-                          : Icons.hourglass_bottom_rounded,
-                      color: data.connected
-                          ? ChernogramColors.success
-                          : Colors.white54,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
         ),
-      );
+        Positioned(
+          left: 8,
+          right: 8,
+          bottom: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: .48),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    data.local ? '${data.name} • вы' : data.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Icon(
+                  data.connected
+                      ? Icons.graphic_eq_rounded
+                      : Icons.hourglass_bottom_rounded,
+                  color: data.connected
+                      ? ChernogramColors.success
+                      : Colors.white54,
+                  size: 16,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _GroupCallButton extends StatelessWidget {
@@ -900,23 +892,23 @@ class _GroupCallButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: danger
-            ? ChernogramColors.danger
-            : active
-                ? Colors.white
-                : Colors.white.withValues(alpha: .12),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () => onTap(),
-          child: SizedBox(
-            width: 50,
-            height: 50,
-            child: Icon(
-              icon,
-              color: active ? const Color(0xFF111725) : Colors.white,
-            ),
-          ),
+    color: danger
+        ? ChernogramColors.danger
+        : active
+        ? Colors.white
+        : Colors.white.withValues(alpha: .12),
+    shape: const CircleBorder(),
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => onTap(),
+      child: SizedBox(
+        width: 50,
+        height: 50,
+        child: Icon(
+          icon,
+          color: active ? const Color(0xFF111725) : Colors.white,
         ),
-      );
+      ),
+    ),
+  );
 }

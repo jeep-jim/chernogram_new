@@ -23,13 +23,12 @@ class CgChatAppearance {
     CgChatPattern? darkPattern,
     CgChatPattern? lightPattern,
     double? intensity,
-  }) =>
-      CgChatAppearance(
-        enabled: enabled ?? this.enabled,
-        darkPattern: darkPattern ?? this.darkPattern,
-        lightPattern: lightPattern ?? this.lightPattern,
-        intensity: intensity ?? this.intensity,
-      );
+  }) => CgChatAppearance(
+    enabled: enabled ?? this.enabled,
+    darkPattern: darkPattern ?? this.darkPattern,
+    lightPattern: lightPattern ?? this.lightPattern,
+    intensity: intensity ?? this.intensity,
+  );
 }
 
 class CgChatAppearanceController {
@@ -53,10 +52,9 @@ class CgChatAppearanceController {
     final prefs = await SharedPreferences.getInstance();
     appearance.value = CgChatAppearance(
       enabled: prefs.getBool(_enabledKey) ?? true,
-      darkPattern: _parse(prefs.getString(_darkKey)) ??
-          CgChatPattern.constellations,
-      lightPattern:
-          _parse(prefs.getString(_lightKey)) ?? CgChatPattern.waves,
+      darkPattern:
+          _parse(prefs.getString(_darkKey)) ?? CgChatPattern.constellations,
+      lightPattern: _parse(prefs.getString(_lightKey)) ?? CgChatPattern.waves,
       intensity: (prefs.getDouble(_intensityKey) ?? .20)
           .clamp(.07, .42)
           .toDouble(),
@@ -194,26 +192,35 @@ class CgChatAppearanceController {
     required CgChatPattern value,
     required bool ru,
     required ValueChanged<CgChatPattern> onChanged,
-  }) =>
-      Wrap(
-        spacing: 7,
-        runSpacing: 7,
-        children: CgChatPattern.values.map((pattern) {
-          return ChoiceChip(
-            selected: pattern == value,
-            label: Text(_label(pattern, ru)),
-            onSelected: (_) => onChanged(pattern),
-          );
-        }).toList(),
+  }) => Wrap(
+    spacing: 7,
+    runSpacing: 7,
+    children: CgChatPattern.values.map((pattern) {
+      return ChoiceChip(
+        selected: pattern == value,
+        label: Text(_label(pattern, ru)),
+        onSelected: (_) => onChanged(pattern),
       );
+    }).toList(),
+  );
 
   String _label(CgChatPattern value, bool ru) => switch (value) {
-        CgChatPattern.none => ru ? 'Без фона' : 'None',
-        CgChatPattern.constellations => ru ? 'Созвездия' : 'Constellations',
-        CgChatPattern.masks => ru ? 'Маски' : 'Masks',
-        CgChatPattern.waves => ru ? 'Волны' : 'Waves',
-        CgChatPattern.circuit => ru ? 'Схема' : 'Circuit',
-      };
+    CgChatPattern.none => ru ? 'Без фона' : 'None',
+    CgChatPattern.constellations => ru ? 'Созвездия' : 'Constellations',
+    CgChatPattern.masks => ru ? 'Маски' : 'Masks',
+    CgChatPattern.waves => ru ? 'Волны' : 'Waves',
+    CgChatPattern.circuit => ru ? 'Схема' : 'Circuit',
+  };
+}
+
+class CgChatBackgroundContainer extends StatelessWidget {
+  final Widget child;
+
+  const CgChatBackgroundContainer({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) =>
+      Stack(fit: StackFit.expand, children: [const CgChatBackdrop(), child]);
 }
 
 class CgChatBackdrop extends StatefulWidget {
@@ -234,14 +241,14 @@ class _CgChatBackdropState extends State<CgChatBackdrop> {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: ValueListenableBuilder<CgChatAppearance>(
-          valueListenable: controller.appearance,
-          builder: (context, appearance, _) => CgChatBackdropPreview(
-            appearance: appearance,
-            dark: Theme.of(context).brightness == Brightness.dark,
-          ),
-        ),
-      );
+    child: ValueListenableBuilder<CgChatAppearance>(
+      valueListenable: controller.appearance,
+      builder: (context, appearance, _) => CgChatBackdropPreview(
+        appearance: appearance,
+        dark: Theme.of(context).brightness == Brightness.dark,
+      ),
+    ),
+  );
 }
 
 class CgChatBackdropPreview extends StatelessWidget {

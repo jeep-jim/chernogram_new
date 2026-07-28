@@ -16,6 +16,7 @@ import 'app_monitor.dart';
 import 'brand.dart';
 import 'call_avatar.dart';
 import 'call_service.dart';
+import 'chat_background.dart';
 import 'chat_media.dart';
 import 'core_models.dart';
 import 'group_call_service.dart';
@@ -77,7 +78,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
   bool get _canWrite => _isOwner || _tunnel.permissions.canWriteMessages;
   bool get _canSendMedia => _isOwner || _tunnel.permissions.canSendMedia;
   bool get _canDownload => _isOwner || _tunnel.permissions.canDownload;
-  bool get _canInvite => _isOwner || _tunnel.permissions.canInvite || !_tunnel.isPrivate;
+  bool get _canInvite =>
+      _isOwner || _tunnel.permissions.canInvite || !_tunnel.isPrivate;
   bool get _canCall => _isOwner || _tunnel.permissions.canCall;
 
   String? get _preferredPeerId {
@@ -175,8 +177,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
     });
     for (var attempt = 0; attempt < 80; attempt++) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
-      final currentIndex =
-          _tunnel.messages.indexWhere((item) => item.id == message.id);
+      final currentIndex = _tunnel.messages.indexWhere(
+        (item) => item.id == message.id,
+      );
       if (currentIndex < 0) break;
       final current = _tunnel.messages[currentIndex].attachment;
       if (current == null) break;
@@ -205,7 +208,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
     final index = _tunnel.messages.indexWhere((item) => item.id == messageId);
     if (index < 0) return;
     final message = _tunnel.messages[index];
-    if (message.authorId != widget.profile.id || message.attachment == null) return;
+    if (message.authorId != widget.profile.id || message.attachment == null)
+      return;
     final file = await CgMediaStore.existingFile(message.attachment!);
     if (file == null || !await file.exists()) return;
     final bytes = await file.readAsBytes();
@@ -283,15 +287,18 @@ class _CgChatScreenState extends State<CgChatScreen> {
                               _tunnel.id,
                             );
                             final updated = _tunnel.copyWith(
-                              sharedFiles:
-                                  local.map((item) => item.info).toList(),
+                              sharedFiles: local
+                                  .map((item) => item.info)
+                                  .toList(),
                               revision: _tunnel.revision + 1,
                             );
                             await _applyOwnerUpdate(updated);
                             if (context.mounted) setSheetState(() {});
                           },
                           icon: const Icon(Icons.folder_shared_outlined),
-                          label: Text(widget.ru ? 'Выбрать папку' : 'Choose folder'),
+                          label: Text(
+                            widget.ru ? 'Выбрать папку' : 'Choose folder',
+                          ),
                         ),
                     ],
                   ),
@@ -315,10 +322,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
                                 item.kind == 'audio'
                                     ? Icons.music_note_rounded
                                     : item.kind == 'image'
-                                        ? Icons.image_outlined
-                                        : item.kind == 'video'
-                                            ? Icons.movie_outlined
-                                            : Icons.insert_drive_file_outlined,
+                                    ? Icons.image_outlined
+                                    : item.kind == 'video'
+                                    ? Icons.movie_outlined
+                                    : Icons.insert_drive_file_outlined,
                               ),
                               title: Text(
                                 item.name,
@@ -364,7 +371,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
   }
 
-
   @override
   void initState() {
     super.initState();
@@ -387,12 +393,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
     }
   }
 
-
   void _onComposerChanged() {
     final next = _text.text.trim().isNotEmpty;
     if (next != _hasText && mounted) setState(() => _hasText = next);
   }
-
 
   Map<String, dynamic> _replyMeta() {
     final reply = _replyingTo;
@@ -513,11 +517,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     }
   }
 
-  void _rememberContact(
-    String id,
-    String name, {
-    String? avatarBase64,
-  }) {
+  void _rememberContact(String id, String name, {String? avatarBase64}) {
     if (id.isEmpty || id == widget.profile.id) return;
     widget.onContactSeen?.call(
       CgContact(
@@ -642,9 +642,11 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 : _tunnel.permissions,
             sharedFiles: ((data['sharedFiles'] as List?) ?? const <dynamic>[])
                 .whereType<Map>()
-                .map((item) => CgSharedFileInfo.fromJson(
-                      Map<String, dynamic>.from(item),
-                    ))
+                .map(
+                  (item) => CgSharedFileInfo.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
                 .toList(),
           );
         });
@@ -670,9 +672,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   void _persist() {
     widget.onChanged(_tunnel);
-    _session?.replaceHistory(
-      _tunnel.historyJson(),
-    );
+    _session?.replaceHistory(_tunnel.historyJson());
   }
 
   Future<void> _sendText() async {
@@ -781,6 +781,12 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 title: Text(widget.ru ? 'Переслать' : 'Forward'),
                 onTap: () => Navigator.pop(context, '__forward__'),
               ),
+              if (message.text.trim().isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded),
+                  title: Text(widget.ru ? 'Копировать текст' : 'Copy text'),
+                  onTap: () => Navigator.pop(context, '__copy__'),
+                ),
               if (message.authorId == widget.profile.id) ...[
                 ListTile(
                   leading: const Icon(
@@ -809,6 +815,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
       _replyTo(message);
     } else if (selected == '__forward__') {
       await _forward(message);
+    } else if (selected == '__copy__') {
+      await Clipboard.setData(ClipboardData(text: message.text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.ru ? 'Текст скопирован' : 'Text copied'),
+          ),
+        );
+      }
     } else {
       await _toggleReaction(message, selected);
     }
@@ -883,9 +898,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   Future<void> _recordCircle() async {
     final attachment = await Navigator.push<CgAttachment>(
       context,
-      MaterialPageRoute(
-        builder: (_) => CgCircleRecorderScreen(ru: widget.ru),
-      ),
+      MaterialPageRoute(builder: (_) => CgCircleRecorderScreen(ru: widget.ru)),
     );
     if (attachment != null) await _sendAttachment(attachment);
   }
@@ -1039,6 +1052,116 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   String get _deepInvite =>
       'chernogram://join/${Uri.encodeComponent(_tunnel.inviteToken)}';
+
+  Future<void> _showChatProfile() async {
+    final members = _session?.members ?? const <Map<String, dynamic>>[];
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 22),
+          child: Column(
+            children: [
+              _TunnelAvatar(tunnel: _tunnel, size: 86),
+              const SizedBox(height: 12),
+              Text(
+                widget.privacyLens ? '••••••••' : _tunnel.displayName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _tunnel.isPrivate
+                    ? (widget.ru ? 'Приватный чат' : 'Private chat')
+                    : (widget.ru ? 'Публичный чат' : 'Public chat'),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                'ID ${_tunnel.id}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .50),
+                ),
+              ),
+              const Divider(height: 28),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.ru ? 'Участники' : 'Members',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (members.isEmpty)
+                ListTile(
+                  leading: const Icon(Icons.hourglass_empty_rounded),
+                  title: Text(
+                    widget.ru
+                        ? 'Участники появятся после подключения'
+                        : 'Members appear after connecting',
+                  ),
+                )
+              else
+                for (final member in members)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      child: Text(
+                        (member['name']?.toString().trim().isNotEmpty == true
+                                ? member['name'].toString().trim()[0]
+                                : '?')
+                            .toUpperCase(),
+                      ),
+                    ),
+                    title: Text(member['name']?.toString() ?? 'user'),
+                    subtitle: Text(member['id']?.toString() ?? ''),
+                    trailing: member['self'] == true
+                        ? Text(widget.ru ? 'вы' : 'you')
+                        : null,
+                  ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (_canInvite)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          unawaited(_showInvite());
+                        },
+                        icon: const Icon(Icons.person_add_alt_1_rounded),
+                        label: Text(
+                          widget.ru ? 'Добавить людей' : 'Add people',
+                        ),
+                      ),
+                    ),
+                  if (_canInvite) const SizedBox(width: 9),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        unawaited(_showSettings());
+                      },
+                      icon: const Icon(Icons.tune_rounded),
+                      label: Text(widget.ru ? 'Разрешения' : 'Permissions'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _showInvite() async {
     if (!mounted) return;
@@ -1254,8 +1377,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   Text(
                     widget.ru ? 'Настройки чата' : 'Chat settings',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -1301,7 +1424,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
                       contentPadding: EdgeInsets.zero,
                       value: permissions.canWriteMessages,
                       secondary: const Icon(Icons.chat_outlined),
-                      title: Text(widget.ru ? 'Писать сообщения' : 'Send messages'),
+                      title: Text(
+                        widget.ru ? 'Писать сообщения' : 'Send messages',
+                      ),
                       onChanged: (value) => setSheetState(
                         () => permissions = permissions.copyWith(
                           canWriteMessages: value,
@@ -1312,7 +1437,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
                       contentPadding: EdgeInsets.zero,
                       value: permissions.canSendMedia,
                       secondary: const Icon(Icons.attach_file_rounded),
-                      title: Text(widget.ru ? 'Отправлять файлы' : 'Send files'),
+                      title: Text(
+                        widget.ru ? 'Отправлять файлы' : 'Send files',
+                      ),
                       onChanged: (value) => setSheetState(
                         () => permissions = permissions.copyWith(
                           canSendMedia: value,
@@ -1323,7 +1450,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
                       contentPadding: EdgeInsets.zero,
                       value: permissions.canDownload,
                       secondary: const Icon(Icons.download_outlined),
-                      title: Text(widget.ru ? 'Скачивать файлы' : 'Download files'),
+                      title: Text(
+                        widget.ru ? 'Скачивать файлы' : 'Download files',
+                      ),
                       onChanged: (value) => setSheetState(
                         () => permissions = permissions.copyWith(
                           canDownload: value,
@@ -1334,7 +1463,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
                       contentPadding: EdgeInsets.zero,
                       value: permissions.canInvite,
                       secondary: const Icon(Icons.person_add_alt_1_outlined),
-                      title: Text(widget.ru ? 'Приглашать людей' : 'Invite people'),
+                      title: Text(
+                        widget.ru ? 'Приглашать людей' : 'Invite people',
+                      ),
                       onChanged: (value) => setSheetState(
                         () => permissions = permissions.copyWith(
                           canInvite: value,
@@ -1358,9 +1489,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
                       secondary: const Icon(Icons.call_outlined),
                       title: Text(widget.ru ? 'Звонить' : 'Make calls'),
                       onChanged: (value) => setSheetState(
-                        () => permissions = permissions.copyWith(
-                          canCall: value,
-                        ),
+                        () =>
+                            permissions = permissions.copyWith(canCall: value),
                       ),
                     ),
                     CheckboxListTile(
@@ -1564,7 +1694,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
     _rememberContact(from, fromName);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_showIncomingCall(callId, from, fromName, callerAvatar, video));
+        unawaited(
+          _showIncomingCall(callId, from, fromName, callerAvatar, video),
+        );
       }
     });
   }
@@ -1583,12 +1715,14 @@ class _CgChatScreenState extends State<CgChatScreen> {
     _rememberContact(from, fromName);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_showIncomingGroupCall(
-          callId,
-          fromName,
-          signal['avatarBase64']?.toString(),
-          video,
-        ));
+        unawaited(
+          _showIncomingGroupCall(
+            callId,
+            fromName,
+            signal['avatarBase64']?.toString(),
+            video,
+          ),
+        );
       }
     });
   }
@@ -1646,12 +1780,14 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
     await ChernogramSound.stopIncomingCall();
     if (accepted != true) {
-      unawaited(_session?.sendSignal({
-        'action': 'call_decline',
-        'callId': callId,
-        'from': widget.profile.id,
-        'target': fromId,
-      }));
+      unawaited(
+        _session?.sendSignal({
+          'action': 'call_decline',
+          'callId': callId,
+          'from': widget.profile.id,
+          'target': fromId,
+        }),
+      );
       return;
     }
     if (!mounted) return;
@@ -1691,8 +1827,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
           avatarBase64: callerAvatar,
           name: fromName,
           size: 78,
-          fallbackIcon:
-              video ? Icons.groups_2_rounded : Icons.group_rounded,
+          fallbackIcon: video ? Icons.groups_2_rounded : Icons.group_rounded,
         ),
         title: Text(
           video
@@ -1783,7 +1918,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
               ),
             Padding(
               padding: const EdgeInsets.all(8),
-              child: _TunnelAvatar(tunnel: _tunnel, size: 42),
+              child: GestureDetector(
+                onTap: _showChatProfile,
+                child: _TunnelAvatar(tunnel: _tunnel, size: 42),
+              ),
             ),
           ],
         ),
@@ -1838,6 +1976,15 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 case 'shared':
                   _showSharedLibrary();
                   break;
+                case 'profile':
+                  _showChatProfile();
+                  break;
+                case 'appearance':
+                  CgChatAppearanceController.instance.showSettings(
+                    context,
+                    ru: widget.ru,
+                  );
+                  break;
                 case 'settings':
                   _showSettings();
                   break;
@@ -1845,10 +1992,26 @@ class _CgChatScreenState extends State<CgChatScreen> {
             },
             itemBuilder: (context) => [
               PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: const Icon(Icons.account_circle_outlined),
+                  title: Text(widget.ru ? 'Профиль чата' : 'Chat profile'),
+                ),
+              ),
+              PopupMenuItem(
                 value: 'shared',
                 child: ListTile(
                   leading: const Icon(Icons.folder_shared_outlined),
                   title: Text(widget.ru ? 'Общие файлы' : 'Shared files'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'appearance',
+                child: ListTile(
+                  leading: const Icon(Icons.wallpaper_rounded),
+                  title: Text(
+                    widget.ru ? 'Фон и паттерн' : 'Background pattern',
+                  ),
                 ),
               ),
               PopupMenuItem(
@@ -1896,9 +2059,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 value: 'settings',
                 child: ListTile(
                   leading: const Icon(Icons.tune_rounded),
-                  title: Text(
-                    widget.ru ? 'Настройки чата' : 'Chat settings',
-                  ),
+                  title: Text(widget.ru ? 'Настройки чата' : 'Chat settings'),
                 ),
               ),
             ],
@@ -1910,200 +2071,224 @@ class _CgChatScreenState extends State<CgChatScreen> {
         enable: Platform.isWindows || Platform.isLinux || Platform.isMacOS,
         onDragDone: _handleDropped,
         child: Column(
-        children: [
-          Expanded(
-            child: _tunnel.messages.isEmpty
-                ? _EmptyChat(
-                    ru: widget.ru,
-                    onInvite: canInvite ? _showInvite : null,
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    physics: const ClampingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    dragStartBehavior: DragStartBehavior.down,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-                    itemCount: _tunnel.messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _tunnel.messages[index];
-                      final mine =
-                          message.authorId == widget.profile.id ||
-                          (message.authorId.isEmpty &&
-                              message.authorName == widget.profile.nickname);
-                      return Dismissible(
-                        key: ValueKey('swipe-${message.id}'),
-                        direction: message.deleted
-                            ? DismissDirection.none
-                            : DismissDirection.horizontal,
-                        confirmDismiss: (direction) async {
-                          if (direction == DismissDirection.startToEnd) {
-                            _replyTo(message);
-                          } else {
-                            await _forward(message);
-                          }
-                          return false;
-                        },
-                        background: _SwipeActionBackground(
-                          alignment: Alignment.centerLeft,
-                          icon: Icons.reply_rounded,
-                          label: widget.ru ? 'Ответить' : 'Reply',
-                        ),
-                        secondaryBackground: _SwipeActionBackground(
-                          alignment: Alignment.centerRight,
-                          icon: Icons.forward_rounded,
-                          label: widget.ru ? 'Переслать' : 'Forward',
-                        ),
-                        child: _MessageBubble(
-                          message: message,
-                          mine: mine,
-                          privacyLens: widget.privacyLens,
-                          ru: widget.ru,
-                          onLongPress: () => _showMessageActions(message),
-                          onEnsureAttachment: _ensureAttachment,
-                          onPlayAudio: _playAttachment,
-                          onDelete: _deleteMessage,
-                          canDownload: _canDownload,
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_replyingTo != null) ...[
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest.withValues(
-                          alpha: .92,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+          children: [
+            Expanded(
+              child: _tunnel.messages.isEmpty
+                  ? _EmptyChat(
+                      ru: widget.ru,
+                      onInvite: canInvite ? _showInvite : null,
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      physics: const ClampingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.reply_rounded, color: scheme.primary),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _replyingTo!.authorName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                      dragStartBehavior: DragStartBehavior.down,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+                      itemCount: _tunnel.messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _tunnel.messages[index];
+                        final mine =
+                            message.authorId == widget.profile.id ||
+                            (message.authorId.isEmpty &&
+                                message.authorName == widget.profile.nickname);
+                        return Dismissible(
+                          key: ValueKey('swipe-${message.id}'),
+                          direction: message.deleted
+                              ? DismissDirection.none
+                              : DismissDirection.horizontal,
+                          confirmDismiss: (direction) async {
+                            if (direction == DismissDirection.startToEnd) {
+                              _replyTo(message);
+                            } else {
+                              await _forward(message);
+                            }
+                            return false;
+                          },
+                          background: _SwipeActionBackground(
+                            alignment: Alignment.centerLeft,
+                            icon: Icons.reply_rounded,
+                            label: widget.ru ? 'Ответить' : 'Reply',
+                          ),
+                          secondaryBackground: _SwipeActionBackground(
+                            alignment: Alignment.centerRight,
+                            icon: Icons.forward_rounded,
+                            label: widget.ru ? 'Переслать' : 'Forward',
+                          ),
+                          child: Row(
+                            mainAxisAlignment: mine
+                                ? MainAxisAlignment.end
+                                : MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (!mine) ...[
+                                _MessageAuthorAvatar(
+                                  message: message,
+                                  mine: false,
                                 ),
-                                Text(
-                                  _replyingTo!.text.isNotEmpty
-                                      ? _replyingTo!.text
-                                      : (_replyingTo!.attachment?.name ?? ''),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11),
+                                const SizedBox(width: 6),
+                              ],
+                              Flexible(
+                                child: _MessageBubble(
+                                  message: message,
+                                  mine: mine,
+                                  privacyLens: widget.privacyLens,
+                                  ru: widget.ru,
+                                  onLongPress: () =>
+                                      _showMessageActions(message),
+                                  onEnsureAttachment: _ensureAttachment,
+                                  onPlayAudio: _playAttachment,
+                                  onDelete: _deleteMessage,
+                                  canDownload: _canDownload,
+                                ),
+                              ),
+                              if (mine) ...[
+                                const SizedBox(width: 6),
+                                _MessageAuthorAvatar(
+                                  message: message,
+                                  mine: true,
                                 ),
                               ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_replyingTo != null) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest.withValues(
+                            alpha: .92,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.reply_rounded, color: scheme.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _replyingTo!.authorName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    _replyingTo!.text.isNotEmpty
+                                        ? _replyingTo!.text
+                                        : (_replyingTo!.attachment?.name ?? ''),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            IconButton(
+                              onPressed: () =>
+                                  setState(() => _replyingTo = null),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    GlassPanel(
+                      padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                      borderRadius: BorderRadius.circular(22),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            tooltip: widget.ru ? 'Добавить' : 'Add',
+                            onPressed: _sendingFile
+                                ? null
+                                : _showAttachmentMenu,
+                            icon: _sendingFile
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_rounded),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _text,
+                              focusNode: _composerFocus,
+                              autofocus: false,
+                              onTapOutside: (_) => _composerFocus.unfocus(),
+                              minLines: 1,
+                              maxLines: 5,
+                              textCapitalization: TextCapitalization.sentences,
+                              textInputAction: Platform.isWindows
+                                  ? TextInputAction.send
+                                  : TextInputAction.newline,
+                              enabled: _canWrite,
+                              onSubmitted: (_) => _sendText(),
+                              decoration: InputDecoration(
+                                hintText: widget.ru ? 'Сообщение' : 'Message',
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 10,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
-                          IconButton(
-                            onPressed: () =>
-                                setState(() => _replyingTo = null),
-                            icon: const Icon(Icons.close_rounded),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: _hasText
+                                ? IconButton.filled(
+                                    key: const ValueKey('send'),
+                                    onPressed: _sendText,
+                                    icon: const Icon(
+                                      Icons.arrow_upward_rounded,
+                                    ),
+                                  )
+                                : CgVoiceRecordButton(
+                                    key: const ValueKey('voice'),
+                                    ru: widget.ru,
+                                    enabled: _canSendMedia,
+                                    onRecorded: _sendVoice,
+                                  ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                  GlassPanel(
-                    padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-                    borderRadius: BorderRadius.circular(22),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          tooltip: widget.ru ? 'Добавить' : 'Add',
-                          onPressed:
-                              _sendingFile ? null : _showAttachmentMenu,
-                          icon: _sendingFile
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.add_rounded),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _text,
-                            focusNode: _composerFocus,
-                            autofocus: false,
-                            onTapOutside: (_) => _composerFocus.unfocus(),
-                            minLines: 1,
-                            maxLines: 5,
-                            textCapitalization: TextCapitalization.sentences,
-                            textInputAction: Platform.isWindows
-                                ? TextInputAction.send
-                                : TextInputAction.newline,
-                            enabled: _canWrite,
-                            onSubmitted: (_) => _sendText(),
-                            decoration: InputDecoration(
-                              hintText:
-                                  widget.ru ? 'Сообщение' : 'Message',
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: _hasText
-                              ? IconButton.filled(
-                                  key: const ValueKey('send'),
-                                  onPressed: _sendText,
-                                  icon: const Icon(
-                                    Icons.arrow_upward_rounded,
-                                  ),
-                                )
-                              : CgVoiceRecordButton(
-                                  key: const ValueKey('voice'),
-                                  ru: widget.ru,
-                                  enabled: _canSendMedia,
-                                  onRecorded: _sendVoice,
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 }
-
 
 class _SwipeActionBackground extends StatelessWidget {
   final Alignment alignment;
@@ -2118,22 +2303,22 @@ class _SwipeActionBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        alignment: alignment,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: .14),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 10),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
-          ],
-        ),
-      );
+    alignment: alignment,
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: .14),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+      ],
+    ),
+  );
 }
 
 class _AttachmentAction extends StatelessWidget {
@@ -2175,6 +2360,43 @@ class _AttachmentAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _MessageAuthorAvatar extends StatelessWidget {
+  final CgMessage message;
+  final bool mine;
+
+  const _MessageAuthorAvatar({required this.message, required this.mine});
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = message.meta['avatarBase64']?.toString();
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        return CircleAvatar(
+          radius: 15,
+          backgroundImage: MemoryImage(base64Decode(raw)),
+        );
+      } catch (_) {}
+    }
+    final name = message.authorName.trim();
+    return CircleAvatar(
+      radius: 15,
+      backgroundColor: mine
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.secondaryContainer,
+      child: Text(
+        name.isEmpty ? '?' : name[0].toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          color: mine
+              ? Colors.white
+              : Theme.of(context).colorScheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
 }
 
 class _TunnelAvatar extends StatelessWidget {
@@ -2350,7 +2572,9 @@ class _LinkifiedMessageTextState extends State<_LinkifiedMessageText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(TextSpan(style: widget.style, children: _spans()));
+    return SelectionArea(
+      child: Text.rich(TextSpan(style: widget.style, children: _spans())),
+    );
   }
 }
 
@@ -2395,8 +2619,8 @@ class _MessageBubble extends StatelessWidget {
     final bubbleColor = mediaOnly
         ? Colors.transparent
         : mine
-            ? scheme.primary.withValues(alpha: .92)
-            : scheme.surfaceContainerHighest.withValues(alpha: .74);
+        ? scheme.primary.withValues(alpha: .92)
+        : scheme.surfaceContainerHighest.withValues(alpha: .74);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
@@ -2419,15 +2643,17 @@ class _MessageBubble extends StatelessWidget {
             children: [
               if (message.deleted)
                 Padding(
-                  padding: mediaOnly ? const EdgeInsets.all(8) : EdgeInsets.zero,
+                  padding: mediaOnly
+                      ? const EdgeInsets.all(8)
+                      : EdgeInsets.zero,
                   child: Text(
                     ru ? 'Сообщение удалено' : 'Message deleted',
                     style: TextStyle(
                       color: mediaOnly
                           ? scheme.onSurfaceVariant
                           : mine
-                              ? Colors.white60
-                              : scheme.onSurfaceVariant,
+                          ? Colors.white60
+                          : scheme.onSurfaceVariant,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -2439,7 +2665,9 @@ class _MessageBubble extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: mine && !mediaOnly ? Colors.white70 : scheme.primary,
+                      color: mine && !mediaOnly
+                          ? Colors.white70
+                          : scheme.primary,
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -2522,8 +2750,8 @@ class _MessageBubble extends StatelessWidget {
                     color: mediaOnly
                         ? scheme.onSurface.withValues(alpha: .46)
                         : mine
-                            ? Colors.white60
-                            : scheme.onSurface.withValues(alpha: .42),
+                        ? Colors.white60
+                        : scheme.onSurface.withValues(alpha: .42),
                   ),
                 ),
               ),

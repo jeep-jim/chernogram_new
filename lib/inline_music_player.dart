@@ -45,9 +45,7 @@ class _CgInlineMusicPlayerState extends State<CgInlineMusicPlayer> {
         RegExp(r'[^a-zA-Z0-9._-]+'),
         '_',
       );
-      final file = File(
-        '${directory.path}/${widget.attachment.id}_$safeName',
-      );
+      final file = File('${directory.path}/${widget.attachment.id}_$safeName');
       if (!await file.exists()) {
         await file.writeAsBytes(base64Decode(raw), flush: true);
       }
@@ -123,30 +121,31 @@ class _CgInlineMusicPlayerState extends State<CgInlineMusicPlayer> {
                       stream: _hub.player.positionStream,
                       builder: (context, positionSnapshot) =>
                           StreamBuilder<Duration?>(
-                        stream: _hub.player.durationStream,
-                        builder: (context, durationSnapshot) {
-                          final total = active
-                              ? durationSnapshot.data ?? Duration.zero
-                              : Duration.zero;
-                          final position = active
-                              ? positionSnapshot.data ?? Duration.zero
-                              : Duration.zero;
-                          final maxValue =
-                              math.max(1, total.inMilliseconds).toDouble();
-                          return Slider(
-                            min: 0,
-                            max: maxValue,
-                            value: position.inMilliseconds
-                                .clamp(0, maxValue.toInt())
-                                .toDouble(),
-                            onChanged: !active || total == Duration.zero
-                                ? null
-                                : (value) => _hub.player.seek(
-                                      Duration(milliseconds: value.round()),
-                                    ),
-                          );
-                        },
-                      ),
+                            stream: _hub.player.durationStream,
+                            builder: (context, durationSnapshot) {
+                              final total = active
+                                  ? durationSnapshot.data ?? Duration.zero
+                                  : Duration.zero;
+                              final position = active
+                                  ? positionSnapshot.data ?? Duration.zero
+                                  : Duration.zero;
+                              final maxValue = math
+                                  .max(1, total.inMilliseconds)
+                                  .toDouble();
+                              return Slider(
+                                min: 0,
+                                max: maxValue,
+                                value: position.inMilliseconds
+                                    .clamp(0, maxValue.toInt())
+                                    .toDouble(),
+                                onChanged: !active || total == Duration.zero
+                                    ? null
+                                    : (value) => _hub.player.seek(
+                                        Duration(milliseconds: value.round()),
+                                      ),
+                              );
+                            },
+                          ),
                     ),
                   ],
                 ),

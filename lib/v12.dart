@@ -22,6 +22,7 @@ import 'chat_media.dart';
 import 'chat_screen.dart';
 import 'crash_reporter.dart';
 import 'core_models.dart';
+import 'device_contacts_screen.dart';
 import 'group_call_service.dart';
 import 'music_player.dart';
 import 'notification_service.dart';
@@ -86,7 +87,6 @@ String? _decodeQrImageInBackground(Uint8List bytes) {
   return null;
 }
 
-
 const Set<String> _blockedNicknameRoots = <String>{
   'admin',
   'administrator',
@@ -135,7 +135,6 @@ String? _nicknameError(String value, bool ru) {
   }
   return null;
 }
-
 
 String _directPairToken(String left, String right) {
   final ids = <String>[left, right]..sort();
@@ -235,10 +234,12 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _loading = false;
     });
     await _listenLinks();
-    _notificationClickSubscription =
-        CgNotificationService.tunnelClicks.listen(_openNotificationTunnel);
-    _callClickSubscription =
-        CgNotificationService.callClicks.listen(_openPendingCall);
+    _notificationClickSubscription = CgNotificationService.tunnelClicks.listen(
+      _openNotificationTunnel,
+    );
+    _callClickSubscription = CgNotificationService.callClicks.listen(
+      _openPendingCall,
+    );
     final pendingTunnelId = CgNotificationService.consumePendingTunnelId();
     if (pendingTunnelId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -252,7 +253,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
       });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(CgPermissionCenter.maybePrompt(context, ru: widget.ru));
+      if (mounted)
+        unawaited(CgPermissionCenter.maybePrompt(context, ru: widget.ru));
     });
     unawaited(_prewarmAll());
     unawaited(_syncAppMonitor());
@@ -319,7 +321,6 @@ class _ChernogramV12State extends State<ChernogramV12> {
     );
   }
 
-
   Future<void> _persistUnread() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('cg_unread_v2', jsonEncode(_unreadCounts));
@@ -346,9 +347,10 @@ class _ChernogramV12State extends State<ChernogramV12> {
     }
 
     final activeTunnelIds = _tunnels.map((item) => item.id).toSet();
-    for (final id in _onlineByTunnel.keys
-        .where((id) => !activeTunnelIds.contains(id))
-        .toList()) {
+    for (final id
+        in _onlineByTunnel.keys
+            .where((id) => !activeTunnelIds.contains(id))
+            .toList()) {
       _onlineByTunnel.remove(id);
       changed = true;
     }
@@ -391,11 +393,13 @@ class _ChernogramV12State extends State<ChernogramV12> {
       }
       if (count > 0) nextByTunnel[tunnel.id] = count;
     }
-    final tunnelChanged = nextByTunnel.length != _onlineByTunnel.length ||
+    final tunnelChanged =
+        nextByTunnel.length != _onlineByTunnel.length ||
         nextByTunnel.entries.any(
           (entry) => _onlineByTunnel[entry.key] != entry.value,
         );
-    final contactsChanged = nextContacts.length != _onlineContactIds.length ||
+    final contactsChanged =
+        nextContacts.length != _onlineContactIds.length ||
         !_onlineContactIds.containsAll(nextContacts);
     if (!tunnelChanged && !contactsChanged) return;
     _onlineByTunnel
@@ -463,7 +467,8 @@ class _ChernogramV12State extends State<ChernogramV12> {
         _rememberContact(
           CgContact(
             id: contactId,
-            nickname: event.data['nickname']?.toString() ??
+            nickname:
+                event.data['nickname']?.toString() ??
                 event.data['relaySenderName']?.toString() ??
                 'user',
             lastSeenAt: DateTime.now(),
@@ -480,8 +485,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
       CgMessage.fromJson(raw),
     );
     if (incoming.authorId != _profile?.id) {
-      final tunnelIndexForNotification =
-          _tunnels.indexWhere((item) => item.id == tunnelId);
+      final tunnelIndexForNotification = _tunnels.indexWhere(
+        (item) => item.id == tunnelId,
+      );
       final notificationTitle = tunnelIndexForNotification < 0
           ? (widget.ru ? 'Новое сообщение' : 'New message')
           : _tunnels[tunnelIndexForNotification].displayName;
@@ -501,7 +507,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
       _rememberContact(
         CgContact(
           id: incoming.authorId,
-          nickname: incoming.authorName.trim().isEmpty ? 'user' : incoming.authorName,
+          nickname: incoming.authorName.trim().isEmpty
+              ? 'user'
+              : incoming.authorName,
           lastSeenAt: DateTime.now(),
           tunnelIds: <String>[tunnelId],
           avatarBase64: incoming.meta['authorAvatarBase64']?.toString(),
@@ -512,8 +520,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
     final tunnelIndex = _tunnels.indexWhere((item) => item.id == tunnelId);
     if (tunnelIndex < 0) return;
     final tunnel = _tunnels[tunnelIndex];
-    final messageIndex =
-        tunnel.messages.indexWhere((message) => message.id == incoming.id);
+    final messageIndex = tunnel.messages.indexWhere(
+      (message) => message.id == incoming.id,
+    );
     if (messageIndex >= 0 &&
         tunnel.messages[messageIndex].sameVisibleContent(incoming)) {
       return;
@@ -562,10 +571,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _forwardMessage(
-    CgMessage source,
-    String sourceTunnelId,
-  ) async {
+  Future<void> _forwardMessage(CgMessage source, String sourceTunnelId) async {
     final targets = _tunnels
         .where((tunnel) => tunnel.id != sourceTunnelId)
         .toList();
@@ -1054,9 +1060,7 @@ class _ChernogramV12State extends State<ChernogramV12> {
   @override
   Widget build(BuildContext context) {
     if (_loading || _profile == null) {
-      return const Scaffold(
-        body: Center(child: ChernogramLogo(size: 112)),
-      );
+      return const Scaffold(body: Center(child: ChernogramLogo(size: 112)));
     }
 
     final pages = <Widget>[
@@ -1348,10 +1352,14 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
 
   bool _chatMatches(CgTunnel tunnel, String query) {
     if (_key(tunnel.displayName).contains(query)) return true;
-    return tunnel.messages.reversed.take(50).any((message) =>
-        _key(message.authorName).contains(query) ||
-        _key(message.text).contains(query) ||
-        _key(message.attachment?.name ?? '').contains(query));
+    return tunnel.messages.reversed
+        .take(50)
+        .any(
+          (message) =>
+              _key(message.authorName).contains(query) ||
+              _key(message.text).contains(query) ||
+              _key(message.attachment?.name ?? '').contains(query),
+        );
   }
 
   void _openSearch() {
@@ -1452,12 +1460,23 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
                               spacing: 7,
                               runSpacing: 7,
                               children: <Widget>[
-                                _pill(context, Icons.block_rounded,
-                                    widget.ru ? 'Без рекламы' : 'No ads'),
-                                _pill(context, Icons.folder_copy_outlined,
-                                    widget.ru ? 'P2P-файлы' : 'P2P files'),
-                                _pill(context, Icons.offline_bolt_outlined,
-                                    widget.ru ? 'Локальная история' : 'Local history'),
+                                _pill(
+                                  context,
+                                  Icons.block_rounded,
+                                  widget.ru ? 'Без рекламы' : 'No ads',
+                                ),
+                                _pill(
+                                  context,
+                                  Icons.folder_copy_outlined,
+                                  widget.ru ? 'P2P-файлы' : 'P2P files',
+                                ),
+                                _pill(
+                                  context,
+                                  Icons.offline_bolt_outlined,
+                                  widget.ru
+                                      ? 'Локальная история'
+                                      : 'Local history',
+                                ),
                               ],
                             ),
                           ],
@@ -1547,12 +1566,16 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
               padding: const EdgeInsets.only(top: 54),
               child: Column(
                 children: <Widget>[
-                  Icon(Icons.forum_outlined,
-                      size: 64,
-                      color: scheme.onSurface.withValues(alpha: .16)),
+                  Icon(
+                    Icons.forum_outlined,
+                    size: 64,
+                    color: scheme.onSurface.withValues(alpha: .16),
+                  ),
                   const SizedBox(height: 12),
-                  Text(widget.ru ? 'Чатов пока нет' : 'No chats yet',
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(
+                    widget.ru ? 'Чатов пока нет' : 'No chats yet',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ],
               ),
             )
@@ -1563,8 +1586,12 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
     );
   }
 
-  List<Widget> _searchResults(BuildContext context, String query,
-      List<CgTunnel> chats, List<CgContact> people) {
+  List<Widget> _searchResults(
+    BuildContext context,
+    String query,
+    List<CgTunnel> chats,
+    List<CgContact> people,
+  ) {
     final scheme = Theme.of(context).colorScheme;
     if (query.isEmpty) {
       return <Widget>[
@@ -1597,8 +1624,11 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
         const SizedBox(height: 12),
       ],
       if (people.isNotEmpty) ...<Widget>[
-        _header(context, widget.ru ? 'Люди и аккаунты' : 'People and accounts',
-            '${people.length}'),
+        _header(
+          context,
+          widget.ru ? 'Люди и аккаунты' : 'People and accounts',
+          '${people.length}',
+        ),
         for (final contact in people) _contactTile(context, contact),
       ],
     ];
@@ -1611,13 +1641,15 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: Text(title,
-                style: const TextStyle(
-                    fontSize: 19, fontWeight: FontWeight.w900)),
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+            ),
           ),
-          Text(count,
-              style: TextStyle(
-                  color: scheme.onSurface.withValues(alpha: .45))),
+          Text(
+            count,
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: .45)),
+          ),
         ],
       ),
     );
@@ -1644,7 +1676,9 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            widget.privacyLens ? '••••••••' : tunnel.displayName,
+                            widget.privacyLens
+                                ? '••••••••'
+                                : tunnel.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1653,7 +1687,8 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
                             ),
                           ),
                         ),
-                        if ((widget.onlineByTunnel[tunnel.id] ?? 0) > 0) ...<Widget>[
+                        if ((widget.onlineByTunnel[tunnel.id] ?? 0) >
+                            0) ...<Widget>[
                           const SizedBox(width: 7),
                           Container(
                             width: 8,
@@ -1683,27 +1718,33 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurface.withValues(alpha: .52)),
+                        fontSize: 12,
+                        color: scheme.onSurface.withValues(alpha: .52),
+                      ),
                     ),
                   ],
                 ),
               ),
               if ((widget.unreadCounts[tunnel.id] ?? 0) > 0)
                 Container(
-                  constraints:
-                      const BoxConstraints(minWidth: 22, minHeight: 22),
+                  constraints: const BoxConstraints(
+                    minWidth: 22,
+                    minHeight: 22,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: scheme.primary,
                     borderRadius: BorderRadius.circular(99),
                   ),
-                  child: Text('${widget.unreadCounts[tunnel.id]}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900)),
+                  child: Text(
+                    '${widget.unreadCounts[tunnel.id]}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -1733,18 +1774,25 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(widget.privacyLens ? '••••••••' : contact.nickname,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text(
+                      widget.privacyLens ? '••••••••' : contact.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(widget.privacyLens ? '••••••••' : 'ID ${contact.id}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurface.withValues(alpha: .52))),
+                    Text(
+                      widget.privacyLens ? '••••••••' : 'ID ${contact.id}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurface.withValues(alpha: .52),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1769,11 +1817,14 @@ class _V12ChatsHomeState extends State<_V12ChatsHome> {
         children: <Widget>[
           Icon(icon, size: 15, color: scheme.primary),
           const SizedBox(width: 5),
-          Text(text,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface.withValues(alpha: .72))),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface.withValues(alpha: .72),
+            ),
+          ),
         ],
       ),
     );
@@ -1870,6 +1921,22 @@ class _V12ContactsScreen extends StatelessWidget {
               : 'People you have chatted with are saved here.',
           style: TextStyle(color: scheme.onSurface.withValues(alpha: .56)),
         ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgDeviceContactsScreen(ru: ru),
+              ),
+            ),
+            icon: const Icon(Icons.contact_phone_outlined),
+            label: Text(
+              ru ? 'Телефонная книга и набор номера' : 'Phone book and dialer',
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
         if (contacts.isEmpty)
           Padding(
@@ -1911,7 +1978,9 @@ class _V12ContactsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      privacyLens ? '••••••••' : _lastSeen(contact.lastSeenAt, ru),
+                      privacyLens
+                          ? '••••••••'
+                          : _lastSeen(contact.lastSeenAt, ru),
                     ),
                     if (!privacyLens)
                       Text(
@@ -2086,13 +2155,18 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
             children: [
               Text(
                 widget.ru ? 'Сборка Чернограма' : 'Cernogram build',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 _version,
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .55),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2105,7 +2179,11 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
                     children: [
                       const Padding(
                         padding: EdgeInsets.only(top: 5),
-                        child: Icon(Icons.circle, size: 7, color: Color(0xFF22C7F2)),
+                        child: Icon(
+                          Icons.circle,
+                          size: 7,
+                          color: Color(0xFF22C7F2),
+                        ),
                       ),
                       const SizedBox(width: 9),
                       Expanded(child: Text(note)),
@@ -2127,7 +2205,9 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .58),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .58),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2154,8 +2234,8 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
                   onPressed: () async {
                     final shared =
                         await ChernogramCrashReporter.shareDiagnosticReport(
-                      ru: widget.ru,
-                    );
+                          ru: widget.ru,
+                        );
                     if (!shared && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -2197,9 +2277,9 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
     final nickname = _nickname.text.trim().toLowerCase();
     final error = _nicknameError(nickname, widget.ru);
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     widget.onSave(
@@ -2261,7 +2341,9 @@ class _V12ProfileScreenState extends State<_V12ProfileScreen> {
                   fontSize: 11,
                   decoration: TextDecoration.underline,
                   decorationStyle: TextDecorationStyle.dotted,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .58),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .58),
                 ),
               ),
             ),

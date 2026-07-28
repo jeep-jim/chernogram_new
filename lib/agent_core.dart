@@ -24,20 +24,20 @@ class CgAgentMessage {
   });
 
   CgAgentMessage copyWith({String? text, bool? failed}) => CgAgentMessage(
-        id: id,
-        role: role,
-        text: text ?? this.text,
-        createdAt: createdAt,
-        failed: failed ?? this.failed,
-      );
+    id: id,
+    role: role,
+    text: text ?? this.text,
+    createdAt: createdAt,
+    failed: failed ?? this.failed,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'role': role.name,
-        'text': text,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        if (failed) 'failed': true,
-      };
+    'id': id,
+    'role': role.name,
+    'text': text,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    if (failed) 'failed': true,
+  };
 
   factory CgAgentMessage.fromJson(Map<String, dynamic> json) {
     final rawRole = json['role']?.toString();
@@ -50,7 +50,8 @@ class CgAgentMessage {
         orElse: () => CgAgentRole.user,
       ),
       text: json['text']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now().toUtc(),
       failed: json['failed'] == true,
     );
@@ -90,31 +91,29 @@ class CgAgentSettings {
     bool? allowContacts,
     bool? allowWebSearch,
     double? voiceRate,
-  }) =>
-      CgAgentSettings(
-        endpoint: endpoint ?? this.endpoint,
-        model: model ?? this.model,
-        rememberConversation:
-            rememberConversation ?? this.rememberConversation,
-        autoSpeak: autoSpeak ?? this.autoSpeak,
-        allowChatContext: allowChatContext ?? this.allowChatContext,
-        allowFiles: allowFiles ?? this.allowFiles,
-        allowContacts: allowContacts ?? this.allowContacts,
-        allowWebSearch: allowWebSearch ?? this.allowWebSearch,
-        voiceRate: voiceRate ?? this.voiceRate,
-      );
+  }) => CgAgentSettings(
+    endpoint: endpoint ?? this.endpoint,
+    model: model ?? this.model,
+    rememberConversation: rememberConversation ?? this.rememberConversation,
+    autoSpeak: autoSpeak ?? this.autoSpeak,
+    allowChatContext: allowChatContext ?? this.allowChatContext,
+    allowFiles: allowFiles ?? this.allowFiles,
+    allowContacts: allowContacts ?? this.allowContacts,
+    allowWebSearch: allowWebSearch ?? this.allowWebSearch,
+    voiceRate: voiceRate ?? this.voiceRate,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'endpoint': endpoint,
-        'model': model,
-        'rememberConversation': rememberConversation,
-        'autoSpeak': autoSpeak,
-        'allowChatContext': allowChatContext,
-        'allowFiles': allowFiles,
-        'allowContacts': allowContacts,
-        'allowWebSearch': allowWebSearch,
-        'voiceRate': voiceRate,
-      };
+    'endpoint': endpoint,
+    'model': model,
+    'rememberConversation': rememberConversation,
+    'autoSpeak': autoSpeak,
+    'allowChatContext': allowChatContext,
+    'allowFiles': allowFiles,
+    'allowContacts': allowContacts,
+    'allowWebSearch': allowWebSearch,
+    'voiceRate': voiceRate,
+  };
 
   factory CgAgentSettings.fromJson(Map<String, dynamic> json) =>
       CgAgentSettings(
@@ -128,10 +127,9 @@ class CgAgentSettings {
         allowFiles: json['allowFiles'] == true,
         allowContacts: json['allowContacts'] == true,
         allowWebSearch: json['allowWebSearch'] == true,
-        voiceRate:
-            (double.tryParse(json['voiceRate']?.toString() ?? '') ?? .46)
-                .clamp(.25, .75)
-                .toDouble(),
+        voiceRate: (double.tryParse(json['voiceRate']?.toString() ?? '') ?? .46)
+            .clamp(.25, .75)
+            .toDouble(),
       );
 }
 
@@ -149,9 +147,7 @@ class CgAgentStore {
       return decoded
           .whereType<Map>()
           .map(
-            (item) => CgAgentMessage.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
+            (item) => CgAgentMessage.fromJson(Map<String, dynamic>.from(item)),
           )
           .where((item) => item.text.trim().isNotEmpty)
           .toList();
@@ -218,11 +214,11 @@ class CgLocalAgentProvider implements CgAgentProvider {
     final request = messages.lastOrNull?.text.toLowerCase() ?? '';
     final answer = request.contains('привет') || request.contains('hello')
         ? (ru
-            ? 'Привет. Я Агент Cernogram. Сейчас я работаю в локальном режиме. Открой мои настройки и выбери Ollama или укажи OpenAI-compatible сервер — после этого ответы станут полноценными и потоковыми.'
-            : 'Hello. I am the Cernogram Agent. I am currently in local mode. Open my settings and select Ollama or enter an OpenAI-compatible server for full streaming replies.')
+              ? 'Привет. Я Агент Cernogram. Сейчас я работаю в локальном режиме. Открой мои настройки и выбери Ollama или укажи OpenAI-compatible сервер — после этого ответы станут полноценными и потоковыми.'
+              : 'Hello. I am the Cernogram Agent. I am currently in local mode. Open my settings and select Ollama or enter an OpenAI-compatible server for full streaming replies.')
         : (ru
-            ? 'Локальный режим активен. Я сохранил запрос, но для полноценного ответа нужна модель. В настройках можно выбрать «Ollama на этом компьютере» или указать адрес своего OpenAI-compatible сервера. Ключ в приложение не зашивается.'
-            : 'Local mode is active. I saved the request, but a model is required for a full answer. In settings, select Ollama on this computer or enter your OpenAI-compatible server. No key is embedded in the app.');
+              ? 'Локальный режим активен. Я сохранил запрос, но для полноценного ответа нужна модель. В настройках можно выбрать «Ollama на этом компьютере» или указать адрес своего OpenAI-compatible сервера. Ключ в приложение не зашивается.'
+              : 'Local mode is active. I saved the request, but a model is required for a full answer. In settings, select Ollama on this computer or enter your OpenAI-compatible server. No key is embedded in the app.');
     for (final part in answer.split(RegExp(r'(?<=\s)'))) {
       await Future<void>.delayed(const Duration(milliseconds: 15));
       yield part;
@@ -325,7 +321,8 @@ class CgOpenAiCompatibleProvider implements CgAgentProvider {
     if (path.isEmpty || path == '/') path = '/v1/chat/completions';
     if (path.endsWith('/v1')) path = '$path/chat/completions';
     if (!path.contains('chat/completions')) {
-      path = '${path.endsWith('/') ? path.substring(0, path.length - 1) : path}/chat/completions';
+      path =
+          '${path.endsWith('/') ? path.substring(0, path.length - 1) : path}/chat/completions';
     }
     uri = uri.replace(path: path);
     return uri;

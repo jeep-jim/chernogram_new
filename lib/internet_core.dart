@@ -25,10 +25,7 @@ class InternetTunnelSession {
   // Temporary recovery transport. Keep one primary and one hot standby;
   // broadcasting every packet to four public services caused radio load,
   // duplicate cache replays and long UI stalls on Android.
-  static const List<String> relayHosts = <String>[
-    'ntfy.sh',
-    'ntfy.jae.fi',
-  ];
+  static const List<String> relayHosts = <String>['ntfy.sh', 'ntfy.jae.fi'];
 
   final String tunnelId;
   final String secret;
@@ -70,21 +67,21 @@ class InternetTunnelSession {
   bool get connected => _sockets.isNotEmpty;
   int get onlinePeers => _peers.length + 1;
   List<Map<String, dynamic>> get members => <Map<String, dynamic>>[
-        <String, dynamic>{
-          'id': profileId,
-          'name': nickname,
-          'self': true,
-          'seenAt': DateTime.now().toUtc().toIso8601String(),
-        },
-        ..._peers.entries.map(
-          (entry) => <String, dynamic>{
-            'id': entry.key,
-            'name': _peerNames[entry.key] ?? 'пользователь',
-            'self': false,
-            'seenAt': entry.value.toUtc().toIso8601String(),
-          },
-        ),
-      ];
+    <String, dynamic>{
+      'id': profileId,
+      'name': nickname,
+      'self': true,
+      'seenAt': DateTime.now().toUtc().toIso8601String(),
+    },
+    ..._peers.entries.map(
+      (entry) => <String, dynamic>{
+        'id': entry.key,
+        'name': _peerNames[entry.key] ?? 'пользователь',
+        'self': false,
+        'seenAt': entry.value.toUtc().toIso8601String(),
+      },
+    ),
+  ];
 
   Future<void> connect() async {
     if (_closed || _connecting || connected) return;
@@ -137,7 +134,9 @@ class InternetTunnelSession {
     }
   }
 
-  Future<bool> waitUntilConnected([Duration timeout = const Duration(seconds: 4)]) async {
+  Future<bool> waitUntilConnected([
+    Duration timeout = const Duration(seconds: 4),
+  ]) async {
     if (connected) return true;
     unawaited(connect());
     final deadline = DateTime.now().add(timeout);
@@ -159,9 +158,9 @@ class InternetTunnelSession {
         path: '/${_topic!}/ws',
         queryParameters: const <String, String>{'since': '2m'},
       );
-      final socket = await WebSocket.connect(uri.toString()).timeout(
-        const Duration(milliseconds: 3200),
-      );
+      final socket = await WebSocket.connect(
+        uri.toString(),
+      ).timeout(const Duration(milliseconds: 3200));
       if (_closed) {
         await socket.close();
         return false;
@@ -266,7 +265,8 @@ class InternetTunnelSession {
     final sentAt = DateTime.tryParse(envelope['sentAt']?.toString() ?? '');
     if (kind == 'signal' &&
         sentAt != null &&
-        DateTime.now().toUtc().difference(sentAt.toUtc()).inSeconds.abs() > 120) {
+        DateTime.now().toUtc().difference(sentAt.toUtc()).inSeconds.abs() >
+            120) {
       return;
     }
 
@@ -359,11 +359,16 @@ class InternetTunnelSession {
   List<Map<String, dynamic>> replaySignals(String callId) {
     if (callId.isEmpty) return const <Map<String, dynamic>>[];
     final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
-    return _signalHistory.where((signal) {
-      if (signal['callId']?.toString() != callId) return false;
-      final receivedAt = DateTime.tryParse(signal['receivedAt']?.toString() ?? '');
-      return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
-    }).map((signal) => Map<String, dynamic>.from(signal)).toList();
+    return _signalHistory
+        .where((signal) {
+          if (signal['callId']?.toString() != callId) return false;
+          final receivedAt = DateTime.tryParse(
+            signal['receivedAt']?.toString() ?? '',
+          );
+          return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
+        })
+        .map((signal) => Map<String, dynamic>.from(signal))
+        .toList();
   }
 
   Future<void> sendHistory() async {
@@ -395,14 +400,10 @@ class InternetTunnelSession {
   }
 
   Future<void> _publishPresence() async {
-    await _sendEnvelope(
-      'presence',
-      <String, dynamic>{
-        'online': true,
-        'at': DateTime.now().toUtc().toIso8601String(),
-      },
-      queueOnFailure: false,
-    );
+    await _sendEnvelope('presence', <String, dynamic>{
+      'online': true,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    }, queueOnFailure: false);
   }
 
   Future<void> _sendEnvelope(
@@ -430,7 +431,8 @@ class InternetTunnelSession {
     ];
     String? successfulHost;
     Object? lastError;
-    final fastPacket = kind == 'signal' ||
+    final fastPacket =
+        kind == 'signal' ||
         kind == 'presence' ||
         kind == 'control' ||
         (kind == 'message' && encrypted.length <= 3500);
@@ -488,7 +490,8 @@ class InternetTunnelSession {
       } else {
         uniqueId = data['operationId']?.toString();
       }
-      final duplicate = uniqueId != null &&
+      final duplicate =
+          uniqueId != null &&
           _outbox.any((item) {
             if (item.kind != kind) return false;
             if (kind == 'message') {
@@ -526,20 +529,22 @@ class InternetTunnelSession {
     for (final host in selected) {
       unawaited(
         _publishEncrypted(
-          host,
-          encrypted,
-          cache: true,
-          priority: 'max',
-          timeout: const Duration(milliseconds: 2600),
-        ).then((_) {
-          if (!completer.isCompleted) completer.complete(host);
-        }).catchError((Object error) {
-          completed++;
-          _scheduleHostReconnect(host);
-          if (completed >= selected.length && !completer.isCompleted) {
-            completer.complete(null);
-          }
-        }),
+              host,
+              encrypted,
+              cache: true,
+              priority: 'max',
+              timeout: const Duration(milliseconds: 2600),
+            )
+            .then((_) {
+              if (!completer.isCompleted) completer.complete(host);
+            })
+            .catchError((Object error) {
+              completed++;
+              _scheduleHostReconnect(host);
+              if (completed >= selected.length && !completer.isCompleted) {
+                completer.complete(null);
+              }
+            }),
       );
     }
     return completer.future.timeout(
@@ -669,7 +674,9 @@ class InternetTunnelSession {
   void _scheduleHostReconnect(String host) {
     if (_closed || _sockets.containsKey(host)) return;
     _relayRetryTimers.remove(host)?.cancel();
-    final delay = Duration(seconds: 4 + (_reconnectAttempt * 2).clamp(0, 12).toInt());
+    final delay = Duration(
+      seconds: 4 + (_reconnectAttempt * 2).clamp(0, 12).toInt(),
+    );
     _relayRetryTimers[host] = Timer(delay, () {
       unawaited(_connectHost(host));
     });
@@ -685,7 +692,10 @@ class InternetTunnelSession {
     });
   }
 
-  void _emit(String type, [Map<String, dynamic> data = const <String, dynamic>{}]) {
+  void _emit(
+    String type, [
+    Map<String, dynamic> data = const <String, dynamic>{},
+  ]) {
     if (!_events.isClosed) _events.add(InternetEvent(type, data));
   }
 

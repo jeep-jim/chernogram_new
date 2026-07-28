@@ -33,7 +33,8 @@ class LocalProfile {
     id: json['id']?.toString() ?? '',
     nickname: json['nickname']?.toString() ?? '',
     createdAt:
-        DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+        DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+        DateTime.now(),
   );
 }
 
@@ -80,7 +81,8 @@ class TunnelInfo {
     isPublic: json['isPublic'] == true,
     ownerId: json['ownerId']?.toString() ?? '',
     createdAt:
-        DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+        DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+        DateTime.now(),
     messages: ((json['messages'] as List?) ?? const [])
         .whereType<Map>()
         .map((item) => TunnelMessage.fromJson(Map<String, dynamic>.from(item)))
@@ -116,7 +118,8 @@ class TunnelMessage {
     author: json['author']?.toString() ?? '',
     text: json['text']?.toString() ?? '',
     assetId: json['assetId']?.toString(),
-    sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '') ?? DateTime.now(),
+    sentAt:
+        DateTime.tryParse(json['sentAt']?.toString() ?? '') ?? DateTime.now(),
   );
 }
 
@@ -199,7 +202,9 @@ class NicknameRules {
   static String? validate(String input, {required bool ru}) {
     final value = input.trim().toLowerCase();
     if (value.length < 4 || value.length > 24) {
-      return ru ? 'Никнейм: от 4 до 24 символов.' : 'Nickname: 4–24 characters.';
+      return ru
+          ? 'Никнейм: от 4 до 24 символов.'
+          : 'Nickname: 4–24 characters.';
     }
     if (!RegExp(r'^[a-zа-яё0-9_.]+$', caseSensitive: false).hasMatch(value)) {
       return ru
@@ -221,7 +226,10 @@ class NicknameRules {
 String generateChernogramId({int length = 12}) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   final random = Random.secure();
-  return List.generate(length, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+  return List.generate(
+    length,
+    (_) => alphabet[random.nextInt(alphabet.length)],
+  ).join();
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -354,7 +362,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 14),
               Text(
                 widget.profile == null
-                    ? (ru ? 'Создайте локальный профиль' : 'Create a local profile')
+                    ? (ru
+                          ? 'Создайте локальный профиль'
+                          : 'Create a local profile')
                     : '@${widget.profile!.nickname}',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
@@ -401,12 +411,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ru
                 ? 'Сейчас профиль закрепляется локально. Для глобальной уникальности никнейма и работы туннелей между телефонами подключим безопасный сетевой реестр.'
                 : 'The profile is currently stored locally. Global nickname uniqueness and cross-device tunnels will use a secure network registry.',
-            style: const TextStyle(fontSize: 12, color: ChernogramColors.textSoft),
+            style: const TextStyle(
+              fontSize: 12,
+              color: ChernogramColors.textSoft,
+            ),
           ),
         ),
         const SizedBox(height: 20),
         ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           tileColor: ChernogramColors.surface,
           leading: const Icon(Icons.language),
           title: Text(ru ? 'Язык интерфейса' : 'Interface language'),
@@ -415,7 +430,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 8),
         ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           tileColor: ChernogramColors.surface,
           leading: const Icon(Icons.system_update_alt_rounded),
           title: Text(ru ? 'Проверить обновления' : 'Check for updates'),
@@ -568,7 +585,9 @@ class _TunnelsScreenState extends State<TunnelsScreen> {
                         ru
                             ? 'Чат, папка и быстрая ссылка для передачи медиа в одном месте.'
                             : 'Chat, shared media and a quick invite link in one place.',
-                        style: const TextStyle(color: ChernogramColors.textSoft),
+                        style: const TextStyle(
+                          color: ChernogramColors.textSoft,
+                        ),
                       ),
                     ],
                   ),
@@ -582,7 +601,11 @@ class _TunnelsScreenState extends State<TunnelsScreen> {
               padding: const EdgeInsets.only(top: 60),
               child: Column(
                 children: [
-                  const Icon(Icons.cable_outlined, size: 70, color: Colors.white30),
+                  const Icon(
+                    Icons.cable_outlined,
+                    size: 70,
+                    color: Colors.white30,
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     ru ? 'Пока нет туннелей' : 'No tunnels yet',
@@ -674,9 +697,9 @@ class _CreateTunnelSheetState extends State<_CreateTunnelSheet> {
         children: [
           Text(
             ru ? 'Новый туннель' : 'New tunnel',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -684,7 +707,9 @@ class _CreateTunnelSheetState extends State<_CreateTunnelSheet> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: ru ? 'Название' : 'Name',
-              hintText: ru ? 'Например: Котик для Маши' : 'Example: Cat photos for Maya',
+              hintText: ru
+                  ? 'Например: Котик для Маши'
+                  : 'Example: Cat photos for Maya',
             ),
           ),
           const SizedBox(height: 10),
@@ -856,10 +881,8 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => InviteContactsSheet(
-        ru: widget.ru,
-        inviteText: _inviteText,
-      ),
+      builder: (_) =>
+          InviteContactsSheet(ru: widget.ru, inviteText: _inviteText),
     );
   }
 
@@ -884,7 +907,10 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_tunnel.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(
+                _tunnel.name,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
               Text(
                 _tunnel.isPublic
                     ? (ru ? 'Публичный туннель' : 'Public tunnel')
@@ -934,7 +960,10 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
                           style: const TextStyle(fontSize: 12),
                         ),
                       ),
-                      TextButton(onPressed: _copyLink, child: Text(ru ? 'Копировать' : 'Copy')),
+                      TextButton(
+                        onPressed: _copyLink,
+                        child: Text(ru ? 'Копировать' : 'Copy'),
+                      ),
                     ],
                   ),
                   const Divider(height: 10),
@@ -976,7 +1005,9 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
                   final message = _tunnel.messages[index];
                   final mine = message.author == widget.profile.nickname;
                   return Align(
-                    alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: mine
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 330),
                       margin: const EdgeInsets.only(bottom: 8),
@@ -992,7 +1023,8 @@ class _TunnelChatScreenState extends State<TunnelChatScreen> {
                         children: [
                           if (message.assetId != null)
                             _TunnelAssetPreview(assetId: message.assetId!),
-                          if (message.assetId != null) const SizedBox(height: 7),
+                          if (message.assetId != null)
+                            const SizedBox(height: 7),
                           Text(message.text),
                           const SizedBox(height: 4),
                           Row(
@@ -1097,10 +1129,11 @@ class _InviteContactsSheetState extends State<InviteContactsSheet> {
   Future<void> _load() async {
     final allowed = await FlutterContacts.requestPermission(readonly: true);
     if (!allowed) {
-      if (mounted) setState(() {
-        _loading = false;
-        _denied = true;
-      });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _denied = true;
+        });
       return;
     }
     final contacts = await FlutterContacts.getContacts(withProperties: true);
@@ -1134,7 +1167,9 @@ class _InviteContactsSheetState extends State<InviteContactsSheet> {
     final visible = query.isEmpty
         ? _contacts
         : _contacts
-              .where((contact) => contact.displayName.toLowerCase().contains(query))
+              .where(
+                (contact) => contact.displayName.toLowerCase().contains(query),
+              )
               .toList();
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * .78,
@@ -1145,9 +1180,9 @@ class _InviteContactsSheetState extends State<InviteContactsSheet> {
           children: [
             Text(
               ru ? 'Пригласить из контактов' : 'Invite from contacts',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 10),
             TextField(

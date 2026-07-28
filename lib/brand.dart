@@ -18,18 +18,19 @@ class ChernogramColors {
 }
 
 ThemeData chernogramTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: ChernogramColors.orange,
-    brightness: Brightness.dark,
-    surface: ChernogramColors.surface,
-  ).copyWith(
-    primary: ChernogramColors.orange,
-    secondary: ChernogramColors.gold,
-    tertiary: ChernogramColors.goldLight,
-    surface: ChernogramColors.surface,
-    surfaceContainerHighest: ChernogramColors.surfaceHigh,
-    error: ChernogramColors.danger,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: ChernogramColors.orange,
+        brightness: Brightness.dark,
+        surface: ChernogramColors.surface,
+      ).copyWith(
+        primary: ChernogramColors.orange,
+        secondary: ChernogramColors.gold,
+        tertiary: ChernogramColors.goldLight,
+        surface: ChernogramColors.surface,
+        surfaceContainerHighest: ChernogramColors.surfaceHigh,
+        error: ChernogramColors.danger,
+      );
   return _themeFromScheme(
     scheme,
     scaffold: ChernogramColors.background,
@@ -42,19 +43,20 @@ ThemeData chernogramLightTheme() {
   const scaffold = Color(0xFFF2F6FF);
   const surface = Color(0xFFFFFFFF);
   const surfaceHigh = Color(0xFFE8EEFA);
-  final scheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF4F46E5),
-    brightness: Brightness.light,
-    surface: surface,
-  ).copyWith(
-    primary: const Color(0xFF4F46E5),
-    secondary: const Color(0xFF008CCF),
-    tertiary: const Color(0xFF6D5FF5),
-    surface: surface,
-    surfaceContainerHighest: surfaceHigh,
-    onSurface: const Color(0xFF11182A),
-    error: const Color(0xFFD92D52),
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: const Color(0xFF4F46E5),
+        brightness: Brightness.light,
+        surface: surface,
+      ).copyWith(
+        primary: const Color(0xFF4F46E5),
+        secondary: const Color(0xFF008CCF),
+        tertiary: const Color(0xFF6D5FF5),
+        surface: surface,
+        surfaceContainerHighest: surfaceHigh,
+        onSurface: const Color(0xFF11182A),
+        error: const Color(0xFFD92D52),
+      );
   return _themeFromScheme(
     scheme,
     scaffold: scaffold,
@@ -127,7 +129,9 @@ ThemeData _themeFromScheme(
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: scheme.surfaceContainerHighest.withValues(alpha: dark ? .72 : .82),
+      fillColor: scheme.surfaceContainerHighest.withValues(
+        alpha: dark ? .72 : .82,
+      ),
       hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: .42)),
       labelStyle: TextStyle(color: scheme.onSurface.withValues(alpha: .64)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -149,9 +153,7 @@ ThemeData _themeFromScheme(
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -334,7 +336,8 @@ class _ChernogramFacePainter extends CustomPainter {
       final x = size.width * (.14 + t * .72);
       final ellipse = math.sqrt(math.max(0, 1 - normalizedX * normalizedX));
       final top = topBase + (1 - ellipse) * size.height * .12;
-      final jaw = ellipse * faceHeight * .50 - normalizedX.abs() * size.height * .035;
+      final jaw =
+          ellipse * faceHeight * .50 - normalizedX.abs() * size.height * .035;
       final bottom = centerY + jaw;
       final stagger = (progress * 1.42 - t * .34).clamp(0.0, 1.0).toDouble();
       final eased = Curves.easeOutCubic.transform(stagger);
@@ -367,7 +370,6 @@ class _ChernogramFacePainter extends CustomPainter {
         canvas.drawLine(Offset(x, cursor), Offset(x, animatedBottom), main);
       }
     }
-
   }
 
   @override
@@ -383,44 +385,43 @@ class BrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const ChernogramLogo(size: 39),
-          const SizedBox(width: 9),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  ru ? 'Чернограм' : 'Cernogram',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -.45,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: .46),
-                    ),
-                  ),
-              ],
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const ChernogramLogo(size: 39),
+      const SizedBox(width: 9),
+      Flexible(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              ru ? 'Чернограм' : 'Cernogram',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -.45,
+              ),
             ),
-          ),
-        ],
-      );
+            if (subtitle != null)
+              Text(
+                subtitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .46),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
 }
 
 class ChernogramAnimatedIntro extends StatefulWidget {
@@ -461,117 +462,118 @@ class _ChernogramAnimatedIntroState extends State<ChernogramAnimatedIntro>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: ChernogramColors.background,
-        body: Center(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              final stripes = CurvedAnimation(
-                parent: _controller,
-                curve: const Interval(0, .60, curve: Curves.easeOutCubic),
-              ).value;
-              final assembly = CurvedAnimation(
-                parent: _controller,
-                curve: const Interval(.04, .62, curve: Curves.easeOutCubic),
-              ).value;
-              final eyePhase = CurvedAnimation(
-                parent: _controller,
-                curve: const Interval(.50, .82, curve: Curves.easeOut),
-              ).value;
-              final textPhase = CurvedAnimation(
-                parent: _controller,
-                curve: const Interval(.58, 1, curve: Curves.easeOutCubic),
-              ).value;
-              final settle = CurvedAnimation(
-                parent: _controller,
-                curve: const Interval(.62, .90, curve: Curves.easeOut),
-              ).value;
-              final eyePulse = (eyePhase *
+    backgroundColor: ChernogramColors.background,
+    body: Center(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final stripes = CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0, .60, curve: Curves.easeOutCubic),
+          ).value;
+          final assembly = CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(.04, .62, curve: Curves.easeOutCubic),
+          ).value;
+          final eyePhase = CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(.50, .82, curve: Curves.easeOut),
+          ).value;
+          final textPhase = CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(.58, 1, curve: Curves.easeOutCubic),
+          ).value;
+          final settle = CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(.62, .90, curve: Curves.easeOut),
+          ).value;
+          final eyePulse =
+              (eyePhase *
                       (.78 + .22 * math.sin(_controller.value * math.pi * 7)))
                   .clamp(0.0, 1.0)
                   .toDouble();
 
-              const markSize = 156.0;
-              final travel = 72 * (1 - assembly);
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Transform.scale(
-                    scale: .96 + assembly * .06 - settle * .02,
-                    child: SizedBox.square(
-                      dimension: markSize,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ClipRect(
-                            clipper: const _FaceHalfClipper(top: true),
-                            child: Transform.translate(
-                              offset: Offset(0, -travel),
-                              child: ChernogramLogo(
-                                size: markSize,
-                                progress: stripes,
-                              ),
-                            ),
+          const markSize = 156.0;
+          final travel = 72 * (1 - assembly);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Transform.scale(
+                scale: .96 + assembly * .06 - settle * .02,
+                child: SizedBox.square(
+                  dimension: markSize,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRect(
+                        clipper: const _FaceHalfClipper(top: true),
+                        child: Transform.translate(
+                          offset: Offset(0, -travel),
+                          child: ChernogramLogo(
+                            size: markSize,
+                            progress: stripes,
                           ),
-                          ClipRect(
-                            clipper: const _FaceHalfClipper(top: false),
-                            child: Transform.translate(
-                              offset: Offset(0, travel),
-                              child: ChernogramLogo(
-                                size: markSize,
-                                progress: stripes,
-                              ),
-                            ),
-                          ),
-                          if (eyePulse > 0)
-                            Opacity(
-                              opacity: eyePulse,
-                              child: CustomPaint(
-                                painter: _IntroEyesPainter(progress: eyePulse),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 19),
-                  Opacity(
-                    opacity: textPhase,
-                    child: Transform.translate(
-                      offset: Offset(0, 10 * (1 - textPhase)),
-                      child: Column(
-                        children: [
-                          Text(
-                            widget.ru ? 'ЧЕРНОГРАМ' : 'CERNOGRAM',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 3,
-                            ),
+                      ClipRect(
+                        clipper: const _FaceHalfClipper(top: false),
+                        child: Transform.translate(
+                          offset: Offset(0, travel),
+                          child: ChernogramLogo(
+                            size: markSize,
+                            progress: stripes,
                           ),
-                          const SizedBox(height: 7),
-                          Text(
-                            widget.ru
-                                ? 'СВЯЗЬ БЕЗ ГРАНИЦ'
-                                : 'CONNECTION WITHOUT BORDERS',
-                            style: const TextStyle(
-                              color: ChernogramColors.goldLight,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.45,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      if (eyePulse > 0)
+                        Opacity(
+                          opacity: eyePulse,
+                          child: CustomPaint(
+                            painter: _IntroEyesPainter(progress: eyePulse),
+                          ),
+                        ),
+                    ],
                   ),
-                ],
-              );
-            },
-          ),
-        ),
-      );
+                ),
+              ),
+              const SizedBox(height: 19),
+              Opacity(
+                opacity: textPhase,
+                child: Transform.translate(
+                  offset: Offset(0, 10 * (1 - textPhase)),
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.ru ? 'ЧЕРНОГРАМ' : 'CERNOGRAM',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 3,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        widget.ru
+                            ? 'СВЯЗЬ БЕЗ ГРАНИЦ'
+                            : 'CONNECTION WITHOUT BORDERS',
+                        style: const TextStyle(
+                          color: ChernogramColors.goldLight,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }
 
 class _FaceHalfClipper extends CustomClipper<Rect> {

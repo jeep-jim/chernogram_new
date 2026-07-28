@@ -159,7 +159,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
       }
       if (answer.trim().isEmpty) {
         throw StateError(
-          widget.ru ? 'Сервер вернул пустой ответ.' : 'The server returned an empty response.',
+          widget.ru
+              ? 'Сервер вернул пустой ответ.'
+              : 'The server returned an empty response.',
         );
       }
       await _persist();
@@ -251,7 +253,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
       onResult: (result) {
         _input.value = TextEditingValue(
           text: result.recognizedWords,
-          selection: TextSelection.collapsed(offset: result.recognizedWords.length),
+          selection: TextSelection.collapsed(
+            offset: result.recognizedWords.length,
+          ),
         );
         if (result.finalResult && mounted) setState(() => _listening = false);
       },
@@ -313,7 +317,10 @@ class _CgAgentScreenState extends State<CgAgentScreen>
               children: [
                 Text(
                   widget.ru ? 'Настройки Агента' : 'Agent settings',
-                  style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -328,9 +335,12 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                   children: [
                     ActionChip(
                       avatar: const Icon(Icons.computer_rounded, size: 18),
-                      label: Text(widget.ru ? 'Ollama на этом ПК' : 'Ollama on this PC'),
+                      label: Text(
+                        widget.ru ? 'Ollama на этом ПК' : 'Ollama on this PC',
+                      ),
                       onPressed: () {
-                        endpoint.text = 'http://127.0.0.1:11434/v1/chat/completions';
+                        endpoint.text =
+                            'http://127.0.0.1:11434/v1/chat/completions';
                         model.text = 'qwen2.5:3b';
                       },
                     ),
@@ -373,7 +383,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                 const SizedBox(height: 12),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(widget.ru ? 'Запоминать диалог' : 'Remember conversation'),
+                  title: Text(
+                    widget.ru ? 'Запоминать диалог' : 'Remember conversation',
+                  ),
                   value: draft.rememberConversation,
                   onChanged: (value) => setSheetState(
                     () => draft = draft.copyWith(rememberConversation: value),
@@ -381,7 +393,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(widget.ru ? 'Озвучивать ответы' : 'Speak replies'),
+                  title: Text(
+                    widget.ru ? 'Озвучивать ответы' : 'Speak replies',
+                  ),
                   value: draft.autoSpeak,
                   onChanged: (value) => setSheetState(
                     () => draft = draft.copyWith(autoSpeak: value),
@@ -439,7 +453,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                           unawaited(_clearMemory());
                         },
                         icon: const Icon(Icons.delete_outline_rounded),
-                        label: Text(widget.ru ? 'Очистить память' : 'Clear memory'),
+                        label: Text(
+                          widget.ru ? 'Очистить память' : 'Clear memory',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -483,20 +499,19 @@ class _CgAgentScreenState extends State<CgAgentScreen>
     required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
-  }) =>
-      SwitchListTile.adaptive(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: Text(title),
-        subtitle: Text(
-          widget.ru
-              ? 'Доступ выключен по умолчанию и включается только вами.'
-              : 'Disabled by default and enabled only by you.',
-          style: const TextStyle(fontSize: 11),
-        ),
-        value: value,
-        onChanged: onChanged,
-      );
+  }) => SwitchListTile.adaptive(
+    contentPadding: EdgeInsets.zero,
+    dense: true,
+    title: Text(title),
+    subtitle: Text(
+      widget.ru
+          ? 'Доступ выключен по умолчанию и включается только вами.'
+          : 'Disabled by default and enabled only by you.',
+      style: const TextStyle(fontSize: 11),
+    ),
+    value: value,
+    onChanged: onChanged,
+  );
 
   void _scrollToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -523,11 +538,7 @@ class _CgAgentScreenState extends State<CgAgentScreen>
           padding: const EdgeInsets.fromLTRB(14, 8, 10, 6),
           child: Row(
             children: [
-              _AgentMask(
-                size: 48,
-                thinking: _sending,
-                speaking: _speaking,
-              ),
+              _AgentMask(size: 48, thinking: _sending, speaking: _speaking),
               const SizedBox(width: 11),
               Expanded(
                 child: Column(
@@ -535,18 +546,21 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                   children: [
                     Text(
                       widget.ru ? 'Агент' : 'Agent',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     Text(
                       _speaking
                           ? (widget.ru ? 'говорит…' : 'speaking…')
                           : _listening
-                              ? (widget.ru ? 'слушает…' : 'listening…')
-                              : _sending
-                                  ? (widget.ru ? 'думает…' : 'thinking…')
-                                  : _settings.endpoint.trim().isEmpty
-                                      ? (widget.ru ? 'локальный режим' : 'local mode')
-                                      : '${_settings.model} · online',
+                          ? (widget.ru ? 'слушает…' : 'listening…')
+                          : _sending
+                          ? (widget.ru ? 'думает…' : 'thinking…')
+                          : _settings.endpoint.trim().isEmpty
+                          ? (widget.ru ? 'локальный режим' : 'local mode')
+                          : '${_settings.model} · online',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -575,29 +589,30 @@ class _CgAgentScreenState extends State<CgAgentScreen>
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _messages.isEmpty
-                  ? _AgentWelcome(
+              ? _AgentWelcome(
+                  ru: widget.ru,
+                  online: _settings.endpoint.trim().isNotEmpty,
+                  onSettings: _showSettings,
+                )
+              : ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 18),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final message = _messages[index];
+                    return _AgentMessageBubble(
+                      message: message,
+                      profile: widget.profile,
                       ru: widget.ru,
-                      online: _settings.endpoint.trim().isNotEmpty,
-                      onSettings: _showSettings,
-                    )
-                  : ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(12, 14, 12, 18),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        return _AgentMessageBubble(
-                          message: message,
-                          profile: widget.profile,
-                          ru: widget.ru,
-                          speaking: _speaking && index == _messages.length - 1,
-                          onSpeak: message.role == CgAgentRole.assistant &&
-                                  message.text.trim().isNotEmpty
-                              ? () => _speak(message.text)
-                              : null,
-                        );
-                      },
-                    ),
+                      speaking: _speaking && index == _messages.length - 1,
+                      onSpeak:
+                          message.role == CgAgentRole.assistant &&
+                              message.text.trim().isNotEmpty
+                          ? () => _speak(message.text)
+                          : null,
+                    );
+                  },
+                ),
         ),
         if (_error != null)
           Container(
@@ -635,7 +650,9 @@ class _CgAgentScreenState extends State<CgAgentScreen>
                     textCapitalization: TextCapitalization.sentences,
                     onSubmitted: (_) => _send(),
                     decoration: InputDecoration(
-                      hintText: widget.ru ? 'Напишите Агенту…' : 'Message the Agent…',
+                      hintText: widget.ru
+                          ? 'Напишите Агенту…'
+                          : 'Message the Agent…',
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
@@ -676,39 +693,39 @@ class _AgentWelcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _AgentMask(size: 126, thinking: false, speaking: false),
-              const SizedBox(height: 18),
-              Text(
-                ru ? 'Цифровой Агент Cernogram' : 'Cernogram Digital Agent',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                online
-                    ? (ru
-                        ? 'Можно писать или говорить. Ответы приходят потоком, история и доступы контролируются вами.'
-                        : 'Type or speak. Replies stream in, and you control memory and permissions.')
-                    : (ru
-                        ? 'Сейчас включён безопасный локальный режим. Подключите Ollama или свой AI-сервер в настройках.'
-                        : 'Safe local mode is active. Connect Ollama or your AI server in settings.'),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 18),
-              OutlinedButton.icon(
-                onPressed: onSettings,
-                icon: const Icon(Icons.tune_rounded),
-                label: Text(ru ? 'Настроить интеллект' : 'Configure intelligence'),
-              ),
-            ],
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _AgentMask(size: 126, thinking: false, speaking: false),
+          const SizedBox(height: 18),
+          Text(
+            ru ? 'Цифровой Агент Cernogram' : 'Cernogram Digital Agent',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+            online
+                ? (ru
+                      ? 'Можно писать или говорить. Ответы приходят потоком, история и доступы контролируются вами.'
+                      : 'Type or speak. Replies stream in, and you control memory and permissions.')
+                : (ru
+                      ? 'Сейчас включён безопасный локальный режим. Подключите Ollama или свой AI-сервер в настройках.'
+                      : 'Safe local mode is active. Connect Ollama or your AI server in settings.'),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 18),
+          OutlinedButton.icon(
+            onPressed: onSettings,
+            icon: const Icon(Icons.tune_rounded),
+            label: Text(ru ? 'Настроить интеллект' : 'Configure intelligence'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _AgentMessageBubble extends StatelessWidget {
@@ -733,7 +750,9 @@ class _AgentMessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
-        mainAxisAlignment: own ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: own
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!own) ...[
@@ -751,7 +770,11 @@ class _AgentMessageBubble extends StatelessWidget {
                   : () {
                       Clipboard.setData(ClipboardData(text: message.text));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(ru ? 'Текст скопирован' : 'Text copied')),
+                        SnackBar(
+                          content: Text(
+                            ru ? 'Текст скопирован' : 'Text copied',
+                          ),
+                        ),
                       );
                     },
               child: Container(
@@ -761,8 +784,8 @@ class _AgentMessageBubble extends StatelessWidget {
                   color: own
                       ? scheme.primary.withValues(alpha: .92)
                       : message.failed
-                          ? scheme.errorContainer
-                          : scheme.surfaceContainerHighest.withValues(alpha: .80),
+                      ? scheme.errorContainer
+                      : scheme.surfaceContainerHighest.withValues(alpha: .80),
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(18),
                     topRight: const Radius.circular(18),
@@ -839,7 +862,10 @@ class _ProfileAvatar extends StatelessWidget {
       backgroundColor: Theme.of(context).colorScheme.primary,
       child: Text(
         letter,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -896,30 +922,30 @@ class _AgentMaskState extends State<_AgentMask>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final pulse = widget.thinking || widget.speaking
-              ? .96 + _controller.value * .06
-              : 1.0;
-          return SizedBox.square(
-            dimension: widget.size,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Transform.scale(
-                  scale: pulse,
-                  child: ChernogramLogo(size: widget.size),
-                ),
-                if (widget.speaking)
-                  Positioned(
-                    bottom: widget.size * .08,
-                    child: _SpeakingWaves(width: widget.size * .40),
-                  ),
-              ],
+    animation: _controller,
+    builder: (context, _) {
+      final pulse = widget.thinking || widget.speaking
+          ? .96 + _controller.value * .06
+          : 1.0;
+      return SizedBox.square(
+        dimension: widget.size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.scale(
+              scale: pulse,
+              child: ChernogramLogo(size: widget.size),
             ),
-          );
-        },
+            if (widget.speaking)
+              Positioned(
+                bottom: widget.size * .08,
+                child: _SpeakingWaves(width: widget.size * .40),
+              ),
+          ],
+        ),
       );
+    },
+  );
 }
 
 class _SpeakingWaves extends StatefulWidget {
@@ -946,25 +972,26 @@ class _SpeakingWavesState extends State<_SpeakingWaves>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) => Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: List<Widget>.generate(5, (index) {
-            final phase = (_controller.value + index * .17) % 1;
-            final height = widget.width * (.06 + .12 * (1 - (phase - .5).abs() * 2));
-            return Container(
-              width: widget.width * .07,
-              height: height,
-              margin: EdgeInsets.symmetric(horizontal: widget.width * .02),
-              decoration: BoxDecoration(
-                color: ChernogramColors.goldLight,
-                borderRadius: BorderRadius.circular(99),
-              ),
-            );
-          }),
-        ),
-      );
+    animation: _controller,
+    builder: (context, _) => Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List<Widget>.generate(5, (index) {
+        final phase = (_controller.value + index * .17) % 1;
+        final height =
+            widget.width * (.06 + .12 * (1 - (phase - .5).abs() * 2));
+        return Container(
+          width: widget.width * .07,
+          height: height,
+          margin: EdgeInsets.symmetric(horizontal: widget.width * .02),
+          decoration: BoxDecoration(
+            color: ChernogramColors.goldLight,
+            borderRadius: BorderRadius.circular(99),
+          ),
+        );
+      }),
+    ),
+  );
 }
 
 class _TypingDots extends StatefulWidget {
@@ -989,26 +1016,26 @@ class _TypingDotsState extends State<_TypingDots>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List<Widget>.generate(3, (index) {
-            final phase = (_controller.value + index * .23) % 1;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Transform.translate(
-                offset: Offset(0, -3 * (1 - (phase - .5).abs() * 2)),
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
+    animation: _controller,
+    builder: (context, _) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List<Widget>.generate(3, (index) {
+        final phase = (_controller.value + index * .23) % 1;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Transform.translate(
+            offset: Offset(0, -3 * (1 - (phase - .5).abs() * 2)),
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
               ),
-            );
-          }),
-        ),
-      );
+            ),
+          ),
+        );
+      }),
+    ),
+  );
 }

@@ -17,11 +17,7 @@ class MediaLibraryScreen extends StatefulWidget {
   final bool ru;
   final ValueChanged<AssetEntity>? onSendToTunnel;
 
-  const MediaLibraryScreen({
-    super.key,
-    required this.ru,
-    this.onSendToTunnel,
-  });
+  const MediaLibraryScreen({super.key, required this.ru, this.onSendToTunnel});
 
   @override
   State<MediaLibraryScreen> createState() => _MediaLibraryScreenState();
@@ -187,7 +183,9 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                                 _album?.name ??
                                     (widget.ru ? 'Все медиа' : 'All media'),
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w800),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                             const Icon(Icons.keyboard_arrow_down),
@@ -209,7 +207,9 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
         Expanded(
           child: _assets.isEmpty
               ? Center(
-                  child: Text(widget.ru ? 'Медиа не найдено' : 'No media found'),
+                  child: Text(
+                    widget.ru ? 'Медиа не найдено' : 'No media found',
+                  ),
                 )
               : GridView.builder(
                   controller: _scroll,
@@ -232,10 +232,8 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => MediaEditorScreen(
-                            asset: asset,
-                            ru: widget.ru,
-                          ),
+                          builder: (_) =>
+                              MediaEditorScreen(asset: asset, ru: widget.ru),
                         ),
                       ),
                     );
@@ -356,11 +354,7 @@ class MediaEditorScreen extends StatefulWidget {
   final AssetEntity asset;
   final bool ru;
 
-  const MediaEditorScreen({
-    super.key,
-    required this.asset,
-    required this.ru,
-  });
+  const MediaEditorScreen({super.key, required this.asset, required this.ru});
 
   @override
   State<MediaEditorScreen> createState() => _MediaEditorScreenState();
@@ -419,15 +413,15 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
       if (widget.asset.type == AssetType.video) {
         final file = await widget.asset.file;
         if (file != null) {
-          await Share.shareXFiles(
-            [XFile(file.path)],
-            text: _caption.text.trim(),
-          );
+          await Share.shareXFiles([
+            XFile(file.path),
+          ], text: _caption.text.trim());
         }
         return;
       }
-      final boundary = _repaintKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary =
+          _repaintKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
       if (boundary == null) return;
       final image = await boundary.toImage(pixelRatio: 2.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -482,7 +476,8 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                 ),
               ],
               selected: {_gram},
-              onSelectionChanged: (value) => setState(() => _gram = value.first),
+              onSelectionChanged: (value) =>
+                  setState(() => _gram = value.first),
             ),
             const SizedBox(height: 12),
             RepaintBoundary(
@@ -505,7 +500,9 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                         ),
                         builder: (_, snapshot) {
                           if (snapshot.data == null) {
-                            return const Center(child: CircularProgressIndicator());
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
                           }
                           return ColorFiltered(
                             colorFilter: ColorFilter.matrix(_matrix),
@@ -639,9 +636,7 @@ class _MediaEditorScreenState extends State<MediaEditorScreen> {
                     )
                   : const Icon(Icons.ios_share),
               label: Text(
-                ru
-                    ? 'Экспортировать и поделиться'
-                    : 'Export and share',
+                ru ? 'Экспортировать и поделиться' : 'Export and share',
               ),
             ),
           ],
@@ -684,7 +679,9 @@ class _PostHeader extends StatelessWidget {
               ],
             ),
           ),
-          Icon(gram == GramMode.instagram ? Icons.more_horiz : Icons.visibility),
+          Icon(
+            gram == GramMode.instagram ? Icons.more_horiz : Icons.visibility,
+          ),
         ],
       ),
     );
@@ -743,12 +740,7 @@ class _FilterSlider extends StatelessWidget {
         const SizedBox(width: 8),
         SizedBox(width: 102, child: Text(label)),
         Expanded(
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            onChanged: onChanged,
-          ),
+          child: Slider(value: value, min: min, max: max, onChanged: onChanged),
         ),
       ],
     );
@@ -779,7 +771,9 @@ class _DraftStudioScreenState extends State<DraftStudioScreen> {
     final start = value.selection.start < 0
         ? value.text.length
         : value.selection.start;
-    final end = value.selection.end < 0 ? value.text.length : value.selection.end;
+    final end = value.selection.end < 0
+        ? value.text.length
+        : value.selection.end;
     final selected = value.text.substring(start, end);
     final replacement = '$left$selected$right';
     _controller.value = TextEditingValue(
@@ -797,9 +791,9 @@ class _DraftStudioScreenState extends State<DraftStudioScreen> {
       children: [
         Text(
           ru ? 'Текстовый конструктор' : 'Text composer',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w900,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 5),
         Text(
@@ -828,7 +822,9 @@ class _DraftStudioScreenState extends State<DraftStudioScreen> {
           ),
           child: Text(
             _controller.text.isEmpty
-                ? (ru ? 'Предпросмотр текста появится здесь' : 'Text preview appears here')
+                ? (ru
+                      ? 'Предпросмотр текста появится здесь'
+                      : 'Text preview appears here')
                 : _controller.text,
             style: TextStyle(
               color: _controller.text.isEmpty ? Colors.white38 : Colors.white,
@@ -876,10 +872,14 @@ class _DraftStudioScreenState extends State<DraftStudioScreen> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: _controller.text));
+                  await Clipboard.setData(
+                    ClipboardData(text: _controller.text),
+                  );
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(ru ? 'Текст скопирован' : 'Text copied')),
+                    SnackBar(
+                      content: Text(ru ? 'Текст скопирован' : 'Text copied'),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.copy),

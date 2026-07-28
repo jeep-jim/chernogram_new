@@ -9,7 +9,10 @@ import 'notification_service.dart';
 class CgPermissionCenter {
   static const String _introKey = 'cg_permission_intro_v2';
 
-  static Future<void> maybePrompt(BuildContext context, {required bool ru}) async {
+  static Future<void> maybePrompt(
+    BuildContext context, {
+    required bool ru,
+  }) async {
     if (!Platform.isAndroid || !context.mounted) return;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_introKey) == true || !context.mounted) return;
@@ -68,9 +71,11 @@ class _PermissionSheetState extends State<_PermissionSheet> {
   Future<void> _requestAll() async {
     if (_busy) return;
     if (!Platform.isAndroid) {
-      setState(() => _status = widget.ru
-          ? 'На Windows мобильные разрешения не требуются. Уведомления работают через системный центр и значок в трее.'
-          : 'Windows does not require mobile permissions. Notifications use the system center and tray icon.');
+      setState(
+        () => _status = widget.ru
+            ? 'На Windows мобильные разрешения не требуются. Уведомления работают через системный центр и значок в трее.'
+            : 'Windows does not require mobile permissions. Notifications use the system center and tray icon.',
+      );
       return;
     }
     setState(() {
@@ -152,7 +157,9 @@ class _PermissionSheetState extends State<_PermissionSheet> {
       ),
       (
         icon: Icons.perm_media_outlined,
-        title: ru ? 'Фото, видео, музыка и файлы' : 'Photos, video, music and files',
+        title: ru
+            ? 'Фото, видео, музыка и файлы'
+            : 'Photos, video, music and files',
         subtitle: ru
             ? 'Отправка, сохранение и P2P-шара.'
             : 'Sending, saving and P2P sharing.',
@@ -166,7 +173,9 @@ class _PermissionSheetState extends State<_PermissionSheet> {
       ),
       (
         icon: Icons.bluetooth_searching_rounded,
-        title: ru ? 'Bluetooth и устройства рядом' : 'Bluetooth and nearby devices',
+        title: ru
+            ? 'Bluetooth и устройства рядом'
+            : 'Bluetooth and nearby devices',
         subtitle: ru
             ? 'Поиск собственных устройств и быстрый локальный обмен.'
             : 'Finding your devices and fast local transfer.',
@@ -260,7 +269,9 @@ class _PermissionSheetState extends State<_PermissionSheet> {
                             )
                           : const Icon(Icons.check_circle_outline_rounded),
                       label: Text(
-                        ru ? 'Запросить нужные доступы' : 'Request required access',
+                        ru
+                            ? 'Запросить нужные доступы'
+                            : 'Request required access',
                       ),
                     ),
                   ),
@@ -271,7 +282,9 @@ class _PermissionSheetState extends State<_PermissionSheet> {
                       onPressed: _openSettings,
                       icon: const Icon(Icons.settings_outlined),
                       label: Text(
-                        ru ? 'Открыть системные настройки' : 'Open system settings',
+                        ru
+                            ? 'Открыть системные настройки'
+                            : 'Open system settings',
                       ),
                     ),
                   ),
