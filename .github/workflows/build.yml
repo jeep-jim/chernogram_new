@@ -53,11 +53,11 @@ jobs:
             printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
             chmod 600 "$HOME/.android/debug.keystore"
           fi
-          test -s "$HOME/.android/debug.keystore"
+          test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
           keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
           ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$ACTUAL" = "$EXPECTED"
+          test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
 
       - name: Setup Flutter 3.44.8
         uses: subosito/flutter-action@v2
@@ -66,14 +66,14 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Validate and build
+      - name: Format, validate and build
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           {
             flutter --version
             flutter pub get
-            dart format --output=none --set-exit-if-changed lib
+            dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
             flutter build apk --release
@@ -85,6 +85,7 @@ jobs:
           set -euo pipefail
           SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER" || { echo '::error::apksigner not found'; exit 1; }
           "$APKSIGNER" sign \
             --ks "$HOME/.android/debug.keystore" \
             --ks-key-alias androiddebugkey \
@@ -130,3 +131,30 @@ jobs:
             --title "Cernogram Recovery ${VERSION_FULL}" \
             --notes "Foreground-only diagnostic build for testing message delivery, Android stability and call signaling without the duplicate background isolate. This is not the final realtime architecture." \
             --prerelease
+
+      - name: Save recovery failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp recovery-build.txt /tmp/recovery-build.txt 2>/dev/null || true
+          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
+          cp recovery-signature.txt /tmp/recovery-signature.txt 2>/dev/null || true
+          git fetch origin rebuild/realtime-core
+          git reset --hard origin/rebuild/realtime-core
+          {
+            echo 'Cernogram recovery build failed'
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            for file in /tmp/signing-key.txt /tmp/recovery-signature.txt /tmp/recovery-build.txt; do
+              if [ -f "$file" ]; then
+                echo "===== $(basename "$file") ====="
+                cat "$file"
+              fi
+            done
+          } > RECOVERY_CI_ERROR.txt
+          git add -f RECOVERY_CI_ERROR.txt
+          git commit -m "Сохранить ошибку recovery-сборки [skip ci]" || true
+          git push origin HEAD:rebuild/realtime-core || true
