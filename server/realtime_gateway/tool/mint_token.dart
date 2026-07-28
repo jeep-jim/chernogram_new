@@ -27,12 +27,14 @@ void main(List<String> arguments) {
     exitCode = 64;
     return;
   }
-  final hours = int.tryParse(arguments.length > 3 ? arguments[3] : '') ?? 12;
+  final requestedHours =
+      int.tryParse(arguments.length > 3 ? arguments[3] : '') ?? 12;
+  final hours = requestedHours.clamp(1, 168).toInt();
   final token = GatewayTokenCodec(secret).issue(
     profileId: arguments[0].trim(),
     deviceId: arguments[1].trim(),
     rooms: rooms,
-    lifetime: Duration(hours: hours.clamp(1, 168)),
+    lifetime: Duration(hours: hours),
   );
   stdout.writeln(token);
 }
