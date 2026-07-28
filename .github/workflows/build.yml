@@ -92,7 +92,7 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Apply interface, realtime and 0.16.4 feedback fixes
+      - name: Apply interface and 0.16.5 call reliability fixes
         shell: bash
         run: |
           set +e
@@ -105,6 +105,7 @@ jobs:
             python3 tooling/materialize_v0163_ringtone.py
             python3 tooling/fix_v0163_realtime.py
             python3 tooling/fix_v0164_feedback.py
+            python3 tooling/fix_v0165_reliability.py
           } 2>&1 | tee ci-patch.txt
           STATUS=${PIPESTATUS[0]}
           exit "$STATUS"
@@ -172,8 +173,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16.4: убрана светлая системная полоса Android в тёмной теме, отбой закрывает звонок мгновенно, в чатах показано число собеседников онлайн, в контактах добавлены точки присутствия и точный отступ 2 пикселя, а версия приложения открывает описание сборки, QR и постоянную ссылку установки.",
-            "notesEn": "Version 0.16.4 removes the light Android navigation divider in dark mode, makes hang-up immediate, shows online peer counts in chats and presence dots with exact 2-pixel spacing in contacts, and adds build details, a QR code and a permanent installation link."
+            "notesRu": "Версия 0.16.5: восстановлены входящие аудио- и видеозвонки на любом экране приложения, ускорено определение пользователей в сети, исправлены точки в чатах и контактах, добавлены ICE restart и защита Android от закрытия приложения при подготовке или завершении WebRTC.",
+            "notesEn": "Version 0.16.5 restores incoming audio and video calls on every app screen, accelerates live presence, fixes online dots in chats and contacts, and adds ICE restart plus Android WebRTC lifecycle protection."
           }
           EOF
 
@@ -191,7 +192,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Исправлены системная полоса Android и зависание при отбое. Добавлены онлайн-индикаторы, точный отступ 2 пикселя в контактах, описание версии, QR и постоянная ссылка установки. APK подписан прежним постоянным ключом." \
+              --notes "Быстрый тестовый релиз звонков: входящий вызов снова открывается на любом экране, presence обновляется быстрее, точки онлайн отображаются в чатах и контактах, WebRTC корректно отменяется и восстанавливает ICE. APK подписан прежним постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -236,7 +237,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16.4 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.16.5 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -251,7 +252,7 @@ jobs:
           APK ready
           Commit: ${GITHUB_SHA}
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Version: 0.16.4+35
+          Version: 0.16.5+36
           Certificate SHA-256: ${EXPECTED_CERT_SHA256}
           Signature policy: final APK is explicitly re-signed and verified; incompatible publication is blocked
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
@@ -261,5 +262,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.16.4 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.16.5 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
