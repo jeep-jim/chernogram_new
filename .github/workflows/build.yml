@@ -92,7 +92,7 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Apply interface, realtime and ringtone fixes
+      - name: Apply interface, realtime and 0.16.4 feedback fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -102,6 +102,31 @@ jobs:
           python3 tooling/fix_v0162_brand.py
           python3 tooling/materialize_v0163_ringtone.py
           python3 tooling/fix_v0163_realtime.py
+          python3 tooling/fix_v0164_feedback.py
+
+      - name: Persist the 0.16.4 source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILES=(
+            lib/main.dart
+            lib/call_service.dart
+            lib/chat_screen.dart
+            lib/v12.dart
+            android/app/src/main/res/values/styles.xml
+            android/app/src/main/res/values-night/styles.xml
+            pubspec.yaml
+            docs/index.html
+            roadmap.md
+          )
+          if ! git diff --quiet -- "${FILES[@]}"; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "${FILES[@]}"
+            git commit -m "Зафиксировать исправления Чернограма 0.16.4 [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Validate and build release APK
         id: build_apk
@@ -166,8 +191,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16.3: ускорен служебный канал звонков, приглашение отправляется до инициализации камеры, управление и отмена срабатывают сразу; добавлен постоянный фоновый канал Android, полноэкранные входящие вызовы, фирменная мелодия Old to new и точные отступы 2 пикселя в файлах и контактах.",
-            "notesEn": "Version 0.16.3 accelerates call signaling, starts ringing before camera initialization, makes controls and cancellation immediate, adds an Android background realtime channel, full-screen incoming calls, the custom Old to new ringtone and exact 2-pixel file/contact spacing."
+            "notesRu": "Версия 0.16.4: убрана светлая системная полоса Android в тёмной теме, отбой закрывает звонок мгновенно, в чатах показано число собеседников онлайн, в контактах добавлены точки присутствия и точный отступ 2 пикселя, а версия приложения открывает описание сборки, QR и постоянную ссылку установки.",
+            "notesEn": "Version 0.16.4 removes the light Android navigation divider in dark mode, makes hang-up immediate, shows online peer counts in chats and presence dots with exact 2-pixel spacing in contacts, and adds build details, a QR code and a permanent installation link."
           }
           EOF
 
@@ -185,7 +210,7 @@ jobs:
             gh release create latest-apk chernogram.apk update.json \
               --target main \
               --title "Чернограм ${VERSION_NAME}" \
-              --notes "Ускорены аудио- и видеозвонки, добавлены мгновенная отмена и круглые кнопки, постоянная фоновая связь Android, полноэкранные входящие вызовы и фирменная мелодия Old to new. APK подписан прежним постоянным ключом." \
+              --notes "Исправлены системная полоса Android и зависание при отбое. Добавлены онлайн-индикаторы, точный отступ 2 пикселя в контактах, описание версии, QR и постоянная ссылка установки. APK подписан прежним постоянным ключом." \
               --prerelease
           } 2>&1 | tee ci-release.txt
           STATUS=${PIPESTATUS[0]}
@@ -225,7 +250,7 @@ jobs:
             fi
           } > CI_ERROR.txt
           git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16.3 [skip ci]" || true
+          git commit -m "Сохранить ошибку сборки 0.16.4 [skip ci]" || true
           git push origin HEAD:main || true
 
       - name: Mark APK as ready
@@ -250,5 +275,5 @@ jobs:
           if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f CI_ERROR.txt
           fi
-          git commit -m "APK 0.16.3 готов с постоянной подписью [skip ci]" || true
+          git commit -m "APK 0.16.4 готов с постоянной подписью [skip ci]" || true
           git push origin HEAD:main || true
