@@ -1,0 +1,46 @@
+Cernogram Realtime Gateway CI failed
+Commit: 76d91fd8c4026a4ce07bc1ddde658acf4ac7e496
+Time: 2026-07-28T13:45:59Z
+Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
+Resolving dependencies...
+Downloading packages...
+  lints 5.1.1 (6.1.0 available)
+Got dependencies!
+1 package has newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Formatted test/gateway_integration_test.dart
+Formatted 7 files (1 changed) in 0.02 seconds.
+Analyzing realtime_gateway...
+No issues found!
+00:00 +0: loading test/store_test.dart
+00:00 +0: test/store_test.dart: GatewayTokenCodec issues and verifies a room-scoped token
+00:00 +1: test/gateway_integration_test.dart: delivers live events and replays offline events after the saved cursor
+00:00 +2: test/gateway_integration_test.dart: delivers live events and replays offline events after the saved cursor
+00:00 +2 -1: test/store_test.dart: GatewayJsonStore splits room events into JSON chunks of at most 500 records
+00:00 +2 -1: test/gateway_integration_test.dart: delivers live events and replays offline events after the saved cursor [E]
+  Bad state: StreamSink is closed
+  dart:_http                                                  _WebSocketImpl.add
+  package:cernogram_realtime_gateway/src/gateway.dart 518:19  CernogramGateway._send
+  package:cernogram_realtime_gateway/src/gateway.dart 492:7   CernogramGateway._broadcastPresence
+  package:cernogram_realtime_gateway/src/gateway.dart 502:7   CernogramGateway._detach
+  package:cernogram_realtime_gateway/src/gateway.dart 115:31  CernogramGateway._attach.<fn>
+  
+  Expected: 'packet-offline-2'
+    Actual: 'packet-live-1'
+     Which: is different.
+            Expected: packet-offline-2
+              Actual: packet-live-1
+                             ^
+             Differ at offset 7
+  
+  package:matcher                           expect
+  test/gateway_integration_test.dart 110:9  main.<fn>
+  
+00:01 +3 -1: test/store_test.dart: GatewayJsonStore persists and restores a per-device cursor
+00:01 +4 -1: Some tests failed.
+
+Failing tests:
+  test/gateway_integration_test.dart: delivers live events and replays offline events after the saved cursor
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
