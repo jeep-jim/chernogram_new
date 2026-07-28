@@ -28,6 +28,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:label="Чернограм"
         android:name="${applicationName}"
@@ -66,7 +75,6 @@
                     android:pathPrefix="/jeep-jim/chernogram_new/main/docs/index.html" />
             </intent-filter>
         </activity>
-
 
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
