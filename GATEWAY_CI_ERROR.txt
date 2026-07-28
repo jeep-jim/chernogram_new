@@ -1,6 +1,6 @@
 Cernogram Realtime Gateway CI failed
-Commit: fefa509fe4b0bcc0de5daf17885971114bb1e436
-Time: 2026-07-28T13:37:44Z
+Commit: 1ef7dfceec2ba6e2c8cb6a1f465fae1061c509dc
+Time: 2026-07-28T13:39:02Z
 Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
 Resolving dependencies...
 Downloading packages...
@@ -59,9 +59,33 @@ Formatted lib/src/gateway.dart
 Formatted lib/src/store.dart
 Formatted lib/src/token.dart
 Formatted test/store_test.dart
-Formatted 6 files (4 changed) in 0.03 seconds.
+Formatted 6 files (4 changed) in 0.02 seconds.
 Analyzing realtime_gateway...
 
    info - lib/src/store.dart:331:25 - Unnecessary braces in a string interpolation. Try removing the braces. - unnecessary_brace_in_string_interps
 
 1 issue found.
+00:00 +0: loading test/store_test.dart
+00:00 +0: test/store_test.dart: GatewayTokenCodec issues and verifies a room-scoped token
+00:00 +1: test/store_test.dart: GatewayJsonStore keeps stable sequence for duplicate packetId
+00:00 +2: test/store_test.dart: GatewayJsonStore splits room events into JSON chunks of at most 500 records
+00:30 +2 -1: test/store_test.dart: GatewayJsonStore splits room events into JSON chunks of at most 500 records [E]
+  TimeoutException after 0:00:30.000000: Test timed out after 30 seconds. See https://pub.dev/packages/test#timeouts
+  dart:isolate  _RawReceivePort._handleMessage
+  
+00:30 +2 -1: test/store_test.dart: GatewayJsonStore persists and restores a per-device cursor
+00:30 +2 -1: test/store_test.dart: GatewayJsonStore splits room events into JSON chunks of at most 500 records [E]
+  PathNotFoundException: Cannot rename file to '/tmp/cernogram-gateway-test-BEFQYY/server_state.json', path = '/tmp/cernogram-gateway-test-BEFQYY/server_state.json.tmp-2120-1785245942072041' (OS Error: No such file or directory, errno = 2)
+  package:cernogram_realtime_gateway/src/store.dart 335:5   GatewayJsonStore._writeJsonAtomic
+  ===== asynchronous gap ===========================
+  package:cernogram_realtime_gateway/src/store.dart 171:7   GatewayJsonStore.append.<fn>
+  ===== asynchronous gap ===========================
+  package:cernogram_realtime_gateway/src/store.dart 342:28  GatewayJsonStore._exclusive.<fn>
+  
+00:30 +3 -1: Some tests failed.
+
+Failing tests:
+  test/store_test.dart: GatewayJsonStore splits room events into JSON chunks of at most 500 records
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
