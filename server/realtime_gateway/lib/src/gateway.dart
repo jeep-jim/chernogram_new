@@ -127,7 +127,8 @@ class CernogramGateway {
       return;
     }
     if (utf8.encode(raw).length > config.maxFrameBytes) {
-      await client.socket.close(WebSocketStatus.messageTooBig, 'frame_too_large');
+      await client.socket
+          .close(WebSocketStatus.messageTooBig, 'frame_too_large');
       return;
     }
 
@@ -342,9 +343,8 @@ class CernogramGateway {
             DateTime.now().toUtc();
     final requestedTtl = int.tryParse(frame['ttlSeconds']?.toString() ?? '') ??
         const Duration(days: 7).inSeconds;
-    final ttlSeconds = requestedTtl
-        .clamp(5, const Duration(days: 30).inSeconds)
-        .toInt();
+    final ttlSeconds =
+        requestedTtl.clamp(5, const Duration(days: 30).inSeconds).toInt();
     final result = await store.append(
       roomId: roomId,
       packetId: packetId,
@@ -371,7 +371,8 @@ class CernogramGateway {
 
     if (!result.duplicate) {
       final outgoing = _eventFrame(result.event, replay: false);
-      final members = _roomMembers[roomId]?.toList() ?? const <_ClientSession>[];
+      final members =
+          _roomMembers[roomId]?.toList() ?? const <_ClientSession>[];
       for (final member in members) {
         if (identical(member, client)) continue;
         _send(member, outgoing);

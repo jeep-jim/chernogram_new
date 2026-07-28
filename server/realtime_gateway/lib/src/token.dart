@@ -35,7 +35,8 @@ class GatewayTokenCodec {
       'deviceId': deviceId,
       'rooms': rooms.toSet().toList()..sort(),
       'iat': DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000,
-      'exp': DateTime.now().toUtc().add(lifetime).millisecondsSinceEpoch ~/ 1000,
+      'exp':
+          DateTime.now().toUtc().add(lifetime).millisecondsSinceEpoch ~/ 1000,
     };
     final payloadBytes = utf8.encode(jsonEncode(payload));
     final signature = Hmac(sha256, _secret).convert(payloadBytes).bytes;
@@ -67,7 +68,8 @@ class GatewayTokenCodec {
     if (profileId.isEmpty || deviceId.isEmpty || rooms.isEmpty || exp <= 0) {
       throw const FormatException('incomplete_token_payload');
     }
-    final expiresAt = DateTime.fromMillisecondsSinceEpoch(exp * 1000, isUtc: true);
+    final expiresAt =
+        DateTime.fromMillisecondsSinceEpoch(exp * 1000, isUtc: true);
     if (!expiresAt.isAfter(DateTime.now().toUtc())) {
       throw const FormatException('token_expired');
     }

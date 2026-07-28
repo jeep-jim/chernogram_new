@@ -8,7 +8,8 @@ import 'package:test/test.dart';
 void main() {
   group('GatewayTokenCodec', () {
     test('issues and verifies a room-scoped token', () {
-      final codec = GatewayTokenCodec('a-secure-test-secret-with-more-than-32-chars');
+      final codec =
+          GatewayTokenCodec('a-secure-test-secret-with-more-than-32-chars');
       final token = codec.issue(
         profileId: 'profile-a',
         deviceId: 'android-main',
@@ -27,7 +28,8 @@ void main() {
     late GatewayJsonStore store;
 
     setUp(() async {
-      temporary = await Directory.systemTemp.createTemp('cernogram-gateway-test-');
+      temporary =
+          await Directory.systemTemp.createTemp('cernogram-gateway-test-');
       store = GatewayJsonStore(temporary);
       await store.initialize();
     });
@@ -75,7 +77,8 @@ void main() {
       expect(duplicate.event.serverSeq, first.event.serverSeq);
     });
 
-    test('splits room events into JSON chunks of at most 500 records', () async {
+    test('splits room events into JSON chunks of at most 500 records',
+        () async {
       for (var index = 0; index < 501; index++) {
         await store.append(
           roomId: 'room-chunked',
@@ -97,7 +100,8 @@ void main() {
       final chunkFiles = await Directory('${temporary.path}/rooms')
           .list(recursive: true)
           .where((entity) =>
-              entity is File && RegExp(r'events_\d{6}\.json$').hasMatch(entity.path))
+              entity is File &&
+              RegExp(r'events_\d{6}\.json$').hasMatch(entity.path))
           .cast<File>()
           .toList();
       expect(chunkFiles, hasLength(2));

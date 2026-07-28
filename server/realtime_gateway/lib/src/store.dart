@@ -57,10 +57,12 @@ class StoredGatewayEvent {
       senderDeviceId: json['senderDeviceId']?.toString() ?? '',
       kind: json['kind']?.toString() ?? 'message',
       priority: json['priority']?.toString() ?? 'normal',
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toUtc() ??
-          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      expiresAt: DateTime.tryParse(json['expiresAt']?.toString() ?? '')?.toUtc() ??
-          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toUtc() ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      expiresAt:
+          DateTime.tryParse(json['expiresAt']?.toString() ?? '')?.toUtc() ??
+              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       crypto: json['crypto'] is Map
           ? Map<String, dynamic>.from(json['crypto'] as Map)
           : const <String, dynamic>{},
