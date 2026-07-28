@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cernogram_realtime_gateway/src/gateway.dart';
@@ -39,19 +40,23 @@ Future<void> main() async {
     'data=$dataDirectory; anonymousDev=$allowAnonymous',
   );
 
-  final signals = <ProcessSignal>[ProcessSignal.sigint, ProcessSignal.sigterm];
-  final subscriptions = signals
-      .where((signal) => ProcessSignal.isSupported(signal))
-      .map(
-        (signal) => signal.watch().listen((_) async {
-          stdout.writeln('Stopping Cernogram Realtime Gateway...');
-          await gateway.stop();
-          exit(0);
-        }),
-      )
-      .toList();
+  final shutdown = Completer<void>();
+  final subscriptions = <StreamSubscription<ProcessSignal>>[];
+  for (final signal in <ProcessSignal>[
+    ProcessSignal.sigint,
+    ProcessSignal.sigterm,
+  ]) {
+    if (!signal.isSupported) continue;
+    subscriptions.add(
+      signal.watch().listen((_) {
+        if (!shutdown.isCompleted) shutdown.complete();
+      }),
+    );
+  }
 
-  await Completer<void>().future;
+  await shutdown.future;
+  stdout.writeln('Stopping Cernogram Realtime Gateway...');
+  await gateway.stop();
   for (final subscription in subscriptions) {
     await subscription.cancel();
   }
