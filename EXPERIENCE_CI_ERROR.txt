@@ -1,6 +1,6 @@
 Cernogram Experience Suite CI failed
-Commit: 24006803cc11fb8e4b1ae0bba79ecce958bb98f1
-Time: 2026-07-28T14:35:45Z
+Commit: 5c86ec91af44e6562d0a2c10dc6bff5b09fa4f7f
+Time: 2026-07-28T14:37:47Z
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (5 days ago) • 2026-07-23 10:56:21 -0700
 Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (5 days ago) • 2026-07-23 16:11:34.000Z
@@ -103,7 +103,7 @@ Formatted lib/v06.dart
 Formatted lib/v07.dart
 Formatted lib/v12.dart
 Formatted lib/windows_update_service.dart
-Formatted 34 files (32 changed) in 0.51 seconds.
+Formatted 34 files (32 changed) in 0.59 seconds.
 Analyzing chernogram_new...                                     
 
    info • 'localeId' is deprecated and shouldn't be used. Use SpeechListenOptions.localeId instead. Try replacing the use of the deprecated member with the replacement • lib/agent_screen.dart:249:7 • deprecated_member_use
@@ -145,4 +145,4 @@ warning • Unused import: 'notification_service.dart'. Try removing the import 
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/v12.dart:3:8 • unnecessary_import
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v12.dart:256:9 • curly_braces_in_flow_control_structures
 
-38 issues found. (ran in 12.8s)
+38 issues found. (ran in 14.9s)
