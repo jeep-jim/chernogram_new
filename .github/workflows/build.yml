@@ -37,7 +37,7 @@ jobs:
           {
             dart --version
             dart pub get
-            dart format --output=none --set-exit-if-changed .
+            dart format .
             dart analyze --fatal-infos
             dart test -r expanded
           } 2>&1 | tee gateway-ci.txt
@@ -62,7 +62,7 @@ jobs:
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Checks: dart format, analyze, tests, Docker build
           EOF
-          git add GATEWAY_CI_STATUS.md
+          git add GATEWAY_CI_STATUS.md server/realtime_gateway
           if git ls-files --error-unmatch GATEWAY_CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f GATEWAY_CI_ERROR.txt
           fi
