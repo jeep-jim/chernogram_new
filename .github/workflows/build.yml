@@ -66,6 +66,18 @@ jobs:
           channel: stable
           cache: false
 
+      - name: Materialize pending realtime source
+        id: materialize
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f tooling/apply_realtime_outbox_once.py ]; then
+            python3 tooling/apply_realtime_outbox_once.py
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Format, validate and build
         shell: bash
         run: |
@@ -129,10 +141,10 @@ jobs:
           gh release create realtime-recovery-apk chernogram-recovery.apk recovery-update.json recovery-build.txt \
             --target rebuild/realtime-core \
             --title "Cernogram Recovery ${VERSION_FULL}" \
-            --notes "Foreground-only diagnostic build for testing message delivery, Android stability and call signaling without the duplicate background isolate. This is not the final realtime architecture." \
+            --notes "Foreground-only diagnostic build for testing durable message delivery, Android stability and call signaling. Branding is unchanged." \
             --prerelease
 
-      - name: Mark recovery APK ready
+      - name: Save materialized source and recovery status
         if: success()
         shell: bash
         run: |
@@ -140,8 +152,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          git fetch origin rebuild/realtime-core
-          git reset --hard origin/rebuild/realtime-core
           cat > RECOVERY_BUILD_STATUS.md <<EOF
           Recovery APK ready
           Commit: ${GITHUB_SHA}
@@ -150,8 +160,15 @@ jobs:
           Download: https://github.com/jeep-jim/chernogram_new/releases/download/realtime-recovery-apk/chernogram-recovery.apk
           EOF
           git add RECOVERY_BUILD_STATUS.md
-          if git ls-files --error-unmatch RECOVERY_CI_ERROR.txt >/dev/null 2>&1; then git rm -f RECOVERY_CI_ERROR.txt; fi
-          git commit -m "Recovery APK готов [skip ci]" || true
+          if [ "${{ steps.materialize.outputs.applied }}" = "true" ]; then
+            git add lib/internet_core.dart pubspec.yaml .github/workflows/build.yml
+            git rm -f tooling/apply_realtime_outbox_once.py
+            git rm -f .github/workflows/apply-realtime-outbox-once.yml
+          fi
+          if git ls-files --error-unmatch RECOVERY_CI_ERROR.txt >/dev/null 2>&1; then
+            git rm -f RECOVERY_CI_ERROR.txt
+          fi
+          git commit -m "Recovery ${VERSION_FULL} готов и исходники сохранены [skip ci]" || true
           git push origin HEAD:rebuild/realtime-core || true
 
       - name: Save recovery failure diagnostics
