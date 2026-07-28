@@ -1,7 +1,7 @@
 APK ready
-Commit: d93752d8940e3acd95ea0a1ef48eed75dd67d32c
-Time: 2026-07-28T03:50:42Z
-Version: 0.16.5+36
+Commit: 9b8a6c6f26b2b661eaa1ad1c51f277a640cdb125
+Time: 2026-07-28T04:35:24Z
+Version: 0.16.6+37
 Certificate SHA-256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
 Signature policy: final APK is explicitly re-signed and verified; incompatible publication is blocked
 Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
