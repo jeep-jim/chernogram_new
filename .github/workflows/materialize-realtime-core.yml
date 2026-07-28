@@ -1,0 +1,53 @@
+name: Materialize realtime core
+
+on:
+  push:
+    branches:
+      - rebuild/realtime-core
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-realtime-core
+  cancel-in-progress: true
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/realtime-core
+          fetch-depth: 0
+
+      - name: Apply historical patches once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install pillow --disable-pip-version-check --quiet
+          python3 tooling/fix_v015_compile.py
+          python3 tooling/fix_v016_foundation.py
+          python3 tooling/fix_v0162_runtime.py
+          python3 tooling/fix_v0162_brand.py
+          python3 tooling/materialize_v0163_ringtone.py
+          python3 tooling/fix_v0163_realtime.py
+          python3 tooling/fix_v0164_feedback.py
+          python3 tooling/fix_v0165_reliability.py
+          python3 tooling/fix_v0166_clean_transport.py
+          python3 tooling/fix_v0167_brand_media.py
+          python3 tooling/fix_v0168_logo_windows.py
+          python3 tooling/fix_v0169_icon_crash_intro.py
+
+      - name: Commit materialized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/materialize-realtime-core.yml
+          rm -f MATERIALIZE_TRIGGER.txt
+          git add -A
+          git commit -m "Материализовать исходники 0.16.9 без цепочки патчей"
+          git push origin HEAD:rebuild/realtime-core
