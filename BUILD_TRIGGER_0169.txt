@@ -1,1 +1,0 @@
-Build Cernogram 0.16.9+40 after icon, intro animation and crash diagnostics changes.
