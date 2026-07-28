@@ -1,4 +1,4 @@
-name: Build APK
+name: Publish Cernogram Experience Suite
 
 on:
   push:
@@ -10,22 +10,24 @@ permissions:
   contents: write
 
 concurrency:
-  group: chernogram-apk-main
+  group: cernogram-experience-release-020
   cancel-in-progress: true
 
 env:
+  SOURCE_BRANCH: feature/experience-suite-020
   EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
 
 jobs:
-  build:
-    name: Build Cernogram Release APK
+  android:
+    name: Publish Android 0.20
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     steps:
-      - name: Checkout project
+      - name: Checkout validated source
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.SOURCE_BRANCH }}
           fetch-depth: 0
 
       - name: Setup Java 17
@@ -41,7 +43,7 @@ jobs:
           key: chernogram-stable-signing-v2
           fail-on-cache-miss: false
 
-      - name: Restore repository key backup and verify certificate
+      - name: Restore key backup and verify certificate
         shell: bash
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
@@ -58,45 +60,25 @@ jobs:
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
 
-      - name: Setup Flutter 3.44.8
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.44.8"
           channel: stable
           cache: false
 
-      - name: Apply all source patches through 0.16.9
+      - name: Validate and build Android
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install pillow --disable-pip-version-check --quiet
-          python3 tooling/fix_v015_compile.py
-          python3 tooling/fix_v016_foundation.py
-          python3 tooling/fix_v0162_runtime.py
-          python3 tooling/fix_v0162_brand.py
-          python3 tooling/materialize_v0163_ringtone.py
-          python3 tooling/fix_v0163_realtime.py
-          python3 tooling/fix_v0164_feedback.py
-          python3 tooling/fix_v0165_reliability.py
-          python3 tooling/fix_v0166_clean_transport.py
-          python3 tooling/fix_v0167_brand_media.py
-          python3 tooling/fix_v0168_logo_windows.py
-          python3 tooling/fix_v0169_icon_crash_intro.py
+          flutter --version
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release
 
-      - name: Validate and build release APK
-        shell: bash
-        run: |
-          set -o pipefail
-          {
-            flutter --version
-            flutter pub get
-            dart format lib
-            flutter analyze --no-fatal-infos --no-fatal-warnings
-            flutter test
-            flutter build apk --release
-          } 2>&1 | tee ci-build.txt
-
-      - name: Re-sign final APK and verify
+      - name: Re-sign and verify APK
         shell: bash
         run: |
           set -euo pipefail
@@ -115,7 +97,7 @@ jobs:
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
 
-      - name: Prepare update manifest
+      - name: Prepare Android manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -130,12 +112,12 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Версия 0.16.9: одинаковая полосатая маска с глазами на чёрном фоне для рабочего стола, splash и приложения; верхняя и нижняя половины встречаются при запуске, глаза оживают. Добавлен локальный журнал Dart/Flutter и Android-native аварий с отправкой из карточки версии.",
-            "notesEn": "Version 0.16.9 unifies the eyes-only striped mask on a black background across launcher, splash and app, adds a top-and-bottom assembly animation with an eye pulse, and adds shareable Dart/Flutter and Android native crash reports."
+            "notesRu": "Experience Suite 0.20: новый цифровой Агент с голосом и потоковыми ответами, полноценная музыкальная медиатека с очередью, плейлистами, repeat/shuffle и восстановлением позиции, телефонная книга и набор номера. Связь и утверждённая иконка в этом выпуске не изменялись.",
+            "notesEn": "Experience Suite 0.20 adds the voice-enabled streaming Agent, a full music library with queues, playlists, repeat/shuffle and position restore, plus the device phone book and dialer. Realtime transport and the approved icon are unchanged in this release."
           }
           EOF
 
-      - name: Publish APK release
+      - name: Publish Android update
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,52 +127,109 @@ jobs:
           VERSION_NAME=${VERSION_FULL%%+*}
           gh release delete latest-apk --cleanup-tag --yes || true
           gh release create latest-apk chernogram.apk update.json \
-            --target main \
-            --title "Чернограм / Cernogram ${VERSION_NAME}" \
-            --notes "Единая маска с глазами на чёрном фоне, новая сборочная анимация из двух половин и встроенный отправляемый журнал аварий Android. APK подписан прежним постоянным ключом." \
+            --target "$SOURCE_BRANCH" \
+            --title "Cernogram ${VERSION_NAME}" \
+            --notes "Experience Suite: Агент, музыка, медиатека, плейлисты, телефонная книга и набор номера. Иконка и транспорт связи не изменялись." \
             --prerelease
 
-      - name: Save failure diagnostics
-        if: failure()
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          cp ci-build.txt /tmp/ci-build.txt 2>/dev/null || true
-          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
-          cp apk-signature.txt /tmp/apk-signature.txt 2>/dev/null || true
-          git fetch origin main
-          git reset --hard origin/main
-          {
-            echo 'GitHub Actions build failed'
-            echo "Commit: ${GITHUB_SHA}"
-            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            for file in /tmp/signing-key.txt /tmp/apk-signature.txt /tmp/ci-build.txt; do
-              if [ -f "$file" ]; then echo "===== $(basename "$file") ====="; cat "$file"; fi
-            done
-          } > CI_ERROR.txt
-          git add -f CI_ERROR.txt
-          git commit -m "Сохранить ошибку сборки 0.16.9 [skip ci]" || true
-          git push origin HEAD:main || true
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cernogram-android-0.20
+          path: |
+            chernogram.apk
+            update.json
+          retention-days: 14
 
-      - name: Mark APK ready
-        if: success()
-        shell: bash
+  windows:
+    name: Publish Windows 0.20
+    runs-on: windows-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout validated source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Validate and build Windows
+        shell: pwsh
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git reset --hard origin/main
-          cat > BUILD_STATUS.md <<EOF
-          APK ready
-          Commit: ${GITHUB_SHA}
-          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Version: 0.16.9+40
-          Certificate SHA-256: ${EXPECTED_CERT_SHA256}
-          Signature policy: final APK is explicitly re-signed and verified
-          Download: https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk
-          EOF
-          git add BUILD_STATUS.md
-          if git ls-files --error-unmatch CI_ERROR.txt >/dev/null 2>&1; then git rm -f CI_ERROR.txt; fi
-          git commit -m "APK 0.16.9 готов с постоянной подписью [skip ci]" || true
-          git push origin HEAD:main || true
+          $ErrorActionPreference = 'Stop'
+          flutter --version
+          flutter config --enable-windows-desktop
+          if (-not (Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows --project-name chernogram --no-pub .
+          }
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build windows --release
+
+      - name: Smoke test Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $PWD 'build/windows/x64/runner/Release'
+          $exe = Join-Path $release 'chernogram.exe'
+          if (-not (Test-Path $exe)) { throw 'chernogram.exe was not produced' }
+          $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
+          Start-Sleep -Seconds 8
+          if ($process.HasExited) { throw "Cernogram exited during startup smoke test: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Package Windows portable update
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $PWD 'build/windows/x64/runner/Release'
+          $stage = Join-Path $PWD 'app'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item (Join-Path $release '*') $stage -Recurse -Force
+          Compress-Archive -Path $stage -DestinationPath 'Cernogram-Windows-x64.zip' -Force
+
+          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+          $versionName = ($versionFull -split '\+')[0]
+          $sha = (Get-FileHash 'Cernogram-Windows-x64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = [ordered]@{
+            versionName = $versionName
+            versionFull = $versionFull
+            portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Cernogram-Windows-x64.zip"
+            portableSha256 = $sha
+          }
+          $manifest | ConvertTo-Json | Set-Content -Path 'windows-update.json' -Encoding UTF8
+
+      - name: Publish Windows update
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+          $versionName = ($versionFull -split '\+')[0]
+          gh release delete latest-windows --cleanup-tag --yes 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+          gh release create latest-windows Cernogram-Windows-x64.zip windows-update.json `
+            --target "$env:SOURCE_BRANCH" `
+            --title "Cernogram Windows $versionName" `
+            --notes "Experience Suite для Windows: Агент, музыкальная медиатека, плейлисты и расширенный плеер." `
+            --prerelease
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cernogram-windows-0.20
+          path: |
+            Cernogram-Windows-x64.zip
+            windows-update.json
+          retention-days: 14
