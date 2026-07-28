@@ -25,10 +25,6 @@ jobs:
       - name: Materialize persistent realtime outbox
         run: python3 tooling/apply_realtime_outbox_once.py
 
-      - name: Format and validate source
-        run: |
-          dart format lib/internet_core.dart
-
       - name: Commit materialized source
         shell: bash
         run: |
