@@ -106,11 +106,11 @@ class CernogramGateway {
     _clients.add(client);
     socket.listen(
       (raw) {
-        client.serial = client.serial.then((_) => _handleFrame(client, raw)).catchError(
-          (Object error, StackTrace stackTrace) {
-            _sendError(client, 'frame_processing_failed', error.toString());
-          },
-        );
+        client.serial = client.serial
+            .then((_) => _handleFrame(client, raw))
+            .catchError((Object error, StackTrace stackTrace) {
+          _sendError(client, 'frame_processing_failed', error.toString());
+        });
       },
       onDone: () => unawaited(_detach(client)),
       onError: (_) => unawaited(_detach(client)),
@@ -120,7 +120,10 @@ class CernogramGateway {
 
   Future<void> _handleFrame(_ClientSession client, dynamic raw) async {
     if (raw is! String) {
-      await client.socket.close(WebSocketStatus.unsupportedData, 'text_frames_only');
+      await client.socket.close(
+        WebSocketStatus.unsupportedData,
+        'text_frames_only',
+      );
       return;
     }
     if (utf8.encode(raw).length > config.maxFrameBytes) {
@@ -143,14 +146,19 @@ class CernogramGateway {
     switch (type) {
       case 'hello':
         await _handleHello(client, frame);
+        return;
       case 'event':
         await _handleEvent(client, frame);
+        return;
       case 'ack':
         await _handleAck(client, frame);
+        return;
       case 'subscribe':
         await _handleSubscribe(client, frame);
+        return;
       case 'unsubscribe':
         await _handleUnsubscribe(client, frame);
+        return;
       case 'ping':
         _send(client, <String, dynamic>{
           'type': 'pong',
@@ -158,8 +166,10 @@ class CernogramGateway {
           'requestId': frame['requestId'],
           'serverTime': DateTime.now().toUtc().toIso8601String(),
         });
+        return;
       default:
         _sendError(client, 'unsupported_type', type);
+        return;
     }
   }
 
@@ -172,7 +182,11 @@ class CernogramGateway {
       return;
     }
     if (frame['protocol'] != 1) {
-      _sendError(client, 'unsupported_protocol', frame['protocol']?.toString() ?? '');
+      _sendError(
+        client,
+        'unsupported_protocol',
+        frame['protocol']?.toString() ?? '',
+      );
       return;
     }
 
@@ -181,21 +195,32 @@ class CernogramGateway {
     if (accessToken.isNotEmpty) {
       final codec = _tokenCodec;
       if (codec == null) {
-        _sendError(client, 'token_verification_unavailable', 'server secret missing');
+        _sendError(
+          client,
+          'token_verification_unavailable',
+          'server secret missing',
+        );
         return;
       }
       try {
         identity = codec.verify(accessToken);
       } on FormatException catch (error) {
-        _sendError(client, 'authentication_failed', error.message);
-        await client.socket.close(WebSocketStatus.policyViolation, 'authentication_failed');
+        _sendError(client, 'authentication_failed', error.message.toString());
+        await client.socket.close(
+          WebSocketStatus.policyViolation,
+          'authentication_failed',
+        );
         return;
       }
     } else if (config.allowAnonymousDevelopment) {
       final profileId = frame['profileId']?.toString().trim() ?? '';
       final deviceId = frame['deviceId']?.toString().trim() ?? '';
       if (profileId.isEmpty || deviceId.isEmpty) {
-        _sendError(client, 'identity_required', 'profileId and deviceId required');
+        _sendError(
+          client,
+          'identity_required',
+          'profileId and deviceId required',
+        );
         return;
       }
       identity = GatewayIdentity(
@@ -205,8 +230,15 @@ class CernogramGateway {
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
       );
     } else {
-      _sendError(client, 'access_token_required', 'anonymous access disabled');
-      await client.socket.close(WebSocketStatus.policyViolation, 'access_token_required');
+      _sendError(
+        client,
+        'access_token_required',
+        'anonymous access disabled',
+      );
+      await client.socket.close(
+        WebSocketStatus.policyViolation,
+        'access_token_required',
+      );
       return;
     }
 
@@ -214,8 +246,15 @@ class CernogramGateway {
     final suppliedDevice = frame['deviceId']?.toString().trim() ?? '';
     if ((suppliedProfile.isNotEmpty && suppliedProfile != identity.profileId) ||
         (suppliedDevice.isNotEmpty && suppliedDevice != identity.deviceId)) {
-      _sendError(client, 'identity_mismatch', 'token identity differs from hello');
-      await client.socket.close(WebSocketStatus.policyViolation, 'identity_mismatch');
+      _sendError(
+        client,
+        'identity_mismatch',
+        'token identity differs from hello',
+      );
+      await client.socket.close(
+        WebSocketStatus.policyViolation,
+        'identity_mismatch',
+      );
       return;
     }
 
@@ -279,7 +318,11 @@ class CernogramGateway {
     final priority = frame['priority']?.toString().trim() ?? 'normal';
     final crypto = frame['crypto'];
     if (roomId.isEmpty || packetId.isEmpty || crypto is! Map) {
-      _sendError(client, 'invalid_event', 'roomId, packetId and crypto required');
+      _sendError(
+        client,
+        'invalid_event',
+        'roomId, packetId and crypto required',
+      );
       return;
     }
     if (!client.rooms.contains(roomId) || !identity.canAccess(roomId)) {
@@ -299,7 +342,9 @@ class CernogramGateway {
             DateTime.now().toUtc();
     final requestedTtl = int.tryParse(frame['ttlSeconds']?.toString() ?? '') ??
         const Duration(days: 7).inSeconds;
-    final ttlSeconds = requestedTtl.clamp(5, const Duration(days: 30).inSeconds);
+    final ttlSeconds = requestedTtl
+        .clamp(5, const Duration(days: 30).inSeconds)
+        .toInt();
     final result = await store.append(
       roomId: roomId,
       packetId: packetId,
@@ -326,7 +371,8 @@ class CernogramGateway {
 
     if (!result.duplicate) {
       final outgoing = _eventFrame(result.event, replay: false);
-      for (final member in _roomMembers[roomId]?.toList() ?? const <_ClientSession>[]) {
+      final members = _roomMembers[roomId]?.toList() ?? const <_ClientSession>[];
+      for (final member in members) {
         if (identical(member, client)) continue;
         _send(member, outgoing);
       }
@@ -340,7 +386,9 @@ class CernogramGateway {
     final identity = client.identity!;
     final roomId = frame['roomId']?.toString().trim() ?? '';
     final roomSeq = int.tryParse(frame['roomSeq']?.toString() ?? '') ?? 0;
-    if (roomId.isEmpty || roomSeq <= 0 || !client.rooms.contains(roomId)) return;
+    if (roomId.isEmpty || roomSeq <= 0 || !client.rooms.contains(roomId)) {
+      return;
+    }
     await store.saveCursor(
       profileId: identity.profileId,
       deviceId: identity.deviceId,
@@ -368,7 +416,10 @@ class CernogramGateway {
       deviceId: identity.deviceId,
       roomId: roomId,
     );
-    final replay = await store.readAfter(roomId, max(requestedCursor, storedCursor));
+    final replay = await store.readAfter(
+      roomId,
+      max(requestedCursor, storedCursor),
+    );
     for (final event in replay) {
       _send(client, _eventFrame(event, replay: true));
     }
@@ -411,7 +462,9 @@ class CernogramGateway {
   }
 
   void _broadcastPresence(String roomId) {
-    final members = _roomMembers[roomId]?.where((member) => member.authenticated).toList() ??
+    final members = _roomMembers[roomId]
+            ?.where((member) => member.authenticated)
+            .toList() ??
         const <_ClientSession>[];
     final profiles = <String, int>{};
     for (final member in members) {
@@ -425,10 +478,12 @@ class CernogramGateway {
       'onlineProfiles': profiles.length,
       'onlineDevices': members.length,
       'members': profiles.entries
-          .map((entry) => <String, dynamic>{
-                'profileId': entry.key,
-                'devices': entry.value,
-              })
+          .map(
+            (entry) => <String, dynamic>{
+              'profileId': entry.key,
+              'devices': entry.value,
+            },
+          )
           .toList(),
       'at': DateTime.now().toUtc().toIso8601String(),
     };
@@ -452,7 +507,11 @@ class CernogramGateway {
     if (client.socket.readyState != WebSocket.open) return;
     final encoded = jsonEncode(frame);
     if (utf8.encode(encoded).length > config.maxFrameBytes) {
-      _sendError(client, 'server_frame_too_large', frame['type']?.toString() ?? '');
+      _sendError(
+        client,
+        'server_frame_too_large',
+        frame['type']?.toString() ?? '',
+      );
       return;
     }
     client.socket.add(encoded);
