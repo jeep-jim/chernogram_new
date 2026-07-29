@@ -1,6 +1,6 @@
 Cernogram Realtime Gateway CI failed
-Commit: f5ebcf531f0822027483aaea954043a3ac105db6
-Time: 2026-07-28T13:58:32Z
+Commit: c40d8b7a4ad5d945af901ad4c963a4a0bf330754
+Time: 2026-07-29T03:49:07Z
 Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on "linux_x64"
 Resolving dependencies...
 Downloading packages...
