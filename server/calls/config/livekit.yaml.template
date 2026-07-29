@@ -1,0 +1,50 @@
+port: 7880
+
+redis:
+  address: redis:6379
+
+rtc:
+  use_external_ip: true
+  tcp_port: ${LIVEKIT_RTC_TCP_PORT}
+  port_range_start: ${LIVEKIT_RTC_UDP_START}
+  port_range_end: ${LIVEKIT_RTC_UDP_END}
+  allow_tcp_fallback: true
+  congestion_control:
+    enabled: true
+    allow_pause: true
+  turn_servers:
+    - host: ${TURN_DOMAIN}
+      port: ${TURN_PORT}
+      protocol: udp
+      secret: ${TURN_SHARED_SECRET}
+      ttl: 300
+    - host: ${TURN_DOMAIN}
+      port: ${TURN_PORT}
+      protocol: tcp
+      secret: ${TURN_SHARED_SECRET}
+      ttl: 300
+    - host: ${TURN_DOMAIN}
+      port: ${TURN_TLS_PORT}
+      protocol: tls
+      secret: ${TURN_SHARED_SECRET}
+      ttl: 300
+
+keys:
+  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+
+room:
+  auto_create: true
+  empty_timeout: 45
+  departure_timeout: 20
+  max_participants: 50
+  enable_remote_unmute: false
+
+logging:
+  level: info
+  pion_level: warn
+
+signal_relay:
+  retry_timeout: 30s
+  min_retry_interval: 500ms
+  max_retry_interval: 5s
+  stream_buffer_size: 1000
