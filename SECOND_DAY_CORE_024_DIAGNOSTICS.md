@@ -1,7 +1,7 @@
 # Chernogram 0.24 second-day core diagnostics
 
 Outcome: failure
-Time: 2026-07-29T15:26:20Z
+Time: 2026-07-29T15:29:41Z
 
 ```text
 Second-day core d696e470cb96e61a0e5cc29c9e335b5da5a8f69b restored for Chernogram 0.24
@@ -100,5 +100,5 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-33 issues found. (ran in 12.7s)
+33 issues found. (ran in 13.0s)
 ```
