@@ -22,6 +22,7 @@ dependencies:
   image: ^4.9.1
   just_audio: ^0.10.6
   just_audio_background: ^0.0.1-beta.17
+  livekit_client: ^2.7.0
   mobile_scanner: ^7.4.0
   open_filex: ^4.7.0
   ota_update: ^7.1.0
