@@ -4,26 +4,32 @@ on:
   push:
     branches:
       - feature/livekit-calls-v1
+    paths-ignore:
+      - LIVEKIT_CI_STATUS.md
+      - LIVEKIT_CI_ERROR.md
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: cernogram-livekit-calls-v1
-  cancel-in-progress: true
+  group: cernogram-livekit-calls-v1-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.44.8'
 
 jobs:
   broker:
     if: github.actor != 'github-actions[bot]'
     name: Validate Python broker and Docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/livekit-calls-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -51,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: livekit-broker-ci-log
+          name: livekit-broker-ci-log-${{ github.run_attempt }}
           path: broker-ci.log
           if-no-files-found: warn
           retention-days: 14
@@ -59,19 +65,20 @@ jobs:
   android:
     if: github.actor != 'github-actions[bot]'
     name: Build Android LiveKit client
-    runs-on: ubuntu-latest
-    timeout-minutes: 55
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/livekit-calls-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - uses: actions/setup-python@v5
         with:
@@ -79,9 +86,15 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: false
+          cache: true
+
+      - name: Install pinned Android CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
 
       - name: Validate Flutter and build Android
         shell: bash
@@ -92,17 +105,19 @@ jobs:
             python tooling/materialize_livekit_calls_v1.py
             flutter --version
             flutter pub get
-            dart format lib/livekit_test_screen.dart lib/v12.dart
+            dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
+            git diff --exit-code -- pubspec.yaml lib/livekit_test_screen.dart lib/v12.dart
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
             flutter build apk --debug
+            test -s build/app/outputs/flutter-apk/app-debug.apk
           ) 2>&1 | tee android-ci.log
 
       - name: Upload Android diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: livekit-android-ci-log
+          name: livekit-android-ci-log-${{ github.run_attempt }}
           path: android-ci.log
           if-no-files-found: warn
           retention-days: 14
@@ -113,18 +128,19 @@ jobs:
         with:
           name: cernogram-livekit-android-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
           retention-days: 14
 
   windows:
     if: github.actor != 'github-actions[bot]'
     name: Build Windows LiveKit client
-    runs-on: windows-latest
-    timeout-minutes: 60
+    runs-on: windows-2022
+    timeout-minutes: 65
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/livekit-calls-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -133,9 +149,9 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: false
+          cache: true
 
       - name: Validate Flutter and build Windows
         shell: pwsh
@@ -168,13 +184,19 @@ jobs:
               Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
             }
             $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
-            "Applied MSVC coroutine compatibility definition" | Tee-Object -FilePath $log -Append
+            "Pinned runner: windows-2022; applied coroutine compatibility definition" | Tee-Object -FilePath $log -Append
 
             Invoke-Logged { flutter pub get } 'Flutter pub get'
-            Invoke-Logged { dart format lib/livekit_test_screen.dart lib/v12.dart } 'Dart format'
+            Invoke-Logged { dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart } 'Dart format check'
+            Invoke-Logged { git diff --exit-code -- pubspec.yaml lib/livekit_test_screen.dart lib/v12.dart } 'Source materialization check'
             Invoke-Logged { flutter analyze --no-fatal-infos --no-fatal-warnings } 'Flutter analyze'
             Invoke-Logged { flutter test } 'Flutter test'
             Invoke-Logged { flutter build windows --debug } 'Build Windows debug'
+
+            $exe = Join-Path $PWD 'build/windows/x64/runner/Debug/chernogram.exe'
+            if (-not (Test-Path $exe)) {
+              throw "Windows executable was not produced: $exe"
+            }
           } catch {
             "ERROR: $($_.Exception.Message)" | Tee-Object -FilePath $log -Append
             throw
@@ -184,7 +206,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: livekit-windows-ci-log
+          name: livekit-windows-ci-log-${{ github.run_attempt }}
           path: windows-ci.log
           if-no-files-found: warn
           retention-days: 14
@@ -195,6 +217,7 @@ jobs:
         with:
           name: cernogram-livekit-windows-debug
           path: build/windows/x64/runner/Debug
+          if-no-files-found: error
           retention-days: 14
 
   finalize:
@@ -204,33 +227,21 @@ jobs:
       - broker
       - android
       - windows
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/livekit-calls-v1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: livekit-*-ci-log
+          pattern: livekit-*-ci-log-*
           path: ci-logs
           merge-multiple: true
-
-      - uses: actions/setup-python@v5
-        if: needs.broker.result == 'success' && needs.android.result == 'success' && needs.windows.result == 'success'
-        with:
-          python-version: '3.12'
-
-      - uses: subosito/flutter-action@v2
-        if: needs.broker.result == 'success' && needs.android.result == 'success' && needs.windows.result == 'success'
-        with:
-          flutter-version: '3.44.8'
-          channel: stable
-          cache: false
 
       - name: Prepare result files
         shell: bash
@@ -240,15 +251,7 @@ jobs:
           WINDOWS_RESULT: ${{ needs.windows.result }}
         run: |
           set -euo pipefail
-          SUCCESS=false
           if [ "$BROKER_RESULT" = success ] && [ "$ANDROID_RESULT" = success ] && [ "$WINDOWS_RESULT" = success ]; then
-            SUCCESS=true
-          fi
-
-          if [ "$SUCCESS" = true ]; then
-            python tooling/materialize_livekit_calls_v1.py
-            flutter pub get
-            dart format lib/livekit_test_screen.dart lib/v12.dart
             cat > LIVEKIT_CI_STATUS.md <<EOF
           LiveKit Calls v1 ready
           Commit: ${GITHUB_SHA}
@@ -257,6 +260,7 @@ jobs:
           Broker: ${BROKER_RESULT}
           Android: ${ANDROID_RESULT}
           Windows: ${WINDOWS_RESULT}
+          Runners: ubuntu-22.04 and windows-2022
           Media: LiveKit room with microphone, camera and immediate hang-up
           Infrastructure: Python token broker, LiveKit Server, Redis and Docker Compose
           EOF
@@ -275,7 +279,7 @@ jobs:
                 [ -f "$file" ] || continue
                 echo "## $(basename "$file")"
                 echo '```text'
-                tail -n 350 "$file"
+                tail -n 400 "$file"
                 echo '```'
                 echo
               done
@@ -283,13 +287,20 @@ jobs:
             rm -f LIVEKIT_CI_STATUS.md
           fi
 
-      - name: Commit result
+      - name: Commit result only for current branch head
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf ci-logs
-          git add -A
-          git commit -m "Сохранить результат LiveKit CI Android и Windows [skip ci]" || true
+          git fetch origin feature/livekit-calls-v1
+          REMOTE_HEAD="$(git rev-parse origin/feature/livekit-calls-v1)"
+          if [ "$REMOTE_HEAD" != "$GITHUB_SHA" ]; then
+            echo "A newer branch commit exists; result file push is skipped without failing CI."
+            exit 0
+          fi
+          git checkout -B feature/livekit-calls-v1 "$GITHUB_SHA"
+          git add LIVEKIT_CI_STATUS.md LIVEKIT_CI_ERROR.md 2>/dev/null || true
+          git commit -m "Сохранить результат LiveKit CI Android и Windows [skip ci]" || exit 0
           git push origin HEAD:feature/livekit-calls-v1
