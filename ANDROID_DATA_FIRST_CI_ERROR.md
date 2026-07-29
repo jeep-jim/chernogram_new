@@ -1,14 +1,14 @@
 # Android Data First CI failed
 
-Commit: c60f8079c157d976447fc73bbbfaab807ae09542
-Time: 2026-07-29T09:35:52Z
+Commit: 07d5f5535561e6de27470d6ed0dcc9ed3d3a9975
+Time: 2026-07-29T09:38:24Z
 
 ## android-data-first-ci.log
 ```text
 Android data-first UI materialized
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (6 days ago) • 2026-07-23 10:56:21 -0700
-Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (5 days ago) • 2026-07-23 16:11:34.000Z
+Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (6 days ago) • 2026-07-23 16:11:34.000Z
 Tools • Dart 3.12.2 • DevTools 2.57.0
 Resolving dependencies...
 Downloading packages...
@@ -141,7 +141,7 @@ warning • Unused import: 'core_models.dart'. Try removing the import directive
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1100:20 • curly_braces_in_flow_control_structures
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:408:7 • use_build_context_synchronously
 
-17 issues found. (ran in 13.1s)
+17 issues found. (ran in 12.4s)
 ```
 
 ## signing-key.txt
