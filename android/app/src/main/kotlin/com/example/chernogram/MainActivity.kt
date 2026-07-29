@@ -6,11 +6,11 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val channelName = "chernogram/sound"
     private var incomingRingtone: Ringtone? = null
 
