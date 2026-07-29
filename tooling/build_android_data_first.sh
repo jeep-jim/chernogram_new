@@ -18,6 +18,7 @@ python tooling/finalize_android_data_first_v1.py
 python tooling/materialize_data_first_realtime_v1.py
 python tooling/prepare_restore_android_features.py
 python tooling/prepare_restore_reply_state.py
+python tooling/prepare_restore_chat_contract.py
 python tooling/restore_android_features_v1.py
 
 flutter --version
