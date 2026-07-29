@@ -26,8 +26,15 @@ def patch_pubspec() -> None:
         source = replace_once(
             source,
             "  http: ^1.5.0\n",
-            "  http: ^1.5.0\n  livekit_client: 2.8.1\n",
+            "  http: ^1.5.0\n  livekit_client: 2.9.0\n",
             label="pubspec dependency",
+        )
+    else:
+        source = re.sub(
+            r"(?m)^  livekit_client:\s*\S+\s*$",
+            "  livekit_client: 2.9.0",
+            source,
+            count=1,
         )
     path.write_text(source, encoding="utf-8")
 
