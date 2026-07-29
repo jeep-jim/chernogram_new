@@ -1,0 +1,12 @@
+{
+  "versionName": "0.21.0",
+  "versionFull": "0.21.0+51",
+  "versionCode": 51,
+  "architecture": "x64",
+  "minimumWindows": "10",
+  "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=51",
+  "portableSha256": "30de9384156b92aefa82bc4cb92aa23b3d1ceb1e5e9f624b39b0a439891ce075",
+  "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=51",
+  "installerSha256": "dd8159c63e58489dec782bcfb0d8ea6df36f817b85f8a195505520641dc06be2",
+  "packageType": "portable-zip-bootstrap-v4-livekit"
+}

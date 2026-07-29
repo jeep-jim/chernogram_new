@@ -1,0 +1,122 @@
+===== WINDOWS 0.21 PACKAGE =====
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.14.36
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+windows_bootstrap.cpp
+Inno Setup 6 Command-Line Compiler
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+Portions Copyright (C) 2001-2004 Alex Yackimoff. All rights reserved.
+https://www.innosetup.com
+
+Compiler engine version: Inno Setup 6.7.1
+Non-commercial use only
+
+Preprocessing
+   Reading file: C:\Program Files (x86)\Inno Setup 6\ISPPBuiltins.iss
+Parsing [Setup] section, line 7
+Parsing [Setup] section, line 8
+Parsing [Setup] section, line 9
+Parsing [Setup] section, line 10
+Parsing [Setup] section, line 11
+Parsing [Setup] section, line 12
+Parsing [Setup] section, line 13
+Parsing [Setup] section, line 14
+Parsing [Setup] section, line 15
+Parsing [Setup] section, line 16
+Parsing [Setup] section, line 17
+Parsing [Setup] section, line 18
+Parsing [Setup] section, line 19
+Parsing [Setup] section, line 20
+Parsing [Setup] section, line 21
+Parsing [Setup] section, line 22
+Parsing [Setup] section, line 23
+Parsing [Setup] section, line 24
+Parsing [Setup] section, line 25
+Parsing [Setup] section, line 26
+Parsing [Setup] section, line 27
+Reading file (WizardImageFile)
+Reading file (WizardSmallImageFile)
+Preparing Setup program executable
+   Verification successful
+   Updating icons (Setup.e32)
+   Updating version info (Setup.e32)
+Determining language code pages
+Parsing [Languages] section, line 30
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Languages\Russian.isl
+Parsing [Languages] section, line 31
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Default.isl
+   Messages in script file
+Reading default messages from Default.isl
+Parsing [Languages] section, line 30
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Languages\Russian.isl
+Parsing [Languages] section, line 31
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Default.isl
+Parsing [LangOptions], [Messages], and [CustomMessages] sections
+   Messages in script file
+Reading [Code] section
+Parsing [Icons] section, line 37
+Parsing [Icons] section, line 38
+Parsing [Run] section, line 41
+Parsing [Files] section, line 34
+Creating setup files
+   Verification successful
+   Updating icons (Setup.exe)
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\chernogram.exe
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\msvcp140.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\README-RU.txt
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\vcruntime140.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\vcruntime140_1.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\app_links_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\chernogram.exe
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\connectivity_plus_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\dartjni.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\desktop_drop_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\flutter_local_notifications_windows.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\flutter_tts_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\flutter_webrtc_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\flutter_windows.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\libwebrtc.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\livekit_client_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\msvcp140.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\permission_handler_windows_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\record_windows_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\screen_retriever_windows_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\share_plus_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\speech_to_text_windows_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\tray_manager_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\url_launcher_windows_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\vcruntime140.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\vcruntime140_1.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\window_manager_plugin.dll
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\app.so
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\icudtl.dat
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\AssetManifest.bin
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\FontManifest.json
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\NativeAssetsManifest.json
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\NOTICES.Z
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\chernogram_incoming.mp3
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part1
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part2
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part3
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part4
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part5
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\audio\incoming_call.part6
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\branding\chernogram_logo.png
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\branding\chernogram_tray.ico
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\assets\branding\README.txt
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\fonts\MaterialIcons-Regular.otf
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\packages\flutter_local_notifications_web\web\notifications_service_worker.js
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\packages\record_web\assets\js\record.fixwebmduration.js
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\packages\record_web\assets\js\record.worklet.js
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\shaders\ink_sparkle.frag
+   Compressing: D:\a\chernogram_new\chernogram_new\windows-package\app\data\flutter_assets\shaders\stretch_effect.frag
+   Compressing Setup program executable
+   Updating version info (Setup.exe)
+   Updating manifest (Setup.exe)
+
+
+Successful compile (12.515 sec). Resulting Setup program filename is:
+D:\a\chernogram_new\chernogram_new\Chernogram-Windows-Setup.exe
