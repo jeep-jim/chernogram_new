@@ -4,9 +4,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'app_monitor.dart';
 import 'brand.dart';
@@ -27,6 +30,7 @@ class CgChatScreen extends StatefulWidget {
   final bool privacyLens;
   final bool autoInvite;
   final ValueChanged<CgTunnel> onChanged;
+  final Future<void> Function(CgMessage message)? onForward;
   final ValueChanged<CgContact>? onContactSeen;
 
   const CgChatScreen({
@@ -36,6 +40,7 @@ class CgChatScreen extends StatefulWidget {
     required this.tunnel,
     required this.privacyLens,
     required this.onChanged,
+    this.onForward,
     this.onContactSeen,
     this.autoInvite = false,
   });
@@ -47,6 +52,7 @@ class CgChatScreen extends StatefulWidget {
 class _CgChatScreenState extends State<CgChatScreen> {
   final TextEditingController _text = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  final FocusNode _composerFocus = FocusNode();
   final Set<String> _announcedPeers = <String>{};
 
   late CgTunnel _tunnel;
@@ -56,6 +62,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   int _onlinePeers = 1;
   bool _sendingFile = false;
   bool _hasText = false;
+  CgMessage? _replyingTo;
 
   bool get _isOwner => widget.profile.id == _tunnel.ownerId;
 
@@ -85,6 +92,28 @@ class _CgChatScreenState extends State<CgChatScreen> {
   void _onComposerChanged() {
     final next = _text.text.trim().isNotEmpty;
     if (next != _hasText && mounted) setState(() => _hasText = next);
+  }
+
+  Map<String, dynamic> _replyMeta() {
+    final reply = _replyingTo;
+    if (reply == null) return const <String, dynamic>{};
+    return <String, dynamic>{
+      'replyToId': reply.id,
+      'replyAuthor': reply.authorName,
+      'replyText': reply.text,
+      'replyAttachmentName': reply.attachment?.name,
+    };
+  }
+
+  void _replyTo(CgMessage message) {
+    if (message.deleted) return;
+    setState(() => _replyingTo = message);
+    _composerFocus.requestFocus();
+  }
+
+  Future<void> _forward(CgMessage message) async {
+    if (message.deleted) return;
+    await widget.onForward?.call(message);
   }
 
   Future<void> _connect() async {
@@ -117,6 +146,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
       case 'message':
         if (event.data['message'] is Map) {
           final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+          _playIncomingMessageSound(raw);
           _playIncomingMessageSound(raw);
           _mergeMessages([raw]);
           _rememberContact(
@@ -308,8 +338,10 @@ class _CgChatScreenState extends State<CgChatScreen> {
       authorName: widget.profile.nickname,
       text: value,
       sentAt: DateTime.now(),
+      meta: _replyMeta(),
     );
     _text.clear();
+    setState(() => _replyingTo = null);
     _appendLocal(message);
     await _session?.sendMessage(message.toJson());
   }
@@ -391,8 +423,24 @@ class _CgChatScreenState extends State<CgChatScreen> {
                     )
                     .toList(),
               ),
-              if (message.authorId == widget.profile.id) ...[
-                const Divider(height: 28),
+              const Divider(height: 28),
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(widget.ru ? 'Ответить' : 'Reply'),
+                onTap: () => Navigator.pop(context, '__reply__'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.forward_rounded),
+                title: Text(widget.ru ? 'Переслать' : 'Forward'),
+                onTap: () => Navigator.pop(context, '__forward__'),
+              ),
+              if (message.text.trim().isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded),
+                  title: Text(widget.ru ? 'Копировать текст' : 'Copy text'),
+                  onTap: () => Navigator.pop(context, '__copy__'),
+                ),
+              if (message.authorId == widget.profile.id)
                 ListTile(
                   leading: const Icon(
                     Icons.delete_outline_rounded,
@@ -407,7 +455,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   ),
                   onTap: () => Navigator.pop(context, '__delete__'),
                 ),
-              ],
             ],
           ),
         ),
@@ -416,6 +463,19 @@ class _CgChatScreenState extends State<CgChatScreen> {
     if (selected == null) return;
     if (selected == '__delete__') {
       await _deleteMessage(message);
+    } else if (selected == '__reply__') {
+      _replyTo(message);
+    } else if (selected == '__forward__') {
+      await _forward(message);
+    } else if (selected == '__copy__') {
+      await Clipboard.setData(ClipboardData(text: message.text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.ru ? 'Текст скопирован' : 'Text copied'),
+          ),
+        );
+      }
     } else {
       await _toggleReaction(message, selected);
     }
@@ -480,7 +540,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
       sentAt: DateTime.now(),
       type: 'attachment',
       attachment: attachment,
+      meta: _replyMeta(),
     );
+    setState(() => _replyingTo = null);
     _appendLocal(message);
     await _session?.sendMessage(message.toJson());
   }
@@ -1185,6 +1247,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     unawaited(_subscription?.cancel());
     _text.removeListener(_onComposerChanged);
     _text.dispose();
+    _composerFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -1380,62 +1443,129 @@ class _CgChatScreenState extends State<CgChatScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                child: GlassPanel(
-                  padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-                  borderRadius: BorderRadius.circular(22),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        tooltip: widget.ru ? 'Добавить' : 'Add',
-                        onPressed: _sendingFile ? null : _showAttachmentMenu,
-                        icon: _sendingFile
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.add_rounded),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _text,
-                          minLines: 1,
-                          maxLines: 5,
-                          textCapitalization: TextCapitalization.sentences,
-                          onSubmitted: (_) => _sendText(),
-                          decoration: InputDecoration(
-                            hintText: widget.ru ? 'Сообщение' : 'Message',
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 10,
-                            ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_replyingTo != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.fromLTRB(13, 9, 7, 9),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest.withValues(
+                            alpha: .86,
                           ),
+                          borderRadius: BorderRadius.circular(17),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.reply_rounded,
+                              size: 18,
+                              color: scheme.primary,
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.privacyLens
+                                        ? '••••'
+                                        : _replyingTo!.authorName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: scheme.primary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Text(
+                                    widget.privacyLens
+                                        ? '••••••••'
+                                        : (_replyingTo!.text.isNotEmpty
+                                              ? _replyingTo!.text
+                                              : _replyingTo!.attachment?.name ??
+                                                    ''),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () =>
+                                  setState(() => _replyingTo = null),
+                              icon: const Icon(Icons.close_rounded, size: 19),
+                            ),
+                          ],
                         ),
                       ),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        child: _hasText
-                            ? IconButton.filled(
-                                key: const ValueKey('send'),
-                                onPressed: _sendText,
-                                icon: const Icon(Icons.arrow_upward_rounded),
-                              )
-                            : CgVoiceRecordButton(
-                                key: const ValueKey('voice'),
-                                ru: widget.ru,
-                                enabled: _networkState == 'connected',
-                                onRecorded: _sendVoice,
+                    GlassPanel(
+                      padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                      borderRadius: BorderRadius.circular(22),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            tooltip: widget.ru ? 'Добавить' : 'Add',
+                            onPressed: _sendingFile
+                                ? null
+                                : _showAttachmentMenu,
+                            icon: _sendingFile
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_rounded),
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: _text,
+                              focusNode: _composerFocus,
+                              minLines: 1,
+                              maxLines: 5,
+                              textCapitalization: TextCapitalization.sentences,
+                              onSubmitted: (_) => _sendText(),
+                              decoration: InputDecoration(
+                                hintText: widget.ru ? 'Сообщение' : 'Message',
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 10,
+                                ),
                               ),
+                            ),
+                          ),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: _hasText
+                                ? IconButton.filled(
+                                    key: const ValueKey('send'),
+                                    onPressed: _sendText,
+                                    icon: const Icon(
+                                      Icons.arrow_upward_rounded,
+                                    ),
+                                  )
+                                : CgVoiceRecordButton(
+                                    key: const ValueKey('voice'),
+                                    ru: widget.ru,
+                                    enabled: _networkState == 'connected',
+                                    onRecorded: _sendVoice,
+                                  ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1579,6 +1709,92 @@ class _EmptyChat extends StatelessWidget {
   );
 }
 
+class _LinkifiedMessageText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final Color linkColor;
+
+  const _LinkifiedMessageText({
+    required this.text,
+    required this.style,
+    required this.linkColor,
+  });
+
+  @override
+  State<_LinkifiedMessageText> createState() => _LinkifiedMessageTextState();
+}
+
+class _LinkifiedMessageTextState extends State<_LinkifiedMessageText> {
+  static final RegExp _urlPattern = RegExp(
+    r'((?:https?|chernogram)://[^\s]+|www\.[^\s]+)',
+    caseSensitive: false,
+  );
+  final List<TapGestureRecognizer> _recognizers = <TapGestureRecognizer>[];
+
+  List<InlineSpan> _spans() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    for (final match in _urlPattern.allMatches(widget.text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: widget.text.substring(cursor, match.start)));
+      }
+      var visible = match.group(0)!;
+      var trailing = '';
+      while (visible.isNotEmpty &&
+          '.,!?;:)]}'.contains(visible[visible.length - 1])) {
+        trailing = visible[visible.length - 1] + trailing;
+        visible = visible.substring(0, visible.length - 1);
+      }
+      final normalized = visible.toLowerCase().startsWith('www.')
+          ? 'https://$visible'
+          : visible;
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () async {
+          final uri = Uri.tryParse(normalized);
+          if (uri != null) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        };
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: visible,
+          style: widget.style.copyWith(
+            color: widget.linkColor,
+            decoration: TextDecoration.underline,
+            decorationColor: widget.linkColor,
+            fontWeight: FontWeight.w700,
+          ),
+          recognizer: recognizer,
+        ),
+      );
+      if (trailing.isNotEmpty) spans.add(TextSpan(text: trailing));
+      cursor = match.end;
+    }
+    if (cursor < widget.text.length) {
+      spans.add(TextSpan(text: widget.text.substring(cursor)));
+    }
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) => SelectionArea(
+    child: Text.rich(TextSpan(style: widget.style, children: _spans())),
+  );
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final CgMessage message;
   final bool mine;
@@ -1610,6 +1826,51 @@ class _MessageBubble extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final attachment = message.attachment;
     final showAvatar = groupChat && !mine;
+    final replyAuthor = message.meta['replyAuthor']?.toString();
+    final replyText = message.meta['replyText']?.toString();
+    final replyAttachment = message.meta['replyAttachmentName']?.toString();
+    final hasReply =
+        (replyAuthor?.isNotEmpty ?? false) ||
+        (replyText?.isNotEmpty ?? false) ||
+        (replyAttachment?.isNotEmpty ?? false);
+    final hasTextBubble =
+        message.deleted || message.text.isNotEmpty || hasReply;
+
+    Widget infoRow() => Padding(
+      padding: EdgeInsets.only(
+        left: mine ? 0 : 5,
+        right: mine ? 5 : 0,
+        top: 3,
+        bottom: 8,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!message.deleted && message.reactions.isNotEmpty) ...[
+            for (final entry in message.reactions.entries)
+              if (entry.value.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 5),
+                  child: Text(
+                    '${entry.key} ${entry.value.length}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+          ],
+          Text(
+            _formatTime(message.sentAt),
+            style: TextStyle(
+              fontSize: 9,
+              color: scheme.onSurface.withValues(alpha: .42),
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
@@ -1643,110 +1904,106 @@ class _MessageBubble extends StatelessWidget {
             ),
           GestureDetector(
             onLongPress: onLongPress,
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 350),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              decoration: BoxDecoration(
-                color: mine
-                    ? scheme.primary.withValues(alpha: .88)
-                    : scheme.surfaceContainerHighest.withValues(alpha: .91),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(mine ? 20 : 5),
-                  topRight: Radius.circular(mine ? 5 : 20),
-                  bottomLeft: const Radius.circular(20),
-                  bottomRight: const Radius.circular(20),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.deleted)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.block_rounded,
-                          size: 16,
-                          color: mine
-                              ? Colors.white60
-                              : scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 7),
-                        Text(
-                          ru ? 'Сообщение удалено' : 'Message deleted',
-                          style: TextStyle(
-                            color: mine
-                                ? Colors.white60
-                                : scheme.onSurfaceVariant,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    )
-                  else ...[
-                    if (attachment != null)
-                      CgInlineAttachment(
-                        attachment: attachment,
-                        hidden: privacyLens,
-                      ),
-                    if (message.text.isNotEmpty) ...[
-                      if (attachment != null) const SizedBox(height: 7),
-                      Text(
-                        privacyLens ? '••••••••••' : message.text,
-                        style: TextStyle(
-                          color: mine ? Colors.white : scheme.onSurface,
-                          fontSize: 15,
-                          height: 1.25,
-                        ),
-                      ),
-                    ],
-                  ],
-                  if (!message.deleted && message.reactions.isNotEmpty) ...[
-                    const SizedBox(height: 7),
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 4,
-                      children: message.reactions.entries
-                          .where((entry) => entry.value.isNotEmpty)
-                          .map(
-                            (entry) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: .13),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                '${entry.key} ${entry.value.length}',
-                                style: TextStyle(
-                                  color: mine ? Colors.white : scheme.onSurface,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 5),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      _formatTime(message.sentAt),
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: mine
-                            ? Colors.white60
-                            : scheme.onSurface.withValues(alpha: .42),
-                      ),
+            child: Column(
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                if (attachment != null && !message.deleted)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 370),
+                    child: CgInlineAttachment(
+                      attachment: attachment,
+                      hidden: privacyLens,
                     ),
                   ),
-                ],
-              ),
+                if (attachment != null && hasTextBubble)
+                  const SizedBox(height: 5),
+                if (hasTextBubble)
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 350),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: mine
+                          ? scheme.primary.withValues(alpha: .90)
+                          : scheme.surfaceContainerHighest.withValues(
+                              alpha: .91,
+                            ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(mine ? 20 : 5),
+                        topRight: Radius.circular(mine ? 5 : 20),
+                        bottomLeft: const Radius.circular(20),
+                        bottomRight: const Radius.circular(20),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (hasReply && !message.deleted) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: .13),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  privacyLens ? '••••' : (replyAuthor ?? ''),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                Text(
+                                  privacyLens
+                                      ? '••••••••'
+                                      : ((replyText?.isNotEmpty ?? false)
+                                            ? replyText!
+                                            : replyAttachment ?? ''),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (message.text.isNotEmpty)
+                            const SizedBox(height: 7),
+                        ],
+                        if (message.deleted)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.block_rounded, size: 16),
+                              const SizedBox(width: 7),
+                              Text(
+                                ru ? 'Сообщение удалено' : 'Message deleted',
+                                style: const TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          )
+                        else if (message.text.isNotEmpty)
+                          _LinkifiedMessageText(
+                            text: privacyLens ? '••••••••••' : message.text,
+                            style: TextStyle(
+                              color: mine ? Colors.white : scheme.onSurface,
+                              fontSize: 15,
+                              height: 1.25,
+                            ),
+                            linkColor: mine ? Colors.white : scheme.primary,
+                          ),
+                      ],
+                    ),
+                  ),
+                infoRow(),
+              ],
             ),
           ),
         ],

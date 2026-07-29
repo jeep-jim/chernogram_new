@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'account_access.dart';
 import 'app_monitor.dart';
 import 'brand.dart';
+import 'chat_media.dart';
 import 'chat_screen.dart';
 import 'core_models.dart';
 
@@ -52,6 +53,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   List<CgTunnel> _tunnels = <CgTunnel>[];
   List<CgContact> _contacts = <CgContact>[];
   bool _loading = true;
+  bool _privacyLens = false;
   int _tab = 0;
 
   @override
@@ -64,11 +66,13 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     final profile = await CgStore.loadOrCreateProfile();
     final tunnels = await CgStore.loadTunnels();
     final contacts = await CgStore.loadContacts();
+    final privacyLens = await CgStore.loadPrivacyLens();
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _tunnels = tunnels;
       _contacts = contacts;
+      _privacyLens = privacyLens;
       _loading = false;
     });
     await _syncMonitor();
@@ -306,9 +310,10 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
           ru: widget.ru,
           profile: profile,
           tunnel: tunnel,
-          privacyLens: false,
+          privacyLens: _privacyLens,
           autoInvite: autoInvite,
           onChanged: _updateTunnel,
+          onForward: _forwardMessage,
           onContactSeen: _rememberContact,
         ),
       ),
@@ -355,6 +360,76 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     copy.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
     if (mounted) setState(() => _contacts = copy);
     unawaited(CgStore.saveContacts(copy));
+  }
+
+  Future<void> _forwardMessage(CgMessage source) async {
+    final profile = _profile;
+    if (profile == null || !mounted) return;
+    final candidates = _tunnels.toList();
+    if (candidates.isEmpty) return;
+    final target = await showModalBottomSheet<CgTunnel>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.ru ? 'Переслать в чат' : 'Forward to chat',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  itemBuilder: (context, index) {
+                    final tunnel = candidates[index];
+                    return ListTile(
+                      leading: ChernogramAvatar(
+                        size: 42,
+                        seed: tunnel.id,
+                        avatarBase64: tunnel.avatarBase64,
+                      ),
+                      title: Text(tunnel.displayName),
+                      trailing: const Icon(Icons.forward_rounded),
+                      onTap: () => Navigator.pop(context, tunnel),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (target == null) return;
+    final forwarded = CgMessage(
+      id: CgIds.random(24),
+      authorId: profile.id,
+      authorName: profile.nickname,
+      text: source.text,
+      sentAt: DateTime.now(),
+      type: source.type,
+      attachment: source.attachment,
+      meta: <String, dynamic>{
+        ...source.meta,
+        'forwarded': true,
+        'forwardedFrom': source.authorName,
+      },
+    );
+    final updated = target.copyWith(messages: [...target.messages, forwarded]);
+    _updateTunnel(updated);
+    await ChernogramAppMonitor.publishMessage(
+      profile: profile,
+      tunnel: updated,
+      message: forwarded,
+    );
+    _showMessage(widget.ru ? 'Сообщение переслано.' : 'Message forwarded.');
   }
 
   Future<void> _openKnownContact(CgContact contact) async {
@@ -477,6 +552,11 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
         profile: _profile!,
         tunnels: _tunnels,
         contacts: _contacts,
+        privacyLens: _privacyLens,
+        onPrivacyChanged: (value) async {
+          await CgStore.savePrivacyLens(value);
+          if (mounted) setState(() => _privacyLens = value);
+        },
         onProfileChanged: (profile) async {
           await CgStore.saveProfile(profile);
           if (mounted) setState(() => _profile = profile);
@@ -1509,30 +1589,50 @@ class _MusicPageState extends State<_MusicPage> {
     });
   }
 
-  Future<File?> _trackFile(CgAttachment attachment) async {
-    final path = attachment.localPath;
-    if (path != null && await File(path).exists()) return File(path);
-    if (attachment.dataBase64 == null) return null;
-    final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/${attachment.id}_${attachment.name}');
-    await file.writeAsBytes(base64Decode(attachment.dataBase64!), flush: true);
-    return file;
-  }
+  Future<File?> _trackFile(CgAttachment attachment) =>
+      CgMediaStore.ensureFile(attachment);
 
   Future<void> _play(_MusicEntry entry) async {
     final file = await _trackFile(entry.attachment);
-    if (file == null) return;
-    if (_current?.attachment.id == entry.attachment.id) {
-      if (_player.playing) {
-        await _player.pause();
-      } else {
-        await _player.play();
+    if (file == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.ru
+                  ? 'Аудиофайл ещё не загружен на устройство.'
+                  : 'The audio file is not downloaded to this device yet.',
+            ),
+          ),
+        );
       }
       return;
     }
-    await _player.setFilePath(file.path);
-    setState(() => _current = entry);
-    await _player.play();
+    try {
+      if (_current?.attachment.id == entry.attachment.id) {
+        if (_player.playing) {
+          await _player.pause();
+        } else {
+          unawaited(_player.play());
+        }
+        return;
+      }
+      await _player.setAudioSource(AudioSource.uri(Uri.file(file.path)));
+      if (mounted) setState(() => _current = entry);
+      unawaited(_player.play());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.ru
+                  ? 'Не удалось воспроизвести файл: $error'
+                  : 'Playback failed: $error',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<String?> _recognitionToken() async {
@@ -1741,7 +1841,7 @@ class _MusicPageState extends State<_MusicPage> {
                             if (playing) {
                               await _player.pause();
                             } else {
-                              await _player.play();
+                              unawaited(_player.play());
                             }
                           },
                     icon: Icon(
@@ -1843,6 +1943,8 @@ class _ProfilePage extends StatelessWidget {
   final CgProfile profile;
   final List<CgTunnel> tunnels;
   final List<CgContact> contacts;
+  final bool privacyLens;
+  final ValueChanged<bool> onPrivacyChanged;
   final ValueChanged<CgProfile> onProfileChanged;
   final ValueChanged<CgIdentityBundle> onRestore;
   final VoidCallback onCheckUpdates;
@@ -1853,6 +1955,8 @@ class _ProfilePage extends StatelessWidget {
     required this.profile,
     required this.tunnels,
     required this.contacts,
+    required this.privacyLens,
+    required this.onPrivacyChanged,
     required this.onProfileChanged,
     required this.onRestore,
     required this.onCheckUpdates,
@@ -1958,6 +2062,32 @@ class _ProfilePage extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 12),
+      Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        child: SwitchListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          value: privacyLens,
+          onChanged: onPrivacyChanged,
+          secondary: Icon(
+            privacyLens
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+          ),
+          title: Text(
+            ru ? 'Приватный экран' : 'Privacy screen',
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          subtitle: Text(
+            ru
+                ? 'Скрывает имена и текст сообщений, не отключая связь.'
+                : 'Hides names and message text without disconnecting.',
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
       _ProfileAction(
         icon: Icons.fingerprint_rounded,
         title: ru ? 'Доступ и перенос аккаунта' : 'Access and account transfer',
