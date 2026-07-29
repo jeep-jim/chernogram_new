@@ -155,6 +155,12 @@ def build_call_service() -> str:
     text = old("lib/call_service.dart")
     text = replace(
         text,
+        "import 'brand.dart';\n",
+        "import 'brand.dart';\nimport 'call_avatar.dart';\n",
+        "current avatar import",
+    )
+    text = replace(
+        text,
         "class ChernogramCallScreen extends StatefulWidget {\n",
         "class CgCallOutcome {\n"
         "  final String status;\n"
@@ -174,14 +180,35 @@ def build_call_service() -> str:
     text = replace(
         text,
         "  final bool isCaller;\n  final String? peerName;\n",
-        "  final bool isCaller;\n  final String? peerId;\n  final String? peerName;\n",
-        "peer id field",
+        "  final bool isCaller;\n"
+        "  final String? peerId;\n"
+        "  final String? peerName;\n"
+        "  final String? peerAvatarBase64;\n"
+        "  final String? myAvatarBase64;\n",
+        "current call fields",
     )
     text = replace(
         text,
         "    this.isCaller = true,\n    this.peerName,\n",
-        "    this.isCaller = true,\n    this.peerId,\n    this.peerName,\n",
-        "peer id parameter",
+        "    this.isCaller = true,\n"
+        "    this.peerId,\n"
+        "    this.peerName,\n"
+        "    this.peerAvatarBase64,\n"
+        "    this.myAvatarBase64,\n",
+        "current call parameters",
+    )
+    text = replace(
+        text,
+        "                      const ChernogramLogo(size: 112, withPlate: true),\n",
+        "                      CgCallAvatar(\n"
+        "                        avatarBase64: widget.peerAvatarBase64,\n"
+        "                        name: remoteLabel,\n"
+        "                        size: 112,\n"
+        "                        fallbackIcon: widget.video\n"
+        "                            ? Icons.videocam_rounded\n"
+        "                            : Icons.call_rounded,\n"
+        "                      ),\n",
+        "current peer avatar presentation",
     )
     return text
 
