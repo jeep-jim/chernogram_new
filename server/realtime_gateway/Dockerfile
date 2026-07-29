@@ -6,7 +6,10 @@ COPY bin ./bin
 RUN dart compile exe bin/server.dart -o /app/realtime-gateway
 
 FROM debian:bookworm-slim
-RUN useradd --system --uid 10001 --create-home cernogram \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home cernogram \
     && mkdir -p /var/lib/cernogram \
     && chown -R cernogram:cernogram /var/lib/cernogram
 COPY --from=build /app/realtime-gateway /usr/local/bin/realtime-gateway
