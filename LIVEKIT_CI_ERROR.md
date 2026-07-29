@@ -1,10 +1,10 @@
 # LiveKit Calls v1 CI failed
 
-Commit: a90e863a7e0f921e4084e2dea453bdba9e41d7bb
-Time: 2026-07-29T07:02:13Z
+Commit: b1b15fa8516ac364625ee2ec139421e55a7d6b65
+Time: 2026-07-29T07:06:21Z
 Broker: success
 Android: cancelled
-Windows: failure
+Windows: cancelled
 
 ## android-ci.log
 ```text
@@ -103,44 +103,15 @@ warning • Unused import: 'notification_service.dart'. Try removing the import 
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/v12.dart:3:8 • unnecessary_import
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v12.dart:258:9 • curly_braces_in_flow_control_structures
 
-36 issues found. (ran in 15.9s)
+36 issues found. (ran in 16.4s)
 
 ✅ basic smoke test
 
 🎉 1 test passed.
-Running Gradle task 'assembleDebug'...                          
-WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): desktop_drop, device_info_plus, file_picker, flutter_contacts, flutter_tts, flutter_webrtc, livekit_client, mobile_scanner, package_info_plus, photo_manager, record_android, share_plus, speech_to_text
-Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
-
-Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
-If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing 
-an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
-
-If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-Note: Some input files use or override a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-Note: Some input files use or override a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-Note: Some input files use unchecked or unsafe operations.
-Note: Recompile with -Xlint:unchecked for details.
-Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
-License for package CMake 3.22.1 accepted.
-Preparing "Install CMake 3.22.1 v.3.22.1".
-"Install CMake 3.22.1 v.3.22.1" ready.
-Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
-"Install CMake 3.22.1 v.3.22.1" complete.
-"Install CMake 3.22.1 v.3.22.1" finished.
-Running Gradle task 'assembleDebug'...                            428.1s
-✓ Built build/app/outputs/flutter-apk/app-debug.apk
-```
+Running Gradle task 'assembleDebug'...                          ```
 
 ## broker-ci.log
 ```text
-      - mode: ingress
-        target: 50048
-        published: "50048"
-        protocol: udp
-      - mode: ingress
         target: 50049
         published: "50049"
         protocol: udp
@@ -384,11 +355,14 @@ networks:
 #1 transferring dockerfile: 508B done
 #1 DONE 0.0s
 
-#2 [auth] library/python:pull token for registry-1.docker.io
-#2 DONE 0.0s
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 ...
 
-#3 [internal] load metadata for docker.io/library/python:3.12-slim
-#3 DONE 0.4s
+#3 [auth] library/python:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-slim
+#2 DONE 1.2s
 
 #4 [internal] load .dockerignore
 #4 transferring context: 2B done
@@ -400,24 +374,26 @@ networks:
 
 #6 [1/5] FROM docker.io/library/python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 #6 resolve docker.io/library/python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de done
-#6 sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 12.58MB / 29.78MB 0.1s
-#6 sha256:98db2485a0d07a8914586b02387e3813aa7e9fed79ab252898d3e96e21c717ea 1.29MB / 1.29MB 0.1s done
-#6 sha256:48347b15c85fd6dde9c5b0259f378fbaee3ce231b30a42f2f2bcc4ea0285cbc9 1.05MB / 12.11MB 0.1s
-#6 sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e 0B / 250B 0.1s
 #6 sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de 10.37kB / 10.37kB done
 #6 sha256:cab2dbf575e971934a81e4622f5aba17aa7929719bd7e31033a3a83b97fd0464 1.75kB / 1.75kB done
 #6 sha256:25c5b8011a3425a140bf5fa73be0feabd3c0d5b323eecb19dc02437a368ae075 5.66kB / 5.66kB done
-#6 sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 29.78MB / 29.78MB 0.2s done
+#6 sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 0B / 29.78MB 0.1s
+#6 sha256:98db2485a0d07a8914586b02387e3813aa7e9fed79ab252898d3e96e21c717ea 0B / 1.29MB 0.1s
+#6 sha256:48347b15c85fd6dde9c5b0259f378fbaee3ce231b30a42f2f2bcc4ea0285cbc9 7.34MB / 12.11MB 0.1s
+#6 sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 14.68MB / 29.78MB 0.2s
 #6 sha256:48347b15c85fd6dde9c5b0259f378fbaee3ce231b30a42f2f2bcc4ea0285cbc9 12.11MB / 12.11MB 0.1s done
-#6 sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e 250B / 250B 0.1s done
-#6 extracting sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 0.1s
+#6 sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e 0B / 250B 0.2s
+#6 extracting sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053
+#6 sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 29.78MB / 29.78MB 0.2s done
+#6 sha256:98db2485a0d07a8914586b02387e3813aa7e9fed79ab252898d3e96e21c717ea 1.29MB / 1.29MB 0.2s done
+#6 sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e 250B / 250B 0.2s done
 #6 extracting sha256:062e450697faa5f02a3a74eba9864ee4d79bc9cfbd65769fc6cdff2c05c6a053 0.9s done
+#6 extracting sha256:98db2485a0d07a8914586b02387e3813aa7e9fed79ab252898d3e96e21c717ea
 #6 extracting sha256:98db2485a0d07a8914586b02387e3813aa7e9fed79ab252898d3e96e21c717ea 0.1s done
 #6 extracting sha256:48347b15c85fd6dde9c5b0259f378fbaee3ce231b30a42f2f2bcc4ea0285cbc9
 #6 extracting sha256:48347b15c85fd6dde9c5b0259f378fbaee3ce231b30a42f2f2bcc4ea0285cbc9 0.5s done
-#6 extracting sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e
 #6 extracting sha256:fd079632edc0ab4e9d10c77ec348d5057a976e6fc508e93855548096dec2ae1e done
-#6 DONE 1.9s
+#6 DONE 2.4s
 
 #7 [2/5] WORKDIR /app
 #7 DONE 0.0s
@@ -426,56 +402,56 @@ networks:
 #8 DONE 0.0s
 
 #9 [4/5] RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
-#9 1.343 Collecting livekit-api==1.2.0 (from -r requirements.txt (line 1))
-#9 1.374   Downloading livekit_api-1.2.0-py3-none-any.whl.metadata (1.4 kB)
-#9 1.789 Collecting aiohttp>=3.9.0 (from livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 1.796   Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.3 kB)
-#9 1.814 Collecting livekit-protocol<2.0.0,>=1.1.19 (from livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 1.821   Downloading livekit_protocol-1.1.21-py3-none-any.whl.metadata (988 bytes)
-#9 1.939 Collecting protobuf>=4 (from livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 1.946   Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
-#9 1.961 Collecting pyjwt>=2.0.0 (from livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 1.968   Downloading pyjwt-2.13.0-py3-none-any.whl.metadata (3.4 kB)
-#9 1.992 Collecting types-protobuf>=4 (from livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 1.999   Downloading types_protobuf-7.34.1.20260518-py3-none-any.whl.metadata (2.2 kB)
-#9 2.015 Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.022   Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
-#9 2.032 Collecting aiosignal>=1.4.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.039   Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
-#9 2.054 Collecting attrs>=17.3.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.062   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
-#9 2.112 Collecting frozenlist>=1.1.1 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.120   Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
-#9 2.306 Collecting multidict<7.0,>=4.5 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.313   Downloading multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
-#9 2.358 Collecting propcache>=0.2.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.365   Downloading propcache-0.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (16 kB)
-#9 2.383 Collecting typing_extensions>=4.4 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.390   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
-#9 2.582 Collecting yarl<2.0,>=1.17.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.590   Downloading yarl-1.24.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (103 kB)
-#9 2.647 Collecting idna>=2.0 (from yarl<2.0,>=1.17.0->aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
-#9 2.654   Downloading idna-3.18-py3-none-any.whl.metadata (6.1 kB)
-#9 2.675 Downloading livekit_api-1.2.0-py3-none-any.whl (26 kB)
-#9 2.682 Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
-#9 2.714    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 65.5 MB/s eta 0:00:00
-#9 2.722 Downloading livekit_protocol-1.1.21-py3-none-any.whl (149 kB)
-#9 2.729 Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_x86_64.whl (327 kB)
-#9 2.736 Downloading pyjwt-2.13.0-py3-none-any.whl (31 kB)
-#9 2.743 Downloading types_protobuf-7.34.1.20260518-py3-none-any.whl (85 kB)
-#9 2.750 Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
-#9 2.757 Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
-#9 2.763 Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
-#9 2.770 Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (242 kB)
-#9 2.778 Downloading multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (256 kB)
-#9 2.785 Downloading propcache-0.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (61 kB)
-#9 2.792 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
-#9 2.799 Downloading yarl-1.24.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (109 kB)
-#9 2.805 Downloading idna-3.18-py3-none-any.whl (65 kB)
-#9 2.846 Installing collected packages: typing_extensions, types-protobuf, pyjwt, protobuf, propcache, multidict, idna, frozenlist, attrs, aiohappyeyeballs, yarl, livekit-protocol, aiosignal, aiohttp, livekit-api
-#9 3.415 Successfully installed aiohappyeyeballs-2.7.1 aiohttp-3.14.3 aiosignal-1.4.0 attrs-26.1.0 frozenlist-1.8.0 idna-3.18 livekit-api-1.2.0 livekit-protocol-1.1.21 multidict-6.7.1 propcache-0.5.2 protobuf-7.35.1 pyjwt-2.13.0 types-protobuf-7.34.1.20260518 typing_extensions-4.16.0 yarl-1.24.5
-#9 3.415 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
-#9 DONE 3.5s
+#9 1.488 Collecting livekit-api==1.2.0 (from -r requirements.txt (line 1))
+#9 1.561   Downloading livekit_api-1.2.0-py3-none-any.whl.metadata (1.4 kB)
+#9 2.252 Collecting aiohttp>=3.9.0 (from livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.273   Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.3 kB)
+#9 2.326 Collecting livekit-protocol<2.0.0,>=1.1.19 (from livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.348   Downloading livekit_protocol-1.1.21-py3-none-any.whl.metadata (988 bytes)
+#9 2.519 Collecting protobuf>=4 (from livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.540   Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
+#9 2.594 Collecting pyjwt>=2.0.0 (from livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.615   Downloading pyjwt-2.13.0-py3-none-any.whl.metadata (3.4 kB)
+#9 2.676 Collecting types-protobuf>=4 (from livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.697   Downloading types_protobuf-7.34.1.20260518-py3-none-any.whl.metadata (2.2 kB)
+#9 2.749 Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.770   Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
+#9 2.816 Collecting aiosignal>=1.4.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.839   Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+#9 2.890 Collecting attrs>=17.3.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 2.911   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+#9 3.002 Collecting frozenlist>=1.1.1 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.024   Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+#9 3.275 Collecting multidict<7.0,>=4.5 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.296   Downloading multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+#9 3.380 Collecting propcache>=0.2.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.402   Downloading propcache-0.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (16 kB)
+#9 3.457 Collecting typing_extensions>=4.4 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.479   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+#9 3.730 Collecting yarl<2.0,>=1.17.0 (from aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.751   Downloading yarl-1.24.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (103 kB)
+#9 3.868 Collecting idna>=2.0 (from yarl<2.0,>=1.17.0->aiohttp>=3.9.0->livekit-api==1.2.0->-r requirements.txt (line 1))
+#9 3.889   Downloading idna-3.18-py3-none-any.whl.metadata (6.1 kB)
+#9 3.925 Downloading livekit_api-1.2.0-py3-none-any.whl (26 kB)
+#9 3.946 Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
+#9 4.062    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 20.3 MB/s eta 0:00:00
+#9 4.085 Downloading livekit_protocol-1.1.21-py3-none-any.whl (149 kB)
+#9 4.106 Downloading protobuf-7.35.1-cp310-abi3-manylinux2014_x86_64.whl (327 kB)
+#9 4.128 Downloading pyjwt-2.13.0-py3-none-any.whl (31 kB)
+#9 4.149 Downloading types_protobuf-7.34.1.20260518-py3-none-any.whl (85 kB)
+#9 4.171 Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
+#9 4.192 Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+#9 4.214 Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+#9 4.235 Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (242 kB)
+#9 4.258 Downloading multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (256 kB)
+#9 4.279 Downloading propcache-0.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (61 kB)
+#9 4.301 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#9 4.322 Downloading yarl-1.24.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (109 kB)
+#9 4.342 Downloading idna-3.18-py3-none-any.whl (65 kB)
+#9 4.386 Installing collected packages: typing_extensions, types-protobuf, pyjwt, protobuf, propcache, multidict, idna, frozenlist, attrs, aiohappyeyeballs, yarl, livekit-protocol, aiosignal, aiohttp, livekit-api
+#9 4.983 Successfully installed aiohappyeyeballs-2.7.1 aiohttp-3.14.3 aiosignal-1.4.0 attrs-26.1.0 frozenlist-1.8.0 idna-3.18 livekit-api-1.2.0 livekit-protocol-1.1.21 multidict-6.7.1 propcache-0.5.2 protobuf-7.35.1 pyjwt-2.13.0 types-protobuf-7.34.1.20260518 typing_extensions-4.16.0 yarl-1.24.5
+#9 4.983 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#9 DONE 5.1s
 
 #10 [5/5] COPY broker.py ./
 #10 DONE 0.0s
@@ -483,9 +459,9 @@ networks:
 #11 exporting to image
 #11 exporting layers
 #11 exporting layers 0.9s done
-#11 writing image sha256:8ba6ec0255b119fbf63deb593e39d6e678c53ca7a2fd07909858f8b99a36094d done
+#11 writing image sha256:609cbbf57031889716e5bc43739f814ee56ff9b910e3415ae50ee1f336eb56ab done
 #11 naming to docker.io/library/cernogram-livekit-broker-ci done
-#11 DONE 0.9s
+#11 DONE 1.0s
 ```
 
 ## windows-ci.log
@@ -741,59 +717,7 @@ Try `flutter pub outdated` for more information.
 ===== Dart format =====
 Formatted lib/livekit_test_screen.dart
 Formatted lib/v12.dart
-Formatted 2 files (2 changed) in 0.08 seconds.
+Formatted 2 files (2 changed) in 0.07 seconds.
 ===== Flutter analyze =====
-Analyzing chernogram_new...                                     
-
-   info - 'localeId' is deprecated and shouldn't be used. Use SpeechListenOptions.localeId instead. Try replacing the use of the deprecated member with the replacement - lib\agent_screen.dart:249:7 - deprecated_member_use
-   info - 'listenFor' is deprecated and shouldn't be used. Use SpeechListenOptions.listenFor instead. Try replacing the use of the deprecated member with the replacement - lib\agent_screen.dart:250:7 - deprecated_member_use
-   info - 'pauseFor' is deprecated and shouldn't be used. Use SpeechListenOptions.pauseFor instead. Try replacing the use of the deprecated member with the replacement - lib\agent_screen.dart:251:7 - deprecated_member_use
-   info - 'partialResults' is deprecated and shouldn't be used. Use SpeechListenOptions.partialResults instead. Try replacing the use of the deprecated member with the replacement - lib\agent_screen.dart:252:7 - deprecated_member_use
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\app_monitor.dart:301:9 - use_build_context_synchronously
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\call_service.dart:147:11 - curly_braces_in_flow_control_structures
-   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive - lib\chat_media.dart:6:8 - unnecessary_import
-warning - Unused import: 'dart:typed_data'. Try removing the import directive - lib\chat_screen.dart:4:8 - unused_import
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\chat_screen.dart:212:7 - curly_braces_in_flow_control_structures
-warning - The declaration '_attachmentKind' isn't referenced. Try removing the declaration of '_attachmentKind' - lib\chat_screen.dart:1019:10 - unused_element
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\chat_screen.dart:1739:7 - use_build_context_synchronously
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\chat_screen.dart:1824:7 - use_build_context_synchronously
-warning - Unused import: 'core_models.dart'. Try removing the import directive - lib\group_call_service.dart:8:8 - unused_import
-   info - 'roomOptions' is deprecated and shouldn't be used. deprecated, please use roomOptions in Room constructor. Try replacing the use of the deprecated member with the replacement - lib\livekit_test_screen.dart:152:39 - deprecated_member_use
-warning - Unused import: 'dart:io'. Try removing the import directive - lib\main.dart:3:8 - unused_import
-warning - Unused import: 'desktop_tray_service.dart'. Try removing the import directive - lib\main.dart:15:8 - unused_import
-warning - Unused import: 'notification_service.dart'. Try removing the import directive - lib\main.dart:16:8 - unused_import
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\main.dart:152:45 - use_build_context_synchronously
-   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive - lib\media_studio.dart:2:8 - unnecessary_import
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\network_core.dart:394:9 - curly_braces_in_flow_control_structures
-   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\notification_service.dart:42:21 - prefer_const_constructors
-   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\notification_service.dart:116:21 - prefer_const_constructors
-   info - Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation - lib\notification_service.dart:128:16 - prefer_const_constructors
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\permission_center.dart:22:7 - use_build_context_synchronously
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\tunnels.dart:1133:9 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:456:7 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:467:7 - curly_braces_in_flow_control_structures
-   info - Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check - lib\v06.dart:503:7 - use_build_context_synchronously
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:714:23 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:1890:9 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:1937:5 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:1959:9 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v06.dart:1961:9 - curly_braces_in_flow_control_structures
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v07.dart:388:11 - curly_braces_in_flow_control_structures
-   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive - lib\v12.dart:3:8 - unnecessary_import
-   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\v12.dart:258:9 - curly_braces_in_flow_control_structures
-
-36 issues found. (ran in 18.6s)
-===== Flutter test =====
-
-✅ basic smoke test
-
-🎉 1 test passed.
-===== Build Windows debug =====
-Building Windows application...                                 
-download: https://github.com/webrtc-sdk/libwebrtc/releases/download/libwebrtc.m144.7559.09/libwebrtc-win-x64-release.zip
-C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\experimental\coroutine(37,1): error C2338: static assertion failed: 'error STL1011: The /await compiler option, <experimental/coroutine>, <experimental/generator>, and <experimental/resumable> are deprecated by Microsoft and will be REMOVED SOON. They are superseded by the C++20 <coroutine> and C++23 <generator> headers. You can define _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS to suppress this error for now.' [D:\a\chernogram_new\chernogram_new\build\windows\x64\plugins\permission_handler_windows\permission_handler_windows_plugin.vcxproj]
-Building Windows application...                                   173.8s
-Build process failed.
-ERROR: Build Windows debug failed with exit code 1
 ```
 
