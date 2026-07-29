@@ -1,0 +1,22 @@
+services:
+  realtime-gateway:
+    build: .
+    restart: unless-stopped
+    environment:
+      CG_BIND: 0.0.0.0
+      CG_PORT: 8080
+      CG_DATA_DIR: /var/lib/cernogram
+      CG_TOKEN_SECRET: ${CG_TOKEN_SECRET:?set CG_TOKEN_SECRET in .env}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - realtime-data:/var/lib/cernogram
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  realtime-data:
