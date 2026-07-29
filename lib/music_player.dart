@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -6,6 +7,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'brand.dart';
 import 'core_models.dart';
@@ -16,12 +18,14 @@ class CgMusicTrack {
   final String title;
   final String subtitle;
   final String path;
+  final String source;
 
   const CgMusicTrack({
     required this.id,
     required this.title,
     required this.subtitle,
     required this.path,
+    required this.source,
   });
 }
 
@@ -30,15 +34,35 @@ class CgMusicHub {
 
   static final CgMusicHub instance = CgMusicHub._();
 
+  static const String _queueKey = 'cg_music_queue_v2';
+  static const String _activePathKey = 'cg_music_active_path_v2';
+  static const String _positionKey = 'cg_music_position_ms_v2';
+  static const String _loopKey = 'cg_music_loop_v2';
+  static const String _shuffleKey = 'cg_music_shuffle_v2';
+
   final AudioPlayer player = AudioPlayer();
   final ValueNotifier<List<CgMusicTrack>> queue =
       ValueNotifier<List<CgMusicTrack>>(const <CgMusicTrack>[]);
   final ValueNotifier<String?> activeTrackId = ValueNotifier<String?>(null);
+  final ValueNotifier<LoopMode> loopMode = ValueNotifier<LoopMode>(LoopMode.off);
+  final ValueNotifier<bool> shuffleEnabled = ValueNotifier<bool>(false);
+
   StreamSubscription<int?>? _indexSubscription;
+  Timer? _persistenceTimer;
+  bool _restoreAttempted = false;
+
+  CgMusicTrack? get activeTrack {
+    final current = queue.value;
+    final index = player.currentIndex;
+    if (index == null || index < 0 || index >= current.length) return null;
+    return current[index];
+  }
 
   Future<void> playQueue(
     List<CgMusicTrack> tracks, {
     int initialIndex = 0,
+    Duration initialPosition = Duration.zero,
+    bool autoPlay = true,
   }) async {
     if (tracks.isEmpty) return;
     final existing = queue.value;
@@ -53,6 +77,7 @@ class CgMusicHub {
         final current = queue.value;
         if (index == null || index < 0 || index >= current.length) return;
         activeTrackId.value = current[index].id;
+        unawaited(_persistState());
       });
       final sources = tracks
           .map(
@@ -62,16 +87,30 @@ class CgMusicHub {
                 id: track.id,
                 album: track.subtitle,
                 title: track.title,
+                extras: <String, dynamic>{
+                  'path': track.path,
+                  'source': track.source,
+                },
               ),
             ),
           )
-          .toList();
-      await player.setAudioSources(sources, initialIndex: safeIndex);
+          .toList(growable: false);
+      await player.setAudioSources(
+        sources,
+        initialIndex: safeIndex,
+        initialPosition: initialPosition,
+      );
     } else {
-      await player.seek(Duration.zero, index: safeIndex);
+      await player.seek(initialPosition, index: safeIndex);
     }
     activeTrackId.value = tracks[safeIndex].id;
-    await player.play();
+    _startPersistenceTimer();
+    await _persistState();
+    if (autoPlay) {
+      await player.play();
+    } else {
+      await player.pause();
+    }
   }
 
   Future<void> playSingle(CgMusicTrack track) async {
@@ -81,6 +120,7 @@ class CgMusicHub {
       } else {
         await player.play();
       }
+      await _persistState();
       return;
     }
     await playQueue(<CgMusicTrack>[track]);
@@ -91,23 +131,142 @@ class CgMusicHub {
     required String title,
     required String subtitle,
     required String path,
+    String source = 'chat',
   }) =>
       playSingle(
-        CgMusicTrack(id: id, title: title, subtitle: subtitle, path: path),
+        CgMusicTrack(
+          id: id,
+          title: title,
+          subtitle: subtitle,
+          path: path,
+          source: source,
+        ),
       );
 
   Future<void> next() async {
-    if (player.hasNext) await player.seekToNext();
+    if (player.hasNext) {
+      await player.seekToNext();
+    } else if (loopMode.value == LoopMode.all && queue.value.isNotEmpty) {
+      await player.seek(Duration.zero, index: 0);
+    }
+    await _persistState();
   }
 
   Future<void> previous() async {
-    if (player.hasPrevious) await player.seekToPrevious();
+    if (player.position > const Duration(seconds: 4)) {
+      await player.seek(Duration.zero);
+    } else if (player.hasPrevious) {
+      await player.seekToPrevious();
+    }
+    await _persistState();
+  }
+
+  Future<void> cycleLoopMode() async {
+    final next = switch (loopMode.value) {
+      LoopMode.off => LoopMode.all,
+      LoopMode.all => LoopMode.one,
+      LoopMode.one => LoopMode.off,
+    };
+    loopMode.value = next;
+    await player.setLoopMode(next);
+    await _persistState();
+  }
+
+  Future<void> toggleShuffle() async {
+    final enabled = !shuffleEnabled.value;
+    shuffleEnabled.value = enabled;
+    if (enabled) await player.shuffle();
+    await player.setShuffleModeEnabled(enabled);
+    await _persistState();
+  }
+
+  Future<void> restoreFromTracks(List<CgMusicTrack> available) async {
+    if (_restoreAttempted || available.isEmpty || queue.value.isNotEmpty) return;
+    _restoreAttempted = true;
+    final prefs = await SharedPreferences.getInstance();
+    final rawQueue = prefs.getString(_queueKey);
+    final savedPaths = <String>[];
+    if (rawQueue != null && rawQueue.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawQueue);
+        if (decoded is List) {
+          savedPaths.addAll(
+            decoded.map((item) => item.toString()).where((item) => item.isNotEmpty),
+          );
+        }
+      } catch (_) {}
+    }
+    final byPath = <String, CgMusicTrack>{
+      for (final track in available) track.path: track,
+    };
+    final restoredQueue = savedPaths
+        .map((path) => byPath[path])
+        .whereType<CgMusicTrack>()
+        .toList(growable: false);
+    final activePath = prefs.getString(_activePathKey) ?? '';
+    final fallback = byPath[activePath];
+    final tracks = restoredQueue.isNotEmpty
+        ? restoredQueue
+        : fallback == null
+            ? const <CgMusicTrack>[]
+            : <CgMusicTrack>[fallback];
+    if (tracks.isEmpty) return;
+
+    final index = math.max(
+      0,
+      tracks.indexWhere((track) => track.path == activePath),
+    );
+    final position = Duration(milliseconds: prefs.getInt(_positionKey) ?? 0);
+    final loopName = prefs.getString(_loopKey) ?? LoopMode.off.name;
+    final loop = LoopMode.values.firstWhere(
+      (value) => value.name == loopName,
+      orElse: () => LoopMode.off,
+    );
+    final shuffle = prefs.getBool(_shuffleKey) == true;
+    loopMode.value = loop;
+    shuffleEnabled.value = shuffle;
+    await player.setLoopMode(loop);
+    await player.setShuffleModeEnabled(shuffle);
+    await playQueue(
+      tracks,
+      initialIndex: index,
+      initialPosition: position,
+      autoPlay: false,
+    );
   }
 
   Future<void> stopAndClear() async {
     await player.stop();
     queue.value = const <CgMusicTrack>[];
     activeTrackId.value = null;
+    _persistenceTimer?.cancel();
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait<void>(<Future<void>>[
+      prefs.remove(_queueKey),
+      prefs.remove(_activePathKey),
+      prefs.remove(_positionKey),
+    ]);
+  }
+
+  void _startPersistenceTimer() {
+    _persistenceTimer ??= Timer.periodic(const Duration(seconds: 2), (_) {
+      if (queue.value.isNotEmpty) unawaited(_persistState());
+    });
+  }
+
+  Future<void> _persistState() async {
+    final tracks = queue.value;
+    if (tracks.isEmpty) return;
+    final index = (player.currentIndex ?? 0).clamp(0, tracks.length - 1).toInt();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _queueKey,
+      jsonEncode(tracks.map((track) => track.path).toList(growable: false)),
+    );
+    await prefs.setString(_activePathKey, tracks[index].path);
+    await prefs.setInt(_positionKey, player.position.inMilliseconds);
+    await prefs.setString(_loopKey, loopMode.value.name);
+    await prefs.setBool(_shuffleKey, shuffleEnabled.value);
   }
 }
 
@@ -160,17 +319,21 @@ class _CgPlayingBarsState extends State<CgPlayingBars>
           builder: (context, _) {
             final value = widget.active ? _controller.value : .20;
             return Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List<Widget>.generate(3, (index) {
-                final phase = (value + index * .27) % 1.0;
-                final height = widget.size * (.24 + .68 * (1 - (phase - .5).abs() * 2));
+              children: List<Widget>.generate(7, (index) {
+                final phase = (value + index * .16) % 1.0;
+                final arch = 1 - ((index - 3).abs() / 4);
+                final motion = .45 + .55 * (1 - (phase - .5).abs() * 2);
+                final height = widget.size * (.25 + .65 * arch * motion);
                 return Container(
-                  width: widget.size * .16,
+                  width: widget.size * .075,
                   height: math.max(widget.size * .20, height),
-                  margin: EdgeInsets.symmetric(horizontal: widget.size * .045),
+                  margin: EdgeInsets.symmetric(horizontal: widget.size * .025),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: index == 2 || index == 4
+                        ? Theme.of(context).colorScheme.secondary
+                        : Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 );
@@ -202,6 +365,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
   List<String> _folders = const <String>[];
   bool _loading = true;
   String? _permissionError;
+  String _sourceFilter = 'all';
 
   @override
   void initState() {
@@ -242,6 +406,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
             title: attachment.name,
             subtitle: tunnel.displayName,
             path: file.path,
+            source: 'chat',
           ),
         );
       }
@@ -278,6 +443,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                 : title,
             subtitle: widget.ru ? 'На устройстве' : 'On device',
             path: file.path,
+            source: 'device',
           ),
         );
       } catch (_) {}
@@ -294,6 +460,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
             title: file.path.split(Platform.pathSeparator).last,
             subtitle: file.parent.path,
             path: file.path,
+            source: 'folder',
           ),
         )
         .toList();
@@ -301,6 +468,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
 
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
+    _permissionError = null;
     _folders = await CgSharedLibraryStore.loadMusicFolders();
     final chat = await _chatTracks();
     final device = await _deviceTracks();
@@ -311,6 +479,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
     }
     final tracks = unique.values.toList()
       ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    await _hub.restoreFromTracks(tracks);
     if (!mounted) return;
     setState(() {
       _tracks = tracks;
@@ -330,13 +499,12 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
 
   List<CgMusicTrack> get _visible {
     final query = _search.text.trim().toLowerCase();
-    if (query.isEmpty) return _tracks;
-    return _tracks
-        .where(
-          (track) => track.title.toLowerCase().contains(query) ||
-              track.subtitle.toLowerCase().contains(query),
-        )
-        .toList();
+    return _tracks.where((track) {
+      if (_sourceFilter != 'all' && track.source != _sourceFilter) return false;
+      if (query.isEmpty) return true;
+      return track.title.toLowerCase().contains(query) ||
+          track.subtitle.toLowerCase().contains(query);
+    }).toList(growable: false);
   }
 
   Future<void> _play(CgMusicTrack track) async {
@@ -345,6 +513,20 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
     await _hub.playQueue(visible, initialIndex: math.max(0, index));
     if (mounted) setState(() {});
   }
+
+  String _sourceLabel(String source) => switch (source) {
+        'device' => widget.ru ? 'Устройство' : 'Device',
+        'chat' => widget.ru ? 'Чаты' : 'Chats',
+        'folder' => widget.ru ? 'Папки' : 'Folders',
+        _ => widget.ru ? 'Все' : 'All',
+      };
+
+  IconData _sourceIcon(String source) => switch (source) {
+        'device' => Icons.smartphone_rounded,
+        'chat' => Icons.forum_outlined,
+        'folder' => Icons.folder_outlined,
+        _ => Icons.library_music_outlined,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -369,14 +551,14 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
             child: TextField(
               controller: _search,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
                 hintText: widget.ru
-                    ? 'Поиск в чатах и общих папках'
-                    : 'Search chats and shared folders',
+                    ? 'Поиск по названию, чату или папке'
+                    : 'Search title, chat or folder',
                 suffixIcon: _search.text.isEmpty
                     ? null
                     : IconButton(
@@ -384,6 +566,29 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                         icon: const Icon(Icons.close_rounded),
                       ),
               ),
+            ),
+          ),
+          SizedBox(
+            height: 42,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              itemCount: const <String>['all', 'device', 'chat', 'folder'].length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final source = const <String>[
+                  'all',
+                  'device',
+                  'chat',
+                  'folder',
+                ][index];
+                return FilterChip(
+                  selected: _sourceFilter == source,
+                  avatar: Icon(_sourceIcon(source), size: 17),
+                  label: Text(_sourceLabel(source)),
+                  onSelected: (_) => setState(() => _sourceFilter = source),
+                );
+              },
             ),
           ),
           if (_folders.isNotEmpty)
@@ -450,7 +655,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                     : ValueListenableBuilder<String?>(
                         valueListenable: _hub.activeTrackId,
                         builder: (context, activeId, _) => ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(10, 2, 10, 150),
+                          padding: const EdgeInsets.fromLTRB(10, 2, 10, 174),
                           itemCount: _visible.length,
                           itemBuilder: (context, index) {
                             final track = _visible[index];
@@ -473,12 +678,11 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                                     child: Center(
                                       child: active
                                           ? CgPlayingBars(
-                                              active:
-                                                  state.data?.playing == true,
-                                              size: 28,
+                                              active: state.data?.playing == true,
+                                              size: 30,
                                             )
                                           : Icon(
-                                              Icons.music_note_rounded,
+                                              _sourceIcon(track.source),
                                               color: scheme.primary,
                                             ),
                                     ),
@@ -493,7 +697,7 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  track.subtitle,
+                                  '${_sourceLabel(track.source)} • ${track.subtitle}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -517,10 +721,29 @@ class _CgMusicPlayerScreenState extends State<CgMusicPlayerScreen> {
   }
 }
 
-class _MusicNowPlaying extends StatelessWidget {
+class _MusicNowPlaying extends StatefulWidget {
   final bool ru;
 
   const _MusicNowPlaying({required this.ru});
+
+  @override
+  State<_MusicNowPlaying> createState() => _MusicNowPlayingState();
+}
+
+class _MusicNowPlayingState extends State<_MusicNowPlaying> {
+  bool _showRemaining = false;
+
+  String _format(Duration value) {
+    final totalSeconds = math.max(0, value.inSeconds);
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:'
+          '${seconds.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -564,7 +787,7 @@ class _MusicNowPlaying extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: CgPlayingBars(
                               active: state.data?.playing == true,
-                              size: 34,
+                              size: 38,
                             ),
                           ),
                         ),
@@ -576,9 +799,7 @@ class _MusicNowPlaying extends StatelessWidget {
                                 track.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.w900),
                               ),
                               Text(
                                 track.subtitle,
@@ -611,7 +832,7 @@ class _MusicNowPlaying extends StatelessWidget {
                           icon: const Icon(Icons.skip_next_rounded),
                         ),
                         IconButton(
-                          tooltip: ru ? 'Закрыть плеер' : 'Close player',
+                          tooltip: widget.ru ? 'Закрыть плеер' : 'Close player',
                           onPressed: hub.stopAndClear,
                           icon: const Icon(Icons.close_rounded),
                         ),
@@ -627,17 +848,91 @@ class _MusicNowPlaying extends StatelessWidget {
                           final position = positionSnapshot.data ?? Duration.zero;
                           final maxValue =
                               math.max(1, total.inMilliseconds).toDouble();
-                          return Slider(
-                            min: 0,
-                            max: maxValue,
-                            value: position.inMilliseconds
-                                .clamp(0, maxValue.toInt())
-                                .toDouble(),
-                            onChanged: total == Duration.zero
-                                ? null
-                                : (value) => hub.player.seek(
-                                      Duration(milliseconds: value.round()),
+                          final remaining = total - position;
+                          return Column(
+                            children: [
+                              Slider(
+                                min: 0,
+                                max: maxValue,
+                                value: position.inMilliseconds
+                                    .clamp(0, maxValue.toInt())
+                                    .toDouble(),
+                                onChanged: total == Duration.zero
+                                    ? null
+                                    : (value) => hub.player.seek(
+                                          Duration(milliseconds: value.round()),
+                                        ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 0, 4, 4),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      _format(position),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
                                     ),
+                                    const Spacer(),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable: hub.shuffleEnabled,
+                                      builder: (context, enabled, _) => IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        tooltip: widget.ru
+                                            ? 'Случайный порядок'
+                                            : 'Shuffle',
+                                        onPressed: hub.toggleShuffle,
+                                        color: enabled ? scheme.primary : null,
+                                        icon: const Icon(Icons.shuffle_rounded),
+                                      ),
+                                    ),
+                                    ValueListenableBuilder<LoopMode>(
+                                      valueListenable: hub.loopMode,
+                                      builder: (context, mode, _) => IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        tooltip: widget.ru
+                                            ? 'Режим повтора'
+                                            : 'Repeat mode',
+                                        onPressed: hub.cycleLoopMode,
+                                        color: mode != LoopMode.off
+                                            ? scheme.primary
+                                            : null,
+                                        icon: Icon(
+                                          mode == LoopMode.one
+                                              ? Icons.repeat_one_rounded
+                                              : Icons.repeat_rounded,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: () => setState(
+                                        () => _showRemaining = !_showRemaining,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 5,
+                                        ),
+                                        child: Text(
+                                          _showRemaining
+                                              ? '-${_format(remaining.isNegative ? Duration.zero : remaining)}'
+                                              : _format(total),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontFeatures: [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),
