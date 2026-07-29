@@ -1,12 +1,12 @@
 {
-  "versionName": "0.21.0",
-  "versionFull": "0.21.0+51",
-  "versionCode": 51,
+  "versionName": "0.23.0",
+  "versionFull": "0.23.0+55",
+  "versionCode": 55,
   "architecture": "x64",
   "minimumWindows": "10",
-  "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=51",
-  "portableSha256": "30de9384156b92aefa82bc4cb92aa23b3d1ceb1e5e9f624b39b0a439891ce075",
-  "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=51",
-  "installerSha256": "dd8159c63e58489dec782bcfb0d8ea6df36f817b85f8a195505520641dc06be2",
-  "packageType": "portable-zip-bootstrap-v4-livekit"
+  "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=55",
+  "portableSha256": "fe59a6c89f4167bb9b690c07abca1b35072224fb22142d2ca6c9487dc1119e6e",
+  "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=55",
+  "installerSha256": "e9bab7f048363e2909f3f789ce10fb5a2e79e4c6912da6d0268693056ca1fd41",
+  "packageType": "portable-zip-and-installer-v5"
 }
