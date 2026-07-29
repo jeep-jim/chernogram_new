@@ -29,6 +29,107 @@ jobs:
         with:
           sdk: stable
 
+      - name: Apply pending WebSocket race fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gateway_path = Path('server/realtime_gateway/lib/src/gateway.dart')
+          gateway = gateway_path.read_text(encoding='utf-8')
+          old_send = """    client.socket.add(encoded);
+  }
+
+  void _sendError(_ClientSession client, String code, String details) {
+    if (client.socket.readyState != WebSocket.open) return;
+    client.socket.add(jsonEncode(<String, dynamic>{
+      'type': 'error',
+      'protocol': 1,
+      'code': code,
+      'details': details,
+      'serverTime': DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+"""
+          new_send = """    try {
+      client.socket.add(encoded);
+    } catch (_) {
+      unawaited(_detach(client));
+    }
+  }
+
+  void _sendError(_ClientSession client, String code, String details) {
+    if (client.socket.readyState != WebSocket.open) return;
+    try {
+      client.socket.add(jsonEncode(<String, dynamic>{
+        'type': 'error',
+        'protocol': 1,
+        'code': code,
+        'details': details,
+        'serverTime': DateTime.now().toUtc().toIso8601String(),
+      }));
+    } catch (_) {
+      unawaited(_detach(client));
+    }
+  }
+"""
+          if old_send in gateway:
+              gateway = gateway.replace(old_send, new_send, 1)
+              gateway_path.write_text(gateway, encoding='utf-8')
+
+          test_path = Path('server/realtime_gateway/test/gateway_integration_test.dart')
+          test = test_path.read_text(encoding='utf-8')
+          old_ack = """        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ack',
+            'protocol': 1,
+            'roomId': 'room-test',
+            'roomSeq': liveRoomSeq,
+          }),
+        );
+
+        await bob.close();
+"""
+          new_ack = """        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ack',
+            'protocol': 1,
+            'roomId': 'room-test',
+            'roomSeq': liveRoomSeq,
+          }),
+        );
+        bob.socket.add(
+          jsonEncode(<String, dynamic>{
+            'type': 'ping',
+            'protocol': 1,
+            'requestId': 'cursor-barrier',
+          }),
+        );
+        await bob.nextType('pong');
+
+        await bob.close();
+"""
+          if old_ack in test:
+              test = test.replace(old_ack, new_ack, 1)
+
+          old_close = """  Future<void> close() async {
+    await _iterator.cancel();
+    await socket.close();
+  }
+"""
+          new_close = """  Future<void> close() async {
+    try {
+      await socket.close(WebSocketStatus.normalClosure, 'test_done');
+    } catch (_) {}
+    await _iterator.cancel();
+  }
+"""
+          if old_close in test:
+              test = test.replace(old_close, new_close, 1)
+          test_path.write_text(test, encoding='utf-8')
+          PY
+
       - name: Validate Dart package
         working-directory: server/realtime_gateway
         shell: bash
@@ -63,6 +164,8 @@ jobs:
           Checks: dart format, analyze, tests, Docker build
           EOF
           git add GATEWAY_CI_STATUS.md server/realtime_gateway
+          git rm -f .github/workflows/apply-gateway-integration-fix.yml || true
+          git rm -f GATEWAY_FIX_TRIGGER.txt || true
           if git ls-files --error-unmatch GATEWAY_CI_ERROR.txt >/dev/null 2>&1; then
             git rm -f GATEWAY_CI_ERROR.txt
           fi
