@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -17,7 +18,6 @@ class ChernogramColors {
   static const success = Color(0xFF28D7A1);
   static const danger = Color(0xFFFF4D67);
 
-  // Compatibility names used by the stable 0.9.1 code.
   static const orange = violet;
   static const orangeDeep = violetDeep;
   static const gold = cyan;
@@ -460,9 +460,7 @@ class ChernogramAvatar extends StatelessWidget {
     Uint8List? bytes;
     if (avatarBase64 != null && avatarBase64!.isNotEmpty) {
       try {
-        bytes = Uint8List.fromList(
-          const Base64Decoder().convert(avatarBase64!),
-        );
+        bytes = Uint8List.fromList(base64Decode(avatarBase64!));
       } catch (_) {}
     }
     final color = _palette[seed.hashCode.abs() % _palette.length];
@@ -483,10 +481,7 @@ class ChernogramAvatar extends StatelessWidget {
                   ),
                 ),
                 child: Center(
-                  child: ChernogramLogo(
-                    size: size * .66,
-                    tint: color,
-                  ),
+                  child: ChernogramLogo(size: size * .66, tint: color),
                 ),
               ),
       ),
