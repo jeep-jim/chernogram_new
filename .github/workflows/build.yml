@@ -82,7 +82,7 @@ jobs:
           set -o pipefail
           (
             set -euo pipefail
-            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
             flutter --version
             flutter pub get
             dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
@@ -343,6 +343,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf release-logs
-          git add RELEASE_021_STATUS.md RELEASE_021_ERROR.md 2>/dev/null || true
+          git add -A
           git commit -m "Сохранить результат выпуска LiveKit 0.21 [skip ci]" || exit 0
           git push origin HEAD:main
