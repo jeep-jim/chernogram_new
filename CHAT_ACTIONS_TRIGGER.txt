@@ -1,0 +1,1 @@
+Trigger copy/select and media long-press validation.
