@@ -1,0 +1,208 @@
+name: Validate LiveKit Calls v1
+
+on:
+  push:
+    branches:
+      - feature/livekit-calls-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-livekit-calls-v1
+  cancel-in-progress: true
+
+jobs:
+  broker:
+    if: github.actor != 'github-actions[bot]'
+    name: Validate Python broker and Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/livekit-calls-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/livekit_broker/requirements.txt
+
+      - name: Install broker dependencies
+        working-directory: services/livekit_broker
+        run: python -m pip install -r requirements.txt
+
+      - name: Test broker
+        working-directory: services/livekit_broker
+        run: |
+          python -m compileall -q broker.py test_broker.py
+          python -m unittest -v
+
+      - name: Validate Docker Compose
+        run: docker compose --env-file .env.livekit.example -f docker-compose.livekit.yml config
+
+      - name: Build broker image
+        run: docker build -t cernogram-livekit-broker-ci services/livekit_broker
+
+  android:
+    if: github.actor != 'github-actions[bot]'
+    name: Build Android LiveKit client
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/livekit-calls-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: false
+
+      - name: Materialize LiveKit source
+        run: python tooling/materialize_livekit_calls_v1.py
+
+      - name: Validate Flutter and build Android
+        run: |
+          flutter --version
+          flutter pub get
+          dart format lib/livekit_test_screen.dart lib/v12.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --debug
+
+      - name: Upload Android test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cernogram-livekit-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
+  windows:
+    if: github.actor != 'github-actions[bot]'
+    name: Build Windows LiveKit client
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/livekit-calls-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: false
+
+      - name: Materialize LiveKit source
+        shell: pwsh
+        run: python tooling/materialize_livekit_calls_v1.py
+
+      - name: Validate Flutter and build Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter --version
+          flutter config --enable-windows-desktop
+          if (-not (Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows --project-name chernogram --no-pub .
+          }
+          flutter pub get
+          dart format lib/livekit_test_screen.dart lib/v12.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build windows --debug
+
+      - name: Upload Windows test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: cernogram-livekit-windows-debug
+          path: build/windows/x64/runner/Debug
+          retention-days: 14
+
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    name: Save validated LiveKit source
+    needs:
+      - broker
+      - android
+      - windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/livekit-calls-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: false
+
+      - name: Materialize and lock validated source
+        run: |
+          set -euo pipefail
+          python tooling/materialize_livekit_calls_v1.py
+          flutter pub get
+          dart format lib/livekit_test_screen.dart lib/v12.dart
+          cat > LIVEKIT_CI_STATUS.md <<EOF
+          LiveKit Calls v1 ready
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Version: 0.21.0+51
+          Platforms: Android and Windows
+          Media: LiveKit room with microphone, camera and immediate hang-up
+          Broker: Python token service with short-lived room grants
+          Infrastructure: LiveKit Server, Redis and local TURN/UDP through Docker Compose
+          EOF
+
+      - name: Commit validated source
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .env.livekit.example \
+            .gitignore \
+            .github/workflows/livekit-calls-v1.yml \
+            LIVEKIT_CI_STATUS.md \
+            docker-compose.livekit.yml \
+            docs/LIVEKIT_CALLS_V1.md \
+            infra/livekit \
+            lib/livekit_test_screen.dart \
+            lib/v12.dart \
+            pubspec.yaml \
+            pubspec.lock \
+            services/livekit_broker \
+            tooling/materialize_livekit_calls_v1.py
+          git commit -m "Добавить LiveKit Core и тест Android ↔ Windows" || true
+          git push origin HEAD:feature/livekit-calls-v1
