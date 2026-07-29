@@ -22,6 +22,8 @@ import 'sound_service.dart';
 
 const String _landingBase =
     'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
+const String _androidInstallUrl =
+    'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk';
 
 class CgChatScreen extends StatefulWidget {
   final bool ru;
@@ -63,6 +65,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   bool _sendingFile = false;
   bool _hasText = false;
   CgMessage? _replyingTo;
+  final Set<String> _selectedMessageIds = <String>{};
 
   bool get _isOwner => widget.profile.id == _tunnel.ownerId;
 
@@ -116,6 +119,75 @@ class _CgChatScreenState extends State<CgChatScreen> {
     await widget.onForward?.call(message);
   }
 
+  void _toggleMessageSelection(CgMessage message) {
+    if (message.deleted) return;
+    setState(() {
+      if (!_selectedMessageIds.add(message.id)) {
+        _selectedMessageIds.remove(message.id);
+      }
+    });
+  }
+
+  List<CgMessage> get _selectedMessages => _tunnel.messages
+      .where((message) => _selectedMessageIds.contains(message.id))
+      .toList(growable: false);
+
+  Future<void> _copySelectedMessages() async {
+    final value = _selectedMessages
+        .map((message) => message.text.trim().isNotEmpty
+            ? message.text.trim()
+            : message.attachment?.name ?? '')
+        .where((value) => value.isNotEmpty)
+        .join('\n\n');
+    if (value.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: value));
+    }
+    if (mounted) setState(_selectedMessageIds.clear);
+  }
+
+  Future<void> _forwardSelectedMessages() async {
+    final selected = _selectedMessages;
+    for (final message in selected) {
+      await _forward(message);
+    }
+    if (mounted) setState(_selectedMessageIds.clear);
+  }
+
+  Future<void> _deleteSelectedMessages() async {
+    final selected = _selectedMessages
+        .where((message) => message.authorId == widget.profile.id)
+        .toList(growable: false);
+    for (final message in selected) {
+      await _deleteMessage(message);
+    }
+    if (mounted) setState(_selectedMessageIds.clear);
+  }
+
+  void _sendMessageBackground(CgMessage message) {
+    final session = _session;
+    if (session == null) {
+      unawaited(_connect().then((_) => _session?.sendMessage(message.toJson())));
+      return;
+    }
+    unawaited(
+      session.sendMessage(message.toJson()).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {},
+      ),
+    );
+  }
+
+  void _sendControlBackground(Map<String, dynamic> control) {
+    final session = _session;
+    if (session == null) return;
+    unawaited(
+      session.sendControl(control).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {},
+      ),
+    );
+  }
+
   Future<void> _connect() async {
     try {
       final session = await InternetRelay.open(
@@ -146,7 +218,6 @@ class _CgChatScreenState extends State<CgChatScreen> {
       case 'message':
         if (event.data['message'] is Map) {
           final raw = Map<String, dynamic>.from(event.data['message'] as Map);
-          _playIncomingMessageSound(raw);
           _playIncomingMessageSound(raw);
           _mergeMessages([raw]);
           _rememberContact(
@@ -343,7 +414,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     _text.clear();
     setState(() => _replyingTo = null);
     _appendLocal(message);
-    await _session?.sendMessage(message.toJson());
+    _sendMessageBackground(message);
   }
 
   void _appendLocal(CgMessage message) {
@@ -358,7 +429,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   Future<void> _deleteMessage(CgMessage message) async {
     if (message.authorId != widget.profile.id || message.deleted) return;
     _replaceMessage(message.copyWith(deleted: true));
-    await _session?.sendControl({
+    _sendControlBackground({
       'operationId': CgIds.random(24),
       'action': 'message_delete',
       'messageId': message.id,
@@ -381,7 +452,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     }
     if (nextUsers.isEmpty) reactions.remove(emoji);
     _replaceMessage(message.copyWith(reactions: reactions));
-    await _session?.sendControl({
+    _sendControlBackground({
       'operationId': CgIds.random(24),
       'action': 'reaction_toggle',
       'messageId': message.id,
@@ -544,7 +615,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
     );
     setState(() => _replyingTo = null);
     _appendLocal(message);
-    await _session?.sendMessage(message.toJson());
+    _sendMessageBackground(message);
   }
 
   Future<void> _sendVoice(File file, Duration duration) async {
@@ -761,11 +832,28 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 child: FilledButton.icon(
                   onPressed: () => Share.share(
                     widget.ru
-                        ? 'Открой чат в Чернограме: $_deepInvite\n\nЕсли приложение не открылось: $_inviteUrl'
-                        : 'Open the Chernogram chat: $_deepInvite\n\nIf the app did not open: $_inviteUrl',
+                        ? 'Открой чат в Чернограме: $_deepInvite\n\nСсылка через браузер: $_inviteUrl\n\nЕсли приложения ещё нет: $_androidInstallUrl'
+                        : 'Open the Chernogram chat: $_deepInvite\n\nBrowser link: $_inviteUrl\n\nInstall the app: $_androidInstallUrl',
                   ),
                   icon: const Icon(Icons.ios_share_rounded),
-                  label: Text(widget.ru ? 'Отправить ссылку' : 'Share invite'),
+                  label: Text(
+                    widget.ru ? 'Отправить чат и установку' : 'Share chat and install',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Share.share(
+                    widget.ru
+                        ? 'Установить Чернограм: $_androidInstallUrl'
+                        : 'Install Chernogram: $_androidInstallUrl',
+                  ),
+                  icon: const Icon(Icons.install_mobile_rounded),
+                  label: Text(
+                    widget.ru ? 'Только ссылка на установку' : 'Installation link only',
+                  ),
                 ),
               ),
             ],
@@ -777,7 +865,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
 
   Future<void> _sendTunnelSnapshot() async {
     if (!_isOwner) return;
-    await _session?.sendControl({
+    _sendControlBackground({
       'operationId': CgIds.random(24),
       'action': 'tunnel_update',
       'name': _tunnel.name,
@@ -791,7 +879,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   Future<void> _applyOwnerUpdate(CgTunnel updated) async {
     if (!_isOwner) return;
     final secretChanged = updated.secret != _tunnel.secret;
-    await _session?.sendControl({
+    _sendControlBackground({
       'operationId': CgIds.random(24),
       'action': 'tunnel_update',
       'name': updated.name,
@@ -1034,7 +1122,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
       },
     );
     _appendLocal(message);
-    await _session?.sendMessage(message.toJson());
+    _sendMessageBackground(message);
   }
 
   void _showNotConnected() {
@@ -1412,6 +1500,45 @@ class _CgChatScreenState extends State<CgChatScreen> {
                   ),
                 ),
               ),
+            if (_selectedMessageIds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),
+                child: Material(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(18),
+                  child: Row(
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () => setState(_selectedMessageIds.clear),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                      Expanded(
+                        child: Text(
+                          widget.ru
+                              ? 'Выбрано: ${_selectedMessageIds.length}'
+                              : 'Selected: ${_selectedMessageIds.length}',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: widget.ru ? 'Копировать' : 'Copy',
+                        onPressed: _copySelectedMessages,
+                        icon: const Icon(Icons.copy_rounded),
+                      ),
+                      IconButton(
+                        tooltip: widget.ru ? 'Переслать' : 'Forward',
+                        onPressed: _forwardSelectedMessages,
+                        icon: const Icon(Icons.forward_rounded),
+                      ),
+                      IconButton(
+                        tooltip: widget.ru ? 'Удалить свои' : 'Delete mine',
+                        onPressed: _deleteSelectedMessages,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Expanded(
               child: _tunnel.messages.isEmpty
                   ? _EmptyChat(
@@ -1428,13 +1555,58 @@ class _CgChatScreenState extends State<CgChatScreen> {
                             message.authorId == widget.profile.id ||
                             (message.authorId.isEmpty &&
                                 message.authorName == widget.profile.nickname);
-                        return _MessageBubble(
-                          message: message,
-                          mine: mine,
-                          groupChat: _isGroupChat,
-                          privacyLens: widget.privacyLens,
-                          ru: widget.ru,
-                          onLongPress: () => _showMessageActions(message),
+                        final selected =
+                            _selectedMessageIds.contains(message.id);
+                        final bubble = DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            border: selected
+                                ? Border.all(color: scheme.primary, width: 2)
+                                : null,
+                          ),
+                          child: _MessageBubble(
+                            message: message,
+                            mine: mine,
+                            groupChat: _isGroupChat,
+                            privacyLens: widget.privacyLens,
+                            ru: widget.ru,
+                            onLongPress: () => _toggleMessageSelection(message),
+                          ),
+                        );
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: _selectedMessageIds.isEmpty
+                              ? null
+                              : () => _toggleMessageSelection(message),
+                          child: _selectedMessageIds.isNotEmpty || message.deleted
+                              ? bubble
+                              : Dismissible(
+                                  key: ValueKey<String>('swipe:${message.id}'),
+                                  direction: DismissDirection.horizontal,
+                                  confirmDismiss: (direction) async {
+                                    if (direction == DismissDirection.startToEnd) {
+                                      _replyTo(message);
+                                    } else {
+                                      await _forward(message);
+                                    }
+                                    return false;
+                                  },
+                                  background: const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 18),
+                                      child: Icon(Icons.reply_rounded),
+                                    ),
+                                  ),
+                                  secondaryBackground: const Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(right: 18),
+                                      child: Icon(Icons.forward_rounded),
+                                    ),
+                                  ),
+                                  child: bubble,
+                                ),
                         );
                       },
                     ),

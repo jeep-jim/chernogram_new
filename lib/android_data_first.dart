@@ -16,14 +16,19 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_access.dart';
+import 'agent_screen.dart';
 import 'app_monitor.dart';
 import 'brand.dart';
 import 'chat_media.dart';
 import 'chat_screen.dart';
 import 'core_models.dart';
+import 'legacy_v16_features.dart';
+import 'permission_center.dart';
 
 const String _landingBase =
     'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
+const String _androidInstallUrl =
+    'https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk';
 
 class ChernogramDataFirst extends StatefulWidget {
   final bool ru;
@@ -63,20 +68,22 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   }
 
   Future<void> _bootstrap() async {
-    final profile = await CgStore.loadOrCreateProfile();
-    final tunnels = await CgStore.loadTunnels();
-    final contacts = await CgStore.loadContacts();
-    final privacyLens = await CgStore.loadPrivacyLens();
+    final values = await Future.wait<Object>(<Future<Object>>[
+      CgStore.loadOrCreateProfile(),
+      CgStore.loadTunnels(),
+      CgStore.loadContacts(),
+      CgStore.loadPrivacyLens(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _profile = profile;
-      _tunnels = tunnels;
-      _contacts = contacts;
-      _privacyLens = privacyLens;
+      _profile = values[0] as CgProfile;
+      _tunnels = values[1] as List<CgTunnel>;
+      _contacts = values[2] as List<CgContact>;
+      _privacyLens = values[3] as bool;
       _loading = false;
     });
-    await _syncMonitor();
-    await _listenLinks();
+    unawaited(_syncMonitor());
+    unawaited(_listenLinks());
   }
 
   Future<void> _syncMonitor() async {
@@ -177,7 +184,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       _tab = 0;
     });
     await CgStore.saveTunnels(_tunnels);
-    await _syncMonitor();
+    unawaited(_syncMonitor());
     await _openTunnel(tunnel);
   }
 
@@ -291,7 +298,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     );
     setState(() => _tunnels = [tunnel, ..._tunnels]);
     await CgStore.saveTunnels(_tunnels);
-    await _syncMonitor();
+    unawaited(_syncMonitor());
     return tunnel;
   }
 
@@ -457,8 +464,8 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
         '$_landingBase?invite=${Uri.encodeQueryComponent(tunnel.inviteToken)}';
     await Share.share(
       widget.ru
-          ? 'Присоединяйся ко мне в Чернограме: $url'
-          : 'Join me on Chernogram: $url',
+          ? 'Присоединяйся ко мне в Чернограме: $url\n\nЕсли приложения ещё нет, установи его: $_androidInstallUrl'
+          : 'Join me on Chernogram: $url\n\nIf the app is not installed yet: $_androidInstallUrl',
       subject: widget.ru ? 'Приглашение в Чернограм' : 'Chernogram invite',
     );
     if (mounted) await _openTunnel(tunnel);
@@ -508,7 +515,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       _tunnels = bundle.tunnels;
       _contacts = bundle.contacts;
     });
-    await _syncMonitor();
+    unawaited(_syncMonitor());
   }
 
   void _showMessage(String message) {
@@ -560,7 +567,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
         onProfileChanged: (profile) async {
           await CgStore.saveProfile(profile);
           if (mounted) setState(() => _profile = profile);
-          await _syncMonitor();
+          unawaited(_syncMonitor());
         },
         onRestore: _restoreIdentity,
         onCheckUpdates: widget.onCheckUpdates,
@@ -587,7 +594,9 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
           const SizedBox(width: 12),
         ],
       ),
-      body: IndexedStack(index: _tab, children: pages),
+      body: CgChatPatternBackground(
+        child: IndexedStack(index: _tab, children: pages),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (value) => setState(() => _tab = value),
@@ -1152,6 +1161,7 @@ class _FilesPageState extends State<_FilesPage> {
   final _search = TextEditingController();
   int _filter = 0;
   bool _busy = false;
+  final Set<String> _selectedFileIds = <String>{};
 
   List<_FileEntry> get _entries {
     final result = <_FileEntry>[];
@@ -1171,6 +1181,48 @@ class _FilesPageState extends State<_FilesPage> {
     }
     result.sort((a, b) => b.message.sentAt.compareTo(a.message.sentAt));
     return result;
+  }
+
+  void _toggleFileSelection(_FileEntry entry) {
+    setState(() {
+      if (!_selectedFileIds.add(entry.message.id)) {
+        _selectedFileIds.remove(entry.message.id);
+      }
+    });
+  }
+
+  List<_FileEntry> _selectedFiles(List<_FileEntry> entries) => entries
+      .where((entry) => _selectedFileIds.contains(entry.message.id))
+      .toList(growable: false);
+
+  Future<void> _shareSelectedFiles(List<_FileEntry> entries) async {
+    final files = <XFile>[];
+    for (final entry in _selectedFiles(entries)) {
+      final file = await _materialize(entry.attachment);
+      if (file != null) files.add(XFile(file.path));
+    }
+    if (files.isNotEmpty) await Share.shareXFiles(files);
+  }
+
+  Future<void> _clearSelectedLocalFiles(List<_FileEntry> entries) async {
+    var tunnels = widget.tunnels;
+    for (final entry in _selectedFiles(entries)) {
+      tunnels = await CgMediaStore.purgeItem(
+        tunnels,
+        CgMediaItem(
+          tunnelId: entry.tunnel.id,
+          tunnelName: entry.tunnel.displayName,
+          messageId: entry.message.id,
+          authorName: entry.message.authorName,
+          sentAt: entry.message.sentAt,
+          attachment: entry.attachment,
+        ),
+      );
+    }
+    for (final tunnel in tunnels) {
+      widget.onTunnelChanged(tunnel);
+    }
+    if (mounted) setState(_selectedFileIds.clear);
   }
 
   Future<File?> _materialize(CgAttachment attachment) async {
@@ -1419,6 +1471,40 @@ class _FilesPageState extends State<_FilesPage> {
             ],
           ),
         ),
+        if (_selectedFileIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+            child: Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(18),
+              child: Row(
+                children: <Widget>[
+                  IconButton(
+                    onPressed: () => setState(_selectedFileIds.clear),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                  Expanded(
+                    child: Text(
+                      widget.ru
+                          ? 'Выбрано: ${_selectedFileIds.length}'
+                          : 'Selected: ${_selectedFileIds.length}',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: widget.ru ? 'Отправить' : 'Share',
+                    onPressed: () => _shareSelectedFiles(entries),
+                    icon: const Icon(Icons.ios_share_rounded),
+                  ),
+                  IconButton(
+                    tooltip: widget.ru ? 'Удалить локальные копии' : 'Remove local copies',
+                    onPressed: () => _clearSelectedLocalFiles(entries),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         Expanded(
           child: entries.isEmpty
@@ -1456,11 +1542,17 @@ class _FilesPageState extends State<_FilesPage> {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final entry = entries[index];
+                    final selected = _selectedFileIds.contains(entry.message.id);
                     return Material(
-                      color: Theme.of(context).colorScheme.surface,
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary.withValues(alpha: .14)
+                          : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(22),
                       child: InkWell(
-                        onTap: () => _openEntry(entry),
+                        onTap: () => _selectedFileIds.isEmpty
+                            ? _openEntry(entry)
+                            : _toggleFileSelection(entry),
+                        onLongPress: () => _toggleFileSelection(entry),
                         borderRadius: BorderRadius.circular(22),
                         child: Padding(
                           padding: const EdgeInsets.all(13),
@@ -2089,6 +2181,131 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       _ProfileAction(
+        icon: Icons.admin_panel_settings_outlined,
+        title: ru ? 'Разрешения и приватность' : 'Permissions and privacy',
+        subtitle: ru
+            ? 'Уведомления, микрофон, камера, контакты, файлы и фон.'
+            : 'Notifications, microphone, camera, contacts, files and background.',
+        onTap: () => CgPermissionCenter.open(context, ru: ru),
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.privacy_tip_outlined,
+        title: ru ? 'Приватность' : 'Privacy',
+        subtitle: ru
+            ? 'Номер телефона, активность, звонки, группы и отчёты о прочтении.'
+            : 'Phone number, activity, calls, groups and read receipts.',
+        onTap: () {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgV16PrivacyScreen(ru: ru),
+              ),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.devices_rounded,
+        title: ru ? 'Два устройства' : 'Two devices',
+        subtitle: ru
+            ? 'Один аккаунт — телефон и компьютер.'
+            : 'One account on phone and computer.',
+        onTap: () {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgV16TwoDevicesScreen(
+                  ru: ru,
+                  profile: profile,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.phonelink_lock_rounded,
+        title: ru ? 'Активные сессии' : 'Active sessions',
+        subtitle: ru
+            ? 'Устройства, где сейчас открыт ваш аккаунт.'
+            : 'Devices where your account is currently open.',
+        onTap: () {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgV16SessionsScreen(
+                  ru: ru,
+                  profile: profile,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.contacts_outlined,
+        title: ru ? 'Системные контакты' : 'System contacts',
+        subtitle: ru
+            ? 'Телефонная книга и приглашения в Чернограм.'
+            : 'Phone book and Chernogram invites.',
+        onTap: () {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgV16SystemContactsScreen(ru: ru),
+              ),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.auto_awesome_rounded,
+        title: ru ? 'Агент и автоматизация' : 'Agent and automation',
+        subtitle: ru
+            ? 'Помощник, голосовые команды и локальные задачи.'
+            : 'Assistant, voice commands and local tasks.',
+        onTap: () {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CgAgentScreen(
+                  ru: ru,
+                  profile: profile,
+                  tunnels: tunnels,
+                  privacyLens: privacyLens,
+                  onCreateTunnel: () {},
+                  onTogglePrivacy: () {},
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.install_mobile_rounded,
+        title: ru ? 'Отправить приложение' : 'Share the app',
+        subtitle: ru
+            ? 'Прямая ссылка на установку актуальной Android-версии.'
+            : 'Direct link to install the current Android version.',
+        onTap: () => Share.share(
+          ru
+              ? 'Установить Чернограм: $_androidInstallUrl'
+              : 'Install Chernogram: $_androidInstallUrl',
+        ),
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
         icon: Icons.fingerprint_rounded,
         title: ru ? 'Доступ и перенос аккаунта' : 'Access and account transfer',
         subtitle: ru
@@ -2101,8 +2318,8 @@ class _ProfilePage extends StatelessWidget {
         icon: Icons.system_update_alt_rounded,
         title: ru ? 'Проверить обновления' : 'Check updates',
         subtitle: ru
-            ? 'Только Android до стабилизации связи.'
-            : 'Android only until realtime is stable.',
+            ? 'Обновления Android устанавливаются прямо из приложения.'
+            : 'Android updates install directly from the app.',
         onTap: onCheckUpdates,
       ),
       const SizedBox(height: 8),

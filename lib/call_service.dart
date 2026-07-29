@@ -137,13 +137,13 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
           'video': widget.video
               ? <String, dynamic>{
                   'facingMode': 'user',
-                  'width': <String, dynamic>{'ideal': 1280},
-                  'height': <String, dynamic>{'ideal': 720},
-                  'frameRate': <String, dynamic>{'ideal': 30, 'max': 30},
+                  'width': <String, dynamic>{'ideal': 640},
+                  'height': <String, dynamic>{'ideal': 480},
+                  'frameRate': <String, dynamic>{'ideal': 24, 'max': 24},
                 }
               : false,
         },
-      );
+      ).timeout(const Duration(seconds: 9));
 
       final peer = await createPeerConnection(<String, dynamic>{
         'iceServers': <Map<String, dynamic>>[
@@ -231,7 +231,10 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
       for (final track in stream.getTracks()) {
         await peer.addTrack(track, stream);
       }
-      await Helper.setSpeakerphoneOn(true);
+      await Helper.setSpeakerphoneOn(true).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
 
       if (!mounted) {
         await peer.close();
@@ -251,7 +254,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
 
       if (widget.isCaller) {
         await _sendInvite();
-        _inviteTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        _inviteTimer = Timer.periodic(const Duration(seconds: 5), (_) {
           if (_connectedAt == null && _peerId == null && !_ended) {
             unawaited(_sendInvite());
           }
@@ -499,13 +502,15 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   Future<void> _sendSignal(Map<String, dynamic> data) async {
     final session = _session;
     if (session == null || _ended) return;
-    await session.sendSignal(<String, dynamic>{
-      ...data,
-      'callId': _callId,
-      'from': _profileId,
-      'video': widget.video,
-      if (_peerId != null && _peerId!.isNotEmpty) 'target': _peerId,
-    });
+    await session
+        .sendSignal(<String, dynamic>{
+          ...data,
+          'callId': _callId,
+          'from': _profileId,
+          'video': widget.video,
+          if (_peerId != null && _peerId!.isNotEmpty) 'target': _peerId,
+        })
+        .timeout(const Duration(seconds: 5), onTimeout: () {});
   }
 
   void _markConnected() {
@@ -555,7 +560,7 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
 
   Future<void> _hangUp() async {
     if (_ended) return;
-    await _sendSignal(<String, dynamic>{'action': 'call_end'});
+    unawaited(_sendSignal(<String, dynamic>{'action': 'call_end'}));
     _finish(_connectedAt == null ? 'cancelled' : 'completed');
   }
 

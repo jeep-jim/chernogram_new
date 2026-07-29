@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -229,7 +228,7 @@ class GlassPanel extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(16),
     this.borderRadius = const BorderRadius.all(Radius.circular(24)),
-    this.blur = 18,
+    this.blur = 0,
     this.color,
   });
 
@@ -237,25 +236,24 @@ class GlassPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: color ?? scheme.surface.withValues(alpha: dark ? .76 : .88),
-            borderRadius: borderRadius,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: dark ? .15 : .05),
-                blurRadius: 24,
-                offset: const Offset(0, 9),
-              ),
-            ],
+    return RepaintBoundary(
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: color ?? scheme.surface.withValues(alpha: dark ? .94 : .98),
+          borderRadius: borderRadius,
+          border: Border.all(
+            color: scheme.onSurface.withValues(alpha: dark ? .055 : .045),
           ),
-          child: child,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? .10 : .035),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
+        child: child,
       ),
     );
   }
@@ -311,6 +309,7 @@ class ChernogramLogo extends StatelessWidget {
   final double size;
   final bool withPlate;
   final double progress;
+  final double wavePhase;
   final Color? tint;
 
   const ChernogramLogo({
@@ -318,6 +317,7 @@ class ChernogramLogo extends StatelessWidget {
     required this.size,
     this.withPlate = false,
     this.progress = 1,
+    this.wavePhase = 0,
     this.tint,
   });
 
@@ -327,6 +327,7 @@ class ChernogramLogo extends StatelessWidget {
       size: Size.square(size),
       painter: _ChernogramFacePainter(
         progress: progress.clamp(0.0, 1.0).toDouble(),
+        wavePhase: wavePhase,
         tint: tint,
       ),
     );
@@ -336,7 +337,7 @@ class ChernogramLogo extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          boxShadow: [
+          boxShadow: <BoxShadow>[
             BoxShadow(
               color: (tint ?? ChernogramColors.violet).withValues(alpha: .16),
               blurRadius: size * .42,
@@ -352,9 +353,14 @@ class ChernogramLogo extends StatelessWidget {
 
 class _ChernogramFacePainter extends CustomPainter {
   final double progress;
+  final double wavePhase;
   final Color? tint;
 
-  const _ChernogramFacePainter({required this.progress, this.tint});
+  const _ChernogramFacePainter({
+    required this.progress,
+    required this.wavePhase,
+    this.tint,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -368,12 +374,16 @@ class _ChernogramFacePainter extends CustomPainter {
         ? const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFB9A8FF), Color(0xFF7B5CFF), Color(0xFF20C7FF)],
+            colors: <Color>[
+              Color(0xFFB9A8FF),
+              Color(0xFF7B5CFF),
+              Color(0xFF20C7FF),
+            ],
           ).createShader(rect)
         : LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
+            colors: <Color>[
               Color.lerp(tint!, Colors.white, .34)!,
               tint!,
               Color.lerp(tint!, ChernogramColors.cyan, .38)!,
@@ -392,8 +402,13 @@ class _ChernogramFacePainter extends CustomPainter {
       final stagger = (progress * 1.42 - t * .34).clamp(0.0, 1.0);
       final eased = Curves.easeOutCubic.transform(stagger.toDouble());
       if (eased <= 0) continue;
-      final animatedTop = centerY + (top - centerY) * eased;
-      final animatedBottom = centerY + (bottom - centerY) * eased;
+      final pulse = wavePhase == 0
+          ? 0.0
+          : math.sin(wavePhase * math.pi * 2 + index * .88) *
+                size.height *
+                .042;
+      final animatedTop = centerY + (top - centerY) * eased + pulse;
+      final animatedBottom = centerY + (bottom - centerY) * eased - pulse;
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
@@ -431,7 +446,9 @@ class _ChernogramFacePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ChernogramFacePainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.tint != tint;
+      oldDelegate.progress != progress ||
+      oldDelegate.wavePhase != wavePhase ||
+      oldDelegate.tint != tint;
 }
 
 class ChernogramAvatar extends StatelessWidget {
@@ -508,13 +525,13 @@ class _ChernogramEqualizerLogoState extends State<ChernogramEqualizerLogo>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 920),
+    duration: const Duration(milliseconds: 1180),
   );
 
   @override
   void initState() {
     super.initState();
-    if (widget.active) _controller.repeat(reverse: true);
+    if (widget.active) _controller.repeat();
   }
 
   @override
@@ -522,22 +539,21 @@ class _ChernogramEqualizerLogoState extends State<ChernogramEqualizerLogo>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.active == widget.active) return;
     if (widget.active) {
-      _controller.repeat(reverse: true);
+      _controller.repeat();
     } else {
-      _controller.animateTo(1, duration: const Duration(milliseconds: 240));
+      _controller.stop();
+      _controller.value = 0;
     }
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, _) => Transform.scale(
-      scale: widget.active
-          ? .96 + math.sin(_controller.value * math.pi) * .05
-          : 1,
-      child: ChernogramLogo(
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => ChernogramLogo(
         size: widget.size,
-        progress: widget.active ? .62 + _controller.value * .38 : 1,
+        progress: 1,
+        wavePhase: widget.active ? _controller.value : 0,
       ),
     ),
   );
@@ -587,51 +603,92 @@ class BrandHeader extends StatelessWidget {
   );
 }
 
-class CgChatPatternBackground extends StatelessWidget {
+class CgChatPatternBackground extends StatefulWidget {
   final Widget child;
 
   const CgChatPatternBackground({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) => CustomPaint(
-    painter: _ChatPatternPainter(
-      dark: Theme.of(context).brightness == Brightness.dark,
-      accent: Theme.of(context).colorScheme.primary,
-    ),
-    child: child,
-  );
+  State<CgChatPatternBackground> createState() =>
+      _CgChatPatternBackgroundState();
 }
 
-class _ChatPatternPainter extends CustomPainter {
+class _CgChatPatternBackgroundState extends State<CgChatPatternBackground>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 18),
+  )..repeat();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _LivingWavePainter(
+          animation: _controller,
+          dark: theme.brightness == Brightness.dark,
+          accent: theme.colorScheme.primary,
+          secondary: theme.colorScheme.secondary,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+class _LivingWavePainter extends CustomPainter {
+  final Animation<double> animation;
   final bool dark;
   final Color accent;
+  final Color secondary;
 
-  const _ChatPatternPainter({required this.dark, required this.accent});
+  _LivingWavePainter({
+    required this.animation,
+    required this.dark,
+    required this.accent,
+    required this.secondary,
+  }) : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = accent.withValues(alpha: dark ? .038 : .032)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
-    const step = 72.0;
-    for (double y = -step; y < size.height + step; y += step) {
-      final shift = ((y / step).round().isEven) ? 0.0 : step / 2;
-      for (double x = -step + shift; x < size.width + step; x += step) {
-        final center = Offset(x, y);
-        canvas.drawCircle(center, 8, paint);
-        canvas.drawLine(
-          Offset(center.dx - 11, center.dy + 13),
-          Offset(center.dx + 11, center.dy - 13),
-          paint,
-        );
+    final phase = animation.value * math.pi * 2;
+    final baseAlpha = dark ? .050 : .044;
+    for (var line = 0; line < 5; line++) {
+      final path = Path();
+      final baseY = size.height * (.13 + line * .19);
+      final amplitude = 20.0 + line * 4.5;
+      for (double x = -24; x <= size.width + 24; x += 12) {
+        final y = baseY +
+            math.sin(x / 92 + phase + line * .72) * amplitude +
+            math.sin(x / 210 - phase * .62 + line) * amplitude * .42;
+        if (x == -24) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
       }
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = line == 2 ? 1.5 : 1.05
+        ..strokeCap = StrokeCap.round
+        ..color = Color.lerp(accent, secondary, line / 4)!
+            .withValues(alpha: baseAlpha + (line == 2 ? .018 : 0));
+      canvas.drawPath(path, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ChatPatternPainter oldDelegate) =>
-      oldDelegate.dark != dark || oldDelegate.accent != accent;
+  bool shouldRepaint(covariant _LivingWavePainter oldDelegate) =>
+      oldDelegate.dark != dark ||
+      oldDelegate.accent != accent ||
+      oldDelegate.secondary != secondary;
 }
 
 class ChernogramAnimatedIntro extends StatefulWidget {

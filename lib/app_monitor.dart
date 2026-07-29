@@ -60,18 +60,24 @@ class ChernogramAppMonitor {
       ..clear()
       ..addEntries(tunnels.map((tunnel) => MapEntry(tunnel.id, tunnel)));
 
-    final activeIds = tunnels.map((tunnel) => tunnel.id).toSet();
+    final recent = tunnels.toList()
+      ..sort((a, b) {
+        final aTime = a.messages.isEmpty ? a.createdAt : a.messages.last.sentAt;
+        final bTime = b.messages.isEmpty ? b.createdAt : b.messages.last.sentAt;
+        return bTime.compareTo(aTime);
+      });
+    final monitored = recent.take(8).toList(growable: false);
+    final activeIds = monitored.map((tunnel) => tunnel.id).toSet();
     final obsolete = _subscriptions.keys
         .where((tunnelId) => !activeIds.contains(tunnelId))
         .toList();
     for (final tunnelId in obsolete) {
       await _subscriptions.remove(tunnelId)?.cancel();
       _sessions.remove(tunnelId);
+      unawaited(InternetRelay.close(tunnelId));
     }
 
-    for (final tunnel in tunnels) {
-      await _ensureTunnel(tunnel);
-    }
+    await Future.wait(monitored.map(_ensureTunnel));
   }
 
   static Future<void> _ensureTunnel(CgTunnel tunnel) async {
