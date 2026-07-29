@@ -1,7 +1,7 @@
 # Android Data First CI failed
 
-Commit: 07d5f5535561e6de27470d6ed0dcc9ed3d3a9975
-Time: 2026-07-29T09:38:24Z
+Commit: 022a63393317ecb38977f05ae7f9617b36eaff6c
+Time: 2026-07-29T09:41:56Z
 
 ## android-data-first-ci.log
 ```text
@@ -141,7 +141,7 @@ warning • Unused import: 'core_models.dart'. Try removing the import directive
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1100:20 • curly_braces_in_flow_control_structures
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:408:7 • use_build_context_synchronously
 
-17 issues found. (ran in 12.4s)
+17 issues found. (ran in 12.7s)
 ```
 
 ## signing-key.txt
