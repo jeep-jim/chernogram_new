@@ -1,0 +1,73 @@
+name: Diagnose Chernogram 0.23 Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-023-diagnostics.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: fix/realtime-ui-023
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Run exact repair diagnostics
+        id: diagnose
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            python tooling/apply_repair_023.py
+            flutter pub get
+            dart format lib tooling/apply_repair_023.py
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+          ) 2>&1 | tee /tmp/repair-023-diagnostics.log
+      - name: Commit exact diagnostic log
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.diagnose.outcome }}
+        run: |
+          set -euo pipefail
+          cp /tmp/repair-023-diagnostics.log /tmp/repair.log 2>/dev/null || true
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo "# Chernogram 0.23 diagnostics"
+            echo
+            echo "Outcome: ${OUTCOME}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo '```text'
+            tail -n 1600 /tmp/repair.log 2>/dev/null || true
+            echo '```'
+          } > REPAIR_023_DIAGNOSTICS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add REPAIR_023_DIAGNOSTICS.md
+          git commit -m "Сохранить точную диагностику ремонта 0.23 [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
+          test "$OUTCOME" = success
