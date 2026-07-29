@@ -83,11 +83,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
         return;
       }
       unawaited(
-        ChernogramUpdater.checkAndPrompt(
-          context,
-          ru: _ru!,
-          manual: false,
-        ),
+        ChernogramUpdater.checkAndPrompt(context, ru: _ru!, manual: false),
       );
     });
   }

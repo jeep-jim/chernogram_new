@@ -18,6 +18,7 @@ class ChernogramColors {
   static const success = Color(0xFF28D7A1);
   static const danger = Color(0xFFFF4D67);
 
+  static const purple = violet;
   static const orange = violet;
   static const orangeDeep = violetDeep;
   static const gold = cyan;
@@ -25,18 +26,19 @@ class ChernogramColors {
 }
 
 ThemeData chernogramTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: ChernogramColors.violet,
-    brightness: Brightness.dark,
-    surface: ChernogramColors.surface,
-  ).copyWith(
-    primary: ChernogramColors.violet,
-    secondary: ChernogramColors.cyan,
-    tertiary: ChernogramColors.cyanLight,
-    surface: ChernogramColors.surface,
-    surfaceContainerHighest: ChernogramColors.surfaceHigh,
-    error: ChernogramColors.danger,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: ChernogramColors.violet,
+        brightness: Brightness.dark,
+        surface: ChernogramColors.surface,
+      ).copyWith(
+        primary: ChernogramColors.violet,
+        secondary: ChernogramColors.cyan,
+        tertiary: ChernogramColors.cyanLight,
+        surface: ChernogramColors.surface,
+        surfaceContainerHighest: ChernogramColors.surfaceHigh,
+        error: ChernogramColors.danger,
+      );
   return _themeFromScheme(
     scheme,
     scaffold: ChernogramColors.background,
@@ -48,19 +50,20 @@ ThemeData chernogramLightTheme() {
   const scaffold = Color(0xFFF2F5FC);
   const surface = Color(0xFFFFFFFF);
   const surfaceHigh = Color(0xFFE8EDF7);
-  final scheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF5B4CE6),
-    brightness: Brightness.light,
-    surface: surface,
-  ).copyWith(
-    primary: const Color(0xFF5B4CE6),
-    secondary: const Color(0xFF008FCF),
-    tertiary: const Color(0xFF6E5CF2),
-    surface: surface,
-    surfaceContainerHighest: surfaceHigh,
-    onSurface: const Color(0xFF11182A),
-    error: const Color(0xFFD62F50),
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: const Color(0xFF5B4CE6),
+        brightness: Brightness.light,
+        surface: surface,
+      ).copyWith(
+        primary: const Color(0xFF5B4CE6),
+        secondary: const Color(0xFF008FCF),
+        tertiary: const Color(0xFF6E5CF2),
+        surface: surface,
+        surfaceContainerHighest: surfaceHigh,
+        onSurface: const Color(0xFF11182A),
+        error: const Color(0xFFD62F50),
+      );
   return _themeFromScheme(
     scheme,
     scaffold: scaffold,
@@ -293,7 +296,8 @@ class GlassIconButton extends StatelessWidget {
             child: Icon(
               icon,
               size: 21,
-              color: foregroundColor ??
+              color:
+                  foregroundColor ??
                   (active ? scheme.primary : scheme.onSurface),
             ),
           ),
@@ -364,11 +368,7 @@ class _ChernogramFacePainter extends CustomPainter {
         ? const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFB9A8FF),
-              Color(0xFF7B5CFF),
-              Color(0xFF20C7FF),
-            ],
+            colors: [Color(0xFFB9A8FF), Color(0xFF7B5CFF), Color(0xFF20C7FF)],
           ).createShader(rect)
         : LinearGradient(
             begin: Alignment.topCenter,
@@ -386,8 +386,8 @@ class _ChernogramFacePainter extends CustomPainter {
       final x = size.width * (.14 + t * .72);
       final ellipse = math.sqrt(math.max(0, 1 - normalizedX * normalizedX));
       final top = topBase + (1 - ellipse) * size.height * .12;
-      final jaw = ellipse * faceHeight * .50 -
-          normalizedX.abs() * size.height * .035;
+      final jaw =
+          ellipse * faceHeight * .50 - normalizedX.abs() * size.height * .035;
       final bottom = centerY + jaw;
       final stagger = (progress * 1.42 - t * .34).clamp(0.0, 1.0);
       final eased = Curves.easeOutCubic.transform(stagger.toDouble());
@@ -530,17 +530,17 @@ class _ChernogramEqualizerLogoState extends State<ChernogramEqualizerLogo>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) => Transform.scale(
-          scale: widget.active
-              ? .96 + math.sin(_controller.value * math.pi) * .05
-              : 1,
-          child: ChernogramLogo(
-            size: widget.size,
-            progress: widget.active ? .62 + _controller.value * .38 : 1,
-          ),
-        ),
-      );
+    animation: _controller,
+    builder: (context, _) => Transform.scale(
+      scale: widget.active
+          ? .96 + math.sin(_controller.value * math.pi) * .05
+          : 1,
+      child: ChernogramLogo(
+        size: widget.size,
+        progress: widget.active ? .62 + _controller.value * .38 : 1,
+      ),
+    ),
+  );
 
   @override
   void dispose() {
@@ -554,42 +554,37 @@ class BrandHeader extends StatelessWidget {
   final bool ru;
   final VoidCallback? onTap;
 
-  const BrandHeader({
-    super.key,
-    this.subtitle,
-    this.ru = true,
-    this.onTap,
-  });
+  const BrandHeader({super.key, this.subtitle, this.ru = true, this.onTap});
 
   @override
   Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ChernogramLogo(size: 40),
-              if (subtitle != null) ...[
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    subtitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.3,
-                    ),
-                  ),
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(18),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ChernogramLogo(size: 40),
+          if (subtitle != null) ...[
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                subtitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.3,
                 ),
-              ],
-            ],
-          ),
-        ),
-      );
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 class CgChatPatternBackground extends StatelessWidget {
@@ -599,12 +594,12 @@ class CgChatPatternBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CustomPaint(
-        painter: _ChatPatternPainter(
-          dark: Theme.of(context).brightness == Brightness.dark,
-          accent: Theme.of(context).colorScheme.primary,
-        ),
-        child: child,
-      );
+    painter: _ChatPatternPainter(
+      dark: Theme.of(context).brightness == Brightness.dark,
+      accent: Theme.of(context).colorScheme.primary,
+    ),
+    child: child,
+  );
 }
 
 class _ChatPatternPainter extends CustomPainter {
@@ -671,17 +666,17 @@ class _ChernogramAnimatedIntroState extends State<ChernogramAnimatedIntro>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: ChernogramColors.background,
-        body: Center(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) => ChernogramLogo(
-              size: 148,
-              progress: Curves.easeOutCubic.transform(_controller.value),
-            ),
-          ),
+    backgroundColor: ChernogramColors.background,
+    body: Center(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) => ChernogramLogo(
+          size: 148,
+          progress: Curves.easeOutCubic.transform(_controller.value),
         ),
-      );
+      ),
+    ),
+  );
 
   @override
   void dispose() {

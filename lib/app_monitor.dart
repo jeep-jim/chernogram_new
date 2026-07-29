@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'app_navigation.dart';
 import 'brand.dart';
 import 'call_service.dart';
+import 'chat_media.dart';
 import 'core_models.dart';
 import 'group_call_service.dart';
 import 'internet_core.dart';
@@ -140,11 +141,15 @@ class ChernogramAppMonitor {
     final profile = _profile;
     final tunnel = _tunnels[tunnelId];
     if (profile == null || tunnel == null) return;
-    final message = CgMessage.fromJson(raw);
+    var message = CgMessage.fromJson(raw);
     if (message.id.isEmpty) return;
 
     final messages = <CgMessage>[...tunnel.messages];
     final index = messages.indexWhere((item) => item.id == message.id);
+    message = CgMediaStore.preserveLocalPurge(
+      index < 0 ? null : messages[index],
+      message,
+    );
     var changed = false;
     if (index < 0) {
       messages.add(message);
@@ -162,10 +167,8 @@ class ChernogramAppMonitor {
 
     if (message.authorId != profile.id) {
       _rememberContact(tunnelId, message.authorId, message.authorName);
-      final fresh = DateTime.now()
-              .difference(message.sentAt.toLocal())
-              .inSeconds
-              .abs() <=
+      final fresh =
+          DateTime.now().difference(message.sentAt.toLocal()).inSeconds.abs() <=
           30;
       if (playSound && fresh && CgMessageSoundRegistry.claim(message.id)) {
         unawaited(ChernogramSound.playMessage());
@@ -217,8 +220,7 @@ class ChernogramAppMonitor {
         name: data['name']?.toString() ?? tunnel.name,
         isPrivate: data['isPrivate'] != false,
         secret: data['secret']?.toString() ?? tunnel.secret,
-        avatarBase64:
-            data['avatarBase64']?.toString() ?? tunnel.avatarBase64,
+        avatarBase64: data['avatarBase64']?.toString() ?? tunnel.avatarBase64,
         revision: revision,
       );
       _tunnels[tunnelId] = updated;
@@ -247,9 +249,8 @@ class ChernogramAppMonitor {
     final action = signal['action']?.toString() ?? '';
     if (action != 'call_invite' && action != 'group_call_invite') return;
     final callId = signal['callId']?.toString() ?? '';
-    final from = signal['from']?.toString() ??
-        signal['relaySender']?.toString() ??
-        '';
+    final from =
+        signal['from']?.toString() ?? signal['relaySender']?.toString() ?? '';
     final profile = _profile;
     final tunnel = _tunnels[tunnelId];
     if (profile == null ||
@@ -260,7 +261,8 @@ class ChernogramAppMonitor {
         _dialogOpen) {
       return;
     }
-    final fromName = signal['fromName']?.toString() ??
+    final fromName =
+        signal['fromName']?.toString() ??
         signal['relaySenderName']?.toString() ??
         (_ru ? 'Собеседник' : 'Peer');
     final video = signal['video'] == true;
@@ -279,24 +281,24 @@ class ChernogramAppMonitor {
           group
               ? Icons.groups_2_rounded
               : video
-                  ? Icons.videocam_rounded
-                  : Icons.call_rounded,
+              ? Icons.videocam_rounded
+              : Icons.call_rounded,
           size: 40,
         ),
         title: Text(
           group
               ? (video
-                  ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
-                  : (_ru ? 'Групповой звонок' : 'Group call'))
+                    ? (_ru ? 'Групповой видеозвонок' : 'Group video call')
+                    : (_ru ? 'Групповой звонок' : 'Group call'))
               : (video
-                  ? (_ru ? 'Видеозвонок' : 'Video call')
-                  : (_ru ? 'Аудиозвонок' : 'Audio call')),
+                    ? (_ru ? 'Видеозвонок' : 'Video call')
+                    : (_ru ? 'Аудиозвонок' : 'Audio call')),
         ),
         content: Text(
           group
               ? (_ru
-                  ? '$fromName приглашает в звонок до 6 участников.'
-                  : '$fromName invites you to a call for up to 6 participants.')
+                    ? '$fromName приглашает в звонок до 6 участников.'
+                    : '$fromName invites you to a call for up to 6 participants.')
               : (_ru ? '$fromName звонит вам' : '$fromName is calling you'),
           textAlign: TextAlign.center,
         ),
@@ -346,14 +348,6 @@ class ChernogramAppMonitor {
       return;
     }
 
-    if (!group) {
-      await session?.sendSignal(<String, dynamic>{
-        'action': 'call_accept',
-        'callId': callId,
-        'from': profile.id,
-        'target': from,
-      });
-    }
     final navigator = chernogramNavigatorKey.currentState;
     if (navigator == null) return;
     final outcome = await navigator.push<CgCallOutcome>(
@@ -376,6 +370,7 @@ class ChernogramAppMonitor {
                 secret: tunnel.secret,
                 profileId: profile.id,
                 nickname: profile.nickname,
+                peerId: from,
                 peerName: fromName,
                 callId: callId,
                 isCaller: false,
@@ -430,6 +425,24 @@ class ChernogramAppMonitor {
     );
     _tunnels[tunnelId] = updated;
     _onTunnelChanged?.call(updated);
+  }
+
+  static Future<void> publishMessage({
+    required CgProfile profile,
+    required CgTunnel tunnel,
+    required CgMessage message,
+  }) async {
+    _profile ??= profile;
+    _tunnels[tunnel.id] = tunnel;
+    await _ensureTunnel(tunnel);
+    final session = _sessions[tunnel.id];
+    if (session == null) {
+      throw StateError('Room transport is unavailable');
+    }
+    session.replaceHistory(
+      tunnel.messages.map((item) => item.toJson()).toList(),
+    );
+    await session.sendMessage(message.toJson());
   }
 
   static Future<void> stop() async {

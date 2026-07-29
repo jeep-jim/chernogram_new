@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -15,6 +16,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_access.dart';
+import 'app_monitor.dart';
 import 'brand.dart';
 import 'chat_screen.dart';
 import 'core_models.dart';
@@ -69,7 +71,20 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       _contacts = contacts;
       _loading = false;
     });
+    await _syncMonitor();
     await _listenLinks();
+  }
+
+  Future<void> _syncMonitor() async {
+    final profile = _profile;
+    if (profile == null) return;
+    await ChernogramAppMonitor.sync(
+      profile: profile,
+      tunnels: _tunnels,
+      ru: widget.ru,
+      onTunnelChanged: _updateTunnel,
+      onContactSeen: _rememberContact,
+    );
   }
 
   Future<void> _listenLinks() async {
@@ -133,11 +148,11 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
             Text(
               tunnel.isPrivate
                   ? (widget.ru
-                      ? 'Закрытая комната. Вход по этому приглашению.'
-                      : 'Private room. Join with this invite.')
+                        ? 'Закрытая комната. Вход по этому приглашению.'
+                        : 'Private room. Join with this invite.')
                   : (widget.ru
-                      ? 'Открытая комната с общими чатами и файлами.'
-                      : 'Public room with shared chats and files.'),
+                        ? 'Открытая комната с общими чатами и файлами.'
+                        : 'Public room with shared chats and files.'),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 18),
@@ -158,6 +173,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       _tab = 0;
     });
     await CgStore.saveTunnels(_tunnels);
+    await _syncMonitor();
     await _openTunnel(tunnel);
   }
 
@@ -186,7 +202,10 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
             children: [
               Text(
                 widget.ru ? 'Новая комната' : 'New room',
-                style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -194,10 +213,9 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
                     ? 'Личная переписка, групповая комната или открытая папка файлов.'
                     : 'Direct chat, group room, or public file space.',
                 style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: .56),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .56),
                 ),
               ),
               const SizedBox(height: 16),
@@ -243,10 +261,10 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    (name: name.text.trim(), isPrivate: isPrivate),
-                  ),
+                  onPressed: () => Navigator.pop(context, (
+                    name: name.text.trim(),
+                    isPrivate: isPrivate,
+                  )),
                   icon: const Icon(Icons.arrow_forward_rounded),
                   label: Text(widget.ru ? 'Создать' : 'Create'),
                 ),
@@ -269,6 +287,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     );
     setState(() => _tunnels = [tunnel, ..._tunnels]);
     await CgStore.saveTunnels(_tunnels);
+    await _syncMonitor();
     return tunnel;
   }
 
@@ -277,10 +296,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     if (tunnel != null) await _openTunnel(tunnel, autoInvite: true);
   }
 
-  Future<void> _openTunnel(
-    CgTunnel tunnel, {
-    bool autoInvite = false,
-  }) async {
+  Future<void> _openTunnel(CgTunnel tunnel, {bool autoInvite = false}) async {
     final profile = _profile;
     if (profile == null || !mounted) return;
     await Navigator.push<void>(
@@ -310,11 +326,11 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
     copy.sort((a, b) => _lastActivity(b).compareTo(_lastActivity(a)));
     if (mounted) setState(() => _tunnels = copy);
     unawaited(CgStore.saveTunnels(copy));
+    unawaited(_syncMonitor());
   }
 
-  DateTime _lastActivity(CgTunnel tunnel) => tunnel.messages.isEmpty
-      ? tunnel.createdAt
-      : tunnel.messages.last.sentAt;
+  DateTime _lastActivity(CgTunnel tunnel) =>
+      tunnel.messages.isEmpty ? tunnel.createdAt : tunnel.messages.last.sentAt;
 
   void _rememberContact(CgContact incoming) {
     if (incoming.id.isEmpty || incoming.id == _profile?.id) return;
@@ -329,7 +345,10 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
             ? existing.nickname
             : incoming.nickname,
         lastSeenAt: incoming.lastSeenAt,
-        tunnelIds: <String>{...existing.tunnelIds, ...incoming.tunnelIds}.toList(),
+        tunnelIds: <String>{
+          ...existing.tunnelIds,
+          ...incoming.tunnelIds,
+        }.toList(),
         avatarBase64: incoming.avatarBase64 ?? existing.avatarBase64,
       );
     }
@@ -371,11 +390,15 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   }
 
   Future<void> _scanInvite() async {
-    _showMessage(
-      widget.ru
-          ? 'Сканер QR остаётся внутри окна добавления контакта и будет подключён следующим проходом.'
-          : 'The QR scanner stays inside the contact flow and will be connected in the next pass.',
+    final raw = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => CgInviteQrScanner(ru: widget.ru)),
     );
+    if (raw == null || raw.trim().isEmpty) return;
+    var token = raw.trim();
+    final uri = Uri.tryParse(token);
+    if (uri != null) token = _tokenFromUri(uri) ?? token;
+    await _joinToken(token);
   }
 
   Future<void> _openContacts() async {
@@ -396,9 +419,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   Future<void> _openPrelanding() async {
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(
-        builder: (_) => CgPrelandingPlaceholder(ru: widget.ru),
-      ),
+      MaterialPageRoute(builder: (_) => CgPrelandingPlaceholder(ru: widget.ru)),
     );
   }
 
@@ -412,11 +433,14 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       _tunnels = bundle.tunnels;
       _contacts = bundle.contacts;
     });
+    await _syncMonitor();
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -456,6 +480,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
         onProfileChanged: (profile) async {
           await CgStore.saveProfile(profile);
           if (mounted) setState(() => _profile = profile);
+          await _syncMonitor();
         },
         onRestore: _restoreIdentity,
         onCheckUpdates: widget.onCheckUpdates,
@@ -511,6 +536,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   @override
   void dispose() {
     unawaited(_linkSubscription?.cancel());
+    unawaited(ChernogramAppMonitor.stop());
     super.dispose();
   }
 }
@@ -545,7 +571,8 @@ class _ChatsPageState extends State<_ChatsPage> {
         .where((id) => id.isNotEmpty)
         .toSet();
     authors.add(tunnel.ownerId);
-    return authors.length > 2 || tunnel.messages.any((m) => m.meta['group'] == true);
+    return authors.length > 2 ||
+        tunnel.messages.any((m) => m.meta['group'] == true);
   }
 
   String _preview(CgTunnel tunnel) {
@@ -574,7 +601,8 @@ class _ChatsPageState extends State<_ChatsPage> {
           tunnel.messages.any(
             (message) =>
                 message.text.toLowerCase().contains(query) ||
-                (message.attachment?.name.toLowerCase().contains(query) ?? false),
+                (message.attachment?.name.toLowerCase().contains(query) ??
+                    false),
           );
     }).toList();
     return Column(
@@ -716,34 +744,34 @@ class _EmptyChats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ChernogramLogo(size: 96),
-              const SizedBox(height: 17),
-              Text(
-                ru ? 'Начните с комнаты' : 'Start with a room',
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                ru
-                    ? 'Личный чат, группа или открытое пространство для файлов.'
-                    : 'Direct chat, group, or public file space.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add_rounded),
-                label: Text(ru ? 'Создать комнату' : 'Create room'),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ChernogramLogo(size: 96),
+          const SizedBox(height: 17),
+          Text(
+            ru ? 'Начните с комнаты' : 'Start with a room',
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
           ),
-        ),
-      );
+          const SizedBox(height: 7),
+          Text(
+            ru
+                ? 'Личный чат, группа или открытое пространство для файлов.'
+                : 'Direct chat, group, or public file space.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: onCreate,
+            icon: const Icon(Icons.add_rounded),
+            label: Text(ru ? 'Создать комнату' : 'Create room'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ContactHub extends StatefulWidget {
@@ -778,7 +806,9 @@ class _ContactHubState extends State<_ContactHub> {
     try {
       final granted = await FlutterContacts.requestPermission(readonly: true);
       if (granted) {
-        final contacts = await FlutterContacts.getContacts(withProperties: true);
+        final contacts = await FlutterContacts.getContacts(
+          withProperties: true,
+        );
         contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
         if (mounted) setState(() => _phoneContacts = contacts);
       }
@@ -801,7 +831,10 @@ class _ContactHubState extends State<_ContactHub> {
                 Expanded(
                   child: Text(
                     widget.ru ? 'Новый диалог' : 'New conversation',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -828,7 +861,10 @@ class _ContactHubState extends State<_ContactHub> {
                   child: _QuickContactAction(
                     icon: Icons.qr_code_scanner_rounded,
                     label: 'QR',
-                    onTap: widget.onScan,
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onScan();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -850,7 +886,9 @@ class _ContactHubState extends State<_ContactHub> {
               style: ButtonStyle(
                 side: const WidgetStatePropertyAll(BorderSide.none),
                 shape: WidgetStatePropertyAll(
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
                 ),
               ),
               segments: [
@@ -873,80 +911,88 @@ class _ContactHubState extends State<_ContactHub> {
             Expanded(
               child: _section == 0
                   ? widget.contacts.isEmpty
-                      ? Center(
-                          child: Text(
-                            widget.ru
-                                ? 'Здесь появятся люди из ваших комнат.'
-                                : 'People from your rooms will appear here.',
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: widget.contacts.length,
-                          itemBuilder: (context, index) {
-                            final contact = widget.contacts[index];
-                            return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                              leading: ChernogramAvatar(
-                                size: 46,
-                                seed: contact.id,
-                                avatarBase64: contact.avatarBase64,
-                              ),
-                              title: Text(
-                                contact.nickname,
-                                style: const TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              subtitle: Text(
-                                widget.ru ? 'Открыть диалог' : 'Open conversation',
-                              ),
-                              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                              onTap: () async {
-                                Navigator.pop(context);
-                                await widget.onOpenKnown(contact);
-                              },
-                            );
-                          },
-                        )
-                  : _loadingPhone
-                      ? const Center(child: CircularProgressIndicator())
-                      : _phoneContacts.isEmpty
-                          ? Center(
-                              child: Text(
-                                widget.ru
-                                    ? 'Разрешите доступ к контактам, чтобы пригласить человека через любой мессенджер.'
-                                    : 'Allow contacts access to invite anyone through any messenger.',
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _phoneContacts.length,
-                              itemBuilder: (context, index) {
-                                final contact = _phoneContacts[index];
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                                  leading: ChernogramAvatar(
-                                    size: 46,
-                                    seed: contact.id,
-                                  ),
-                                  title: Text(
-                                    contact.displayName.isEmpty
-                                        ? (widget.ru ? 'Без имени' : 'Unnamed')
-                                        : contact.displayName,
-                                    style: const TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                  subtitle: Text(
-                                    widget.ru
-                                        ? 'Создать чат и отправить приглашение'
-                                        : 'Create chat and share invite',
-                                  ),
-                                  trailing: const Icon(Icons.ios_share_rounded),
-                                  onTap: () async {
-                                    Navigator.pop(context);
-                                    await widget.onInvitePhone(contact);
-                                  },
-                                );
-                              },
+                        ? Center(
+                            child: Text(
+                              widget.ru
+                                  ? 'Здесь появятся люди из ваших комнат.'
+                                  : 'People from your rooms will appear here.',
+                              textAlign: TextAlign.center,
                             ),
+                          )
+                        : ListView.builder(
+                            itemCount: widget.contacts.length,
+                            itemBuilder: (context, index) {
+                              final contact = widget.contacts[index];
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                leading: ChernogramAvatar(
+                                  size: 46,
+                                  seed: contact.id,
+                                  avatarBase64: contact.avatarBase64,
+                                ),
+                                title: Text(
+                                  contact.nickname,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  widget.ru
+                                      ? 'Открыть диалог'
+                                      : 'Open conversation',
+                                ),
+                                trailing: const Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 16,
+                                ),
+                                onTap: () async {
+                                  Navigator.pop(context);
+                                  await widget.onOpenKnown(contact);
+                                },
+                              );
+                            },
+                          )
+                  : _loadingPhone
+                  ? const Center(child: CircularProgressIndicator())
+                  : _phoneContacts.isEmpty
+                  ? Center(
+                      child: Text(
+                        widget.ru
+                            ? 'Разрешите доступ к контактам, чтобы пригласить человека через любой мессенджер.'
+                            : 'Allow contacts access to invite anyone through any messenger.',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _phoneContacts.length,
+                      itemBuilder: (context, index) {
+                        final contact = _phoneContacts[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          leading: ChernogramAvatar(size: 46, seed: contact.id),
+                          title: Text(
+                            contact.displayName.isEmpty
+                                ? (widget.ru ? 'Без имени' : 'Unnamed')
+                                : contact.displayName,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            widget.ru
+                                ? 'Создать чат и отправить приглашение'
+                                : 'Create chat and share invite',
+                          ),
+                          trailing: const Icon(Icons.ios_share_rounded),
+                          onTap: () async {
+                            Navigator.pop(context);
+                            await widget.onInvitePhone(contact);
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -968,23 +1014,23 @@ class _QuickContactAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(19),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(19),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 13),
-            child: Column(
-              children: [
-                Icon(icon),
-                const SizedBox(height: 6),
-                Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-              ],
-            ),
-          ),
+    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+    borderRadius: BorderRadius.circular(19),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(19),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Column(
+          children: [
+            Icon(icon),
+            const SizedBox(height: 6),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _FileEntry {
@@ -1033,7 +1079,13 @@ class _FilesPageState extends State<_FilesPage> {
       for (final message in tunnel.messages) {
         final attachment = message.attachment;
         if (attachment != null && !message.deleted) {
-          result.add(_FileEntry(tunnel: tunnel, message: message, attachment: attachment));
+          result.add(
+            _FileEntry(
+              tunnel: tunnel,
+              message: message,
+              attachment: attachment,
+            ),
+          );
         }
       }
     }
@@ -1047,7 +1099,10 @@ class _FilesPageState extends State<_FilesPage> {
     final raw = attachment.dataBase64;
     if (raw == null) return null;
     final directory = await getTemporaryDirectory();
-    final safeName = attachment.name.replaceAll(RegExp(r'[^A-Za-zА-Яа-я0-9._-]'), '_');
+    final safeName = attachment.name.replaceAll(
+      RegExp(r'[^A-Za-zА-Яа-я0-9._-]'),
+      '_',
+    );
     final file = File('${directory.path}/${attachment.id}_$safeName');
     await file.writeAsBytes(base64Decode(raw), flush: true);
     return file;
@@ -1073,7 +1128,9 @@ class _FilesPageState extends State<_FilesPage> {
   }
 
   Future<void> _publishFile() async {
-    final publicRooms = widget.tunnels.where((tunnel) => !tunnel.isPrivate).toList();
+    final publicRooms = widget.tunnels
+        .where((tunnel) => !tunnel.isPrivate)
+        .toList();
     if (publicRooms.isEmpty) {
       final create = await showModalBottomSheet<bool>(
         context: context,
@@ -1085,8 +1142,13 @@ class _FilesPageState extends State<_FilesPage> {
               const Icon(Icons.public_rounded, size: 50),
               const SizedBox(height: 12),
               Text(
-                widget.ru ? 'Нужна открытая комната' : 'A public room is required',
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+                widget.ru
+                    ? 'Нужна открытая комната'
+                    : 'A public room is required',
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 7),
               Text(
@@ -1110,7 +1172,10 @@ class _FilesPageState extends State<_FilesPage> {
       if (create == true) widget.onCreatePublicRoom();
       return;
     }
-    final result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
     if (result == null || result.files.isEmpty) return;
     final picked = result.files.first;
     final bytes = picked.bytes;
@@ -1175,6 +1240,11 @@ class _FilesPageState extends State<_FilesPage> {
       );
       final updated = room.copyWith(messages: [...room.messages, message]);
       widget.onTunnelChanged(updated);
+      await ChernogramAppMonitor.publishMessage(
+        profile: widget.profile,
+        tunnel: updated,
+        message: message,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1193,8 +1263,10 @@ class _FilesPageState extends State<_FilesPage> {
 
   String _kind(String name) {
     final ext = name.split('.').last.toLowerCase();
-    if ({'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'}.contains(ext)) return 'image';
-    if ({'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac'}.contains(ext)) return 'audio';
+    if ({'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'}.contains(ext))
+      return 'image';
+    if ({'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac'}.contains(ext))
+      return 'audio';
     if ({'mp4', 'mov', 'mkv', 'webm'}.contains(ext)) return 'video';
     if ({'zip', 'rar', '7z', 'tar', 'gz'}.contains(ext)) return 'archive';
     return 'document';
@@ -1279,8 +1351,13 @@ class _FilesPageState extends State<_FilesPage> {
                         const Icon(Icons.folder_open_rounded, size: 70),
                         const SizedBox(height: 12),
                         Text(
-                          widget.ru ? 'Файлы появятся здесь' : 'Files will appear here',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                          widget.ru
+                              ? 'Файлы появятся здесь'
+                              : 'Files will appear here',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -1313,10 +1390,9 @@ class _FilesPageState extends State<_FilesPage> {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: .13),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: .13),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Icon(_fileIcon(entry.attachment.kind)),
@@ -1330,7 +1406,9 @@ class _FilesPageState extends State<_FilesPage> {
                                       entry.attachment.name,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontWeight: FontWeight.w900),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                      ),
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
@@ -1363,12 +1441,12 @@ class _FilesPageState extends State<_FilesPage> {
   }
 
   IconData _fileIcon(String kind) => switch (kind) {
-        'image' => Icons.image_outlined,
-        'audio' => Icons.audio_file_outlined,
-        'video' => Icons.video_file_outlined,
-        'archive' => Icons.folder_zip_outlined,
-        _ => Icons.description_outlined,
-      };
+    'image' => Icons.image_outlined,
+    'audio' => Icons.audio_file_outlined,
+    'video' => Icons.video_file_outlined,
+    'archive' => Icons.folder_zip_outlined,
+    _ => Icons.description_outlined,
+  };
 
   String _fileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
@@ -1528,7 +1606,8 @@ class _MusicPageState extends State<_MusicPage> {
     });
     try {
       final directory = await getTemporaryDirectory();
-      final path = '${directory.path}/recognition_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path =
+          '${directory.path}/recognition_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -1540,11 +1619,16 @@ class _MusicPageState extends State<_MusicPage> {
       await Future<void>.delayed(const Duration(seconds: 12));
       final recordedPath = await _recorder.stop();
       if (recordedPath == null) throw StateError('Recording was not created');
-      final request = http.MultipartRequest('POST', Uri.parse('https://api.audd.io/'))
-        ..fields['api_token'] = token
-        ..fields['return'] = 'apple_music,spotify'
-        ..files.add(await http.MultipartFile.fromPath('file', recordedPath));
-      final response = await request.send().timeout(const Duration(seconds: 30));
+      final request =
+          http.MultipartRequest('POST', Uri.parse('https://api.audd.io/'))
+            ..fields['api_token'] = token
+            ..fields['return'] = 'apple_music,spotify'
+            ..files.add(
+              await http.MultipartFile.fromPath('file', recordedPath),
+            );
+      final response = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
       final body = await response.stream.bytesToString();
       if (response.statusCode != 200) {
         throw HttpException('Recognition HTTP ${response.statusCode}');
@@ -1589,7 +1673,10 @@ class _MusicPageState extends State<_MusicPage> {
           padding: const EdgeInsets.all(18),
           child: Column(
             children: [
-              ChernogramEqualizerLogo(size: 112, active: playing || _recognizing),
+              ChernogramEqualizerLogo(
+                size: 112,
+                active: playing || _recognizing,
+              ),
               const SizedBox(height: 12),
               Text(
                 _current?.attachment.name ??
@@ -1597,14 +1684,19 @@ class _MusicPageState extends State<_MusicPage> {
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               if (_current != null) ...[
                 const SizedBox(height: 3),
                 Text(
                   _current!.tunnel.displayName,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .52),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: .52),
                   ),
                 ),
               ],
@@ -1614,14 +1706,20 @@ class _MusicPageState extends State<_MusicPage> {
                 builder: (context, snapshot) {
                   final position = snapshot.data ?? Duration.zero;
                   final total = _player.duration ?? Duration.zero;
-                  final max = total.inMilliseconds <= 0 ? 1.0 : total.inMilliseconds.toDouble();
-                  final value = position.inMilliseconds.clamp(0, max.toInt()).toDouble();
+                  final max = total.inMilliseconds <= 0
+                      ? 1.0
+                      : total.inMilliseconds.toDouble();
+                  final value = position.inMilliseconds
+                      .clamp(0, max.toInt())
+                      .toDouble();
                   return Slider(
                     value: value,
                     max: max,
                     onChanged: _current == null
                         ? null
-                        : (next) => _player.seek(Duration(milliseconds: next.round())),
+                        : (next) => _player.seek(
+                            Duration(milliseconds: next.round()),
+                          ),
                   );
                 },
               ),
@@ -1646,7 +1744,9 @@ class _MusicPageState extends State<_MusicPage> {
                               await _player.play();
                             }
                           },
-                    icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                    icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   IconButton.filledTonal(
@@ -1667,7 +1767,9 @@ class _MusicPageState extends State<_MusicPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Text(
@@ -1702,7 +1804,9 @@ class _MusicPageState extends State<_MusicPage> {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               child: ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 leading: ChernogramAvatar(size: 44, seed: track.attachment.id),
                 title: Text(
                   track.attachment.name,
@@ -1791,7 +1895,8 @@ class _ProfilePage extends StatelessWidget {
       ),
     );
     controller.dispose();
-    if (value?.isNotEmpty == true) onProfileChanged(profile.copyWith(nickname: value));
+    if (value?.isNotEmpty == true)
+      onProfileChanged(profile.copyWith(nickname: value));
   }
 
   Future<void> _security(BuildContext context) async {
@@ -1810,83 +1915,92 @@ class _ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
-        children: [
-          GlassPanel(
-            child: Row(
-              children: [
-                ChernogramAvatar(
-                  size: 66,
-                  seed: profile.id,
-                  avatarBase64: profile.avatarBase64,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        profile.nickname,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'ID ${profile.id}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .48),
-                        ),
-                      ),
-                    ],
+    padding: const EdgeInsets.fromLTRB(14, 8, 14, 110),
+    children: [
+      GlassPanel(
+        child: Row(
+          children: [
+            ChernogramAvatar(
+              size: 66,
+              seed: profile.id,
+              avatarBase64: profile.avatarBase64,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    profile.nickname,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => _editProfile(context),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'ID ${profile.id}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: .48),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _ProfileAction(
-            icon: Icons.fingerprint_rounded,
-            title: ru ? 'Доступ и перенос аккаунта' : 'Access and account transfer',
-            subtitle: ru
-                ? 'PIN, отпечаток или лицо и зашифрованный код восстановления.'
-                : 'PIN, biometrics, and an encrypted recovery code.',
-            onTap: () => _security(context),
-          ),
-          const SizedBox(height: 8),
-          _ProfileAction(
-            icon: Icons.system_update_alt_rounded,
-            title: ru ? 'Проверить обновления' : 'Check updates',
-            subtitle: ru ? 'Только Android до стабилизации связи.' : 'Android only until realtime is stable.',
-            onTap: onCheckUpdates,
-          ),
-          const SizedBox(height: 8),
-          _ProfileAction(
-            icon: Icons.language_rounded,
-            title: ru ? 'English' : 'Русский',
-            subtitle: ru ? 'Сменить язык интерфейса.' : 'Change interface language.',
-            onTap: onChangeLanguage,
-          ),
-          const SizedBox(height: 18),
-          Text(
-            ru ? 'Приоритет' : 'Priority',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            ru
-                ? 'Быстрые чаты, звонки, видео и передача данных. Агент и функции ИИ удалены из навигации и больше не участвуют в продукте.'
-                : 'Fast chats, calls, video, and data transfer. Agent and AI features are removed from the product flow.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
-              height: 1.45,
+            IconButton(
+              onPressed: () => _editProfile(context),
+              icon: const Icon(Icons.edit_outlined),
             ),
-          ),
-        ],
-      );
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      _ProfileAction(
+        icon: Icons.fingerprint_rounded,
+        title: ru ? 'Доступ и перенос аккаунта' : 'Access and account transfer',
+        subtitle: ru
+            ? 'PIN, отпечаток или лицо и зашифрованный код восстановления.'
+            : 'PIN, biometrics, and an encrypted recovery code.',
+        onTap: () => _security(context),
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.system_update_alt_rounded,
+        title: ru ? 'Проверить обновления' : 'Check updates',
+        subtitle: ru
+            ? 'Только Android до стабилизации связи.'
+            : 'Android only until realtime is stable.',
+        onTap: onCheckUpdates,
+      ),
+      const SizedBox(height: 8),
+      _ProfileAction(
+        icon: Icons.language_rounded,
+        title: ru ? 'English' : 'Русский',
+        subtitle: ru
+            ? 'Сменить язык интерфейса.'
+            : 'Change interface language.',
+        onTap: onChangeLanguage,
+      ),
+      const SizedBox(height: 18),
+      Text(
+        ru ? 'Приоритет' : 'Priority',
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        ru
+            ? 'Быстрые чаты, звонки, видео и передача данных. Агент и функции ИИ удалены из навигации и больше не участвуют в продукте.'
+            : 'Fast chats, calls, video, and data transfer. Agent and AI features are removed from the product flow.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
+          height: 1.45,
+        ),
+      ),
+    ],
+  );
 }
 
 class _ProfileAction extends StatelessWidget {
@@ -1904,17 +2018,17 @@ class _ProfileAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(22),
-        child: ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          leading: Icon(icon),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-          subtitle: Text(subtitle),
-          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-          onTap: onTap,
-        ),
-      );
+    color: Theme.of(context).colorScheme.surface,
+    borderRadius: BorderRadius.circular(22),
+    child: ListTile(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      leading: Icon(icon),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+      onTap: onTap,
+    ),
+  );
 }
 
 class _SecuritySheet extends StatefulWidget {
@@ -1999,7 +2113,9 @@ class _SecuritySheetState extends State<_SecuritySheet> {
         );
         return;
       }
-      final verified = await CgAccountVault.authenticateBiometric(ru: widget.ru);
+      final verified = await CgAccountVault.authenticateBiometric(
+        ru: widget.ru,
+      );
       if (verified) {
         await CgAccountVault.setBiometricEnabled(true);
         _toast(widget.ru ? 'Биометрия включена.' : 'Biometrics enabled.');
@@ -2022,7 +2138,9 @@ class _SecuritySheetState extends State<_SecuritySheet> {
       );
       await Share.share(
         code,
-        subject: widget.ru ? 'Код восстановления Чернограма' : 'Chernogram recovery code',
+        subject: widget.ru
+            ? 'Код восстановления Чернограма'
+            : 'Chernogram recovery code',
       );
     } catch (error) {
       _toast(error.toString());
@@ -2037,7 +2155,9 @@ class _SecuritySheetState extends State<_SecuritySheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(widget.ru ? 'Войти на этом устройстве' : 'Sign in on this device'),
+        title: Text(
+          widget.ru ? 'Войти на этом устройстве' : 'Sign in on this device',
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2047,7 +2167,9 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                 minLines: 3,
                 maxLines: 6,
                 decoration: InputDecoration(
-                  labelText: widget.ru ? 'Код Chernogram ID' : 'Chernogram ID code',
+                  labelText: widget.ru
+                      ? 'Код Chernogram ID'
+                      : 'Chernogram ID code',
                 ),
               ),
               const SizedBox(height: 10),
@@ -2055,7 +2177,9 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                 controller: password,
                 obscureText: true,
                 decoration: InputDecoration(
-                  labelText: widget.ru ? 'Пароль восстановления' : 'Recovery password',
+                  labelText: widget.ru
+                      ? 'Пароль восстановления'
+                      : 'Recovery password',
                 ),
               ),
             ],
@@ -2085,9 +2209,15 @@ class _SecuritySheetState extends State<_SecuritySheet> {
         password: password.text,
       );
       widget.onRestore(bundle);
-      _toast(widget.ru ? 'Chernogram ID восстановлен.' : 'Chernogram ID restored.');
+      _toast(
+        widget.ru ? 'Chernogram ID восстановлен.' : 'Chernogram ID restored.',
+      );
     } catch (error) {
-      _toast(widget.ru ? 'Не удалось восстановить: $error' : 'Restore failed: $error');
+      _toast(
+        widget.ru
+            ? 'Не удалось восстановить: $error'
+            : 'Restore failed: $error',
+      );
     } finally {
       code.dispose();
       password.dispose();
@@ -2102,67 +2232,73 @@ class _SecuritySheetState extends State<_SecuritySheet> {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * .82,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          children: [
-            Text(
-              widget.ru ? 'Доступ к Chernogram ID' : 'Chernogram ID access',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              widget.ru
-                  ? 'Аккаунт остаётся локальным. Для другого устройства используется зашифрованный переносимый код, а на каждом устройстве — свой PIN или биометрия.'
-                  : 'The account remains local. A portable encrypted code moves it to another device, while each device uses its own PIN or biometrics.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .60),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _ProfileAction(
-              icon: Icons.pin_rounded,
-              title: widget.ru ? 'Установить PIN' : 'Set PIN',
-              subtitle: widget.ru
-                  ? 'Запрашивается при запуске приложения.'
-                  : 'Requested when the app starts.',
-              onTap: _busy ? () {} : _setPin,
-            ),
-            const SizedBox(height: 8),
-            _ProfileAction(
-              icon: Icons.fingerprint_rounded,
-              title: widget.ru ? 'Включить отпечаток или лицо' : 'Enable fingerprint or face',
-              subtitle: widget.ru
-                  ? 'Проверка выполняется системой Android.'
-                  : 'Authentication is handled by Android.',
-              onTap: _busy ? () {} : _enableBiometric,
-            ),
-            const SizedBox(height: 8),
-            _ProfileAction(
-              icon: Icons.key_rounded,
-              title: widget.ru ? 'Создать код восстановления' : 'Create recovery code',
-              subtitle: widget.ru
-                  ? 'Шифрует профиль, комнаты и контакты вашим паролем.'
-                  : 'Encrypts profile, rooms, and contacts with your password.',
-              onTap: _busy ? () {} : _export,
-            ),
-            const SizedBox(height: 8),
-            _ProfileAction(
-              icon: Icons.login_rounded,
-              title: widget.ru ? 'Войти по коду' : 'Sign in with code',
-              subtitle: widget.ru
-                  ? 'Восстановить тот же ID на другом устройстве.'
-                  : 'Restore the same ID on another device.',
-              onTap: _busy ? () {} : _import,
-            ),
-            if (_busy) ...[
-              const SizedBox(height: 18),
-              const Center(child: CircularProgressIndicator()),
-            ],
-          ],
+    height: MediaQuery.sizeOf(context).height * .82,
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      children: [
+        Text(
+          widget.ru ? 'Доступ к Chernogram ID' : 'Chernogram ID access',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
         ),
-      );
+        const SizedBox(height: 7),
+        Text(
+          widget.ru
+              ? 'Аккаунт остаётся локальным. Для другого устройства используется зашифрованный переносимый код, а на каждом устройстве — свой PIN или биометрия.'
+              : 'The account remains local. A portable encrypted code moves it to another device, while each device uses its own PIN or biometrics.',
+          style: TextStyle(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: .60),
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _ProfileAction(
+          icon: Icons.pin_rounded,
+          title: widget.ru ? 'Установить PIN' : 'Set PIN',
+          subtitle: widget.ru
+              ? 'Запрашивается при запуске приложения.'
+              : 'Requested when the app starts.',
+          onTap: _busy ? () {} : _setPin,
+        ),
+        const SizedBox(height: 8),
+        _ProfileAction(
+          icon: Icons.fingerprint_rounded,
+          title: widget.ru
+              ? 'Включить отпечаток или лицо'
+              : 'Enable fingerprint or face',
+          subtitle: widget.ru
+              ? 'Проверка выполняется системой Android.'
+              : 'Authentication is handled by Android.',
+          onTap: _busy ? () {} : _enableBiometric,
+        ),
+        const SizedBox(height: 8),
+        _ProfileAction(
+          icon: Icons.key_rounded,
+          title: widget.ru
+              ? 'Создать код восстановления'
+              : 'Create recovery code',
+          subtitle: widget.ru
+              ? 'Шифрует профиль, комнаты и контакты вашим паролем.'
+              : 'Encrypts profile, rooms, and contacts with your password.',
+          onTap: _busy ? () {} : _export,
+        ),
+        const SizedBox(height: 8),
+        _ProfileAction(
+          icon: Icons.login_rounded,
+          title: widget.ru ? 'Войти по коду' : 'Sign in with code',
+          subtitle: widget.ru
+              ? 'Восстановить тот же ID на другом устройстве.'
+              : 'Restore the same ID on another device.',
+          onTap: _busy ? () {} : _import,
+        ),
+        if (_busy) ...[
+          const SizedBox(height: 18),
+          const Center(child: CircularProgressIndicator()),
+        ],
+      ],
+    ),
+  );
 }
 
 class CgPrelandingPlaceholder extends StatelessWidget {
@@ -2172,37 +2308,108 @@ class CgPrelandingPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
+    appBar: AppBar(),
+    body: SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: GlassPanel(
               padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: GlassPanel(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      const ChernogramLogo(size: 132),
-                      const SizedBox(height: 18),
-                      Text(
-                        ru ? 'Что такое Чернограм' : 'What is Chernogram',
-                        style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        ru
-                            ? 'Прелендинг подготовлен. Здесь будет короткое объяснение сервиса: быстрые чаты, звонки и свободная передача данных между устройствами без рекламной ленты и ИИ-агента.'
-                            : 'The prelanding entry is prepared. It will explain fast chats, calls, and direct data transfer without an advertising feed or AI agent.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(height: 1.5),
-                      ),
-                    ],
+              child: Column(
+                children: [
+                  const ChernogramLogo(size: 132),
+                  const SizedBox(height: 18),
+                  Text(
+                    ru ? 'Что такое Чернограм' : 'What is Chernogram',
+                    style: const TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
+                  const SizedBox(height: 10),
+                  Text(
+                    ru
+                        ? 'Прелендинг подготовлен. Здесь будет короткое объяснение сервиса: быстрые чаты, звонки и свободная передача данных между устройствами без рекламной ленты и ИИ-агента.'
+                        : 'The prelanding entry is prepared. It will explain fast chats, calls, and direct data transfer without an advertising feed or AI agent.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class CgInviteQrScanner extends StatefulWidget {
+  final bool ru;
+
+  const CgInviteQrScanner({super.key, required this.ru});
+
+  @override
+  State<CgInviteQrScanner> createState() => _CgInviteQrScannerState();
+}
+
+class _CgInviteQrScannerState extends State<CgInviteQrScanner> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: const [BarcodeFormat.qrCode],
+  );
+  bool _handled = false;
+
+  void _detect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final barcode in capture.barcodes) {
+      final value = barcode.rawValue?.trim();
+      if (value == null || value.isEmpty) continue;
+      _handled = true;
+      Navigator.pop(context, value);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(widget.ru ? 'Сканировать приглашение' : 'Scan invite'),
+      actions: [
+        IconButton(
+          onPressed: _controller.toggleTorch,
+          icon: const Icon(Icons.flashlight_on_rounded),
+        ),
+      ],
+    ),
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        MobileScanner(controller: _controller, onDetect: _detect),
+        IgnorePointer(
+          child: Center(
+            child: Container(
+              width: 252,
+              height: 252,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 3,
                 ),
               ),
             ),
           ),
         ),
-      );
+      ],
+    ),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 }

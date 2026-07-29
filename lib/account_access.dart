@@ -135,11 +135,7 @@ class CgAccountVault {
     final salt = _randomBytes(16);
     final nonce = _randomBytes(12);
     final key = await _deriveSecret(password, salt);
-    final box = await _cipher.encrypt(
-      payload,
-      secretKey: key,
-      nonce: nonce,
-    );
+    final box = await _cipher.encrypt(payload, secretKey: key, nonce: nonce);
     final envelope = BytesBuilder(copy: false)
       ..addByte(_version)
       ..add(salt)
@@ -157,9 +153,7 @@ class CgAccountVault {
     if (!normalized.startsWith('CG1-')) {
       throw const FormatException('Unsupported Chernogram ID format');
     }
-    final raw = base64Url.decode(
-      base64Url.normalize(normalized.substring(4)),
-    );
+    final raw = base64Url.decode(base64Url.normalize(normalized.substring(4)));
     if (raw.length < 46 || raw.first != _version) {
       throw const FormatException('Damaged Chernogram ID');
     }
@@ -197,18 +191,12 @@ class CgAccountVault {
     return key.extractBytes();
   }
 
-  static Future<SecretKey> _deriveSecret(
-    String password,
-    List<int> salt,
-  ) =>
-      _kdf.deriveKey(
-        secretKey: SecretKey(utf8.encode(password)),
-        nonce: salt,
-      );
+  static Future<SecretKey> _deriveSecret(String password, List<int> salt) =>
+      _kdf.deriveKey(secretKey: SecretKey(utf8.encode(password)), nonce: salt);
 
   static Uint8List _randomBytes(int length) => Uint8List.fromList(
-        List<int>.generate(length, (_) => _random.nextInt(256)),
-      );
+    List<int>.generate(length, (_) => _random.nextInt(256)),
+  );
 
   static bool _constantTimeEquals(List<int> a, List<int> b) {
     if (a.length != b.length) return false;
@@ -224,11 +212,7 @@ class CgAccessGate extends StatefulWidget {
   final bool ru;
   final Widget child;
 
-  const CgAccessGate({
-    super.key,
-    required this.ru,
-    required this.child,
-  });
+  const CgAccessGate({super.key, required this.ru, required this.child});
 
   @override
   State<CgAccessGate> createState() => _CgAccessGateState();
@@ -298,9 +282,7 @@ class _CgAccessGateState extends State<CgAccessGate> {
   Widget build(BuildContext context) {
     if (_unlocked) return widget.child;
     if (_checking) {
-      return const Scaffold(
-        body: Center(child: ChernogramLogo(size: 132)),
-      );
+      return const Scaffold(body: Center(child: ChernogramLogo(size: 132)));
     }
     return Scaffold(
       body: SafeArea(
@@ -330,10 +312,9 @@ class _CgAccessGateState extends State<CgAccessGate> {
                           : 'Local protection never sends your fingerprint, face, or PIN online.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: .56),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: .56),
                       ),
                     ),
                     const SizedBox(height: 18),

@@ -114,7 +114,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         );
       }
 
-      final session = InternetRelay.session(tunnelId) ??
+      final session =
+          InternetRelay.session(tunnelId) ??
           await InternetRelay.open(
             tunnelId: tunnelId,
             secret: secret,
@@ -125,22 +126,24 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
       _session = session;
       _signalSubscription = session.events.listen(_onRelayEvent);
 
-      final stream = await navigator.mediaDevices.getUserMedia(<String, dynamic>{
-        'audio': <String, dynamic>{
-          'echoCancellation': true,
-          'noiseSuppression': true,
-          'autoGainControl': true,
-          'channelCount': 1,
+      final stream = await navigator.mediaDevices.getUserMedia(
+        <String, dynamic>{
+          'audio': <String, dynamic>{
+            'echoCancellation': true,
+            'noiseSuppression': true,
+            'autoGainControl': true,
+            'channelCount': 1,
+          },
+          'video': widget.video
+              ? <String, dynamic>{
+                  'facingMode': 'user',
+                  'width': <String, dynamic>{'ideal': 1280},
+                  'height': <String, dynamic>{'ideal': 720},
+                  'frameRate': <String, dynamic>{'ideal': 30, 'max': 30},
+                }
+              : false,
         },
-        'video': widget.video
-            ? <String, dynamic>{
-                'facingMode': 'user',
-                'width': <String, dynamic>{'ideal': 1280},
-                'height': <String, dynamic>{'ideal': 720},
-                'frameRate': <String, dynamic>{'ideal': 30, 'max': 30},
-              }
-            : false,
-      });
+      );
 
       final peer = await createPeerConnection(<String, dynamic>{
         'iceServers': <Map<String, dynamic>>[
@@ -253,14 +256,17 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
             unawaited(_sendInvite());
           }
         });
-        if (mounted) setState(() => _status = widget.ru ? 'Звоним…' : 'Calling…');
+        if (mounted)
+          setState(() => _status = widget.ru ? 'Звоним…' : 'Calling…');
       } else {
         await _sendReady();
         _readyTimer = Timer.periodic(const Duration(seconds: 2), (_) {
           if (!_remoteDescriptionSet && !_ended) unawaited(_sendReady());
         });
         if (mounted) {
-          setState(() => _status = widget.ru ? 'Принимаем звонок…' : 'Answering…');
+          setState(
+            () => _status = widget.ru ? 'Принимаем звонок…' : 'Answering…',
+          );
         }
       }
 
@@ -284,16 +290,16 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
   }
 
   Future<void> _sendInvite() => _sendSignal(<String, dynamic>{
-        'action': 'call_invite',
-        'video': widget.video,
-        'fromName': widget.nickname,
-      });
+    'action': 'call_invite',
+    'video': widget.video,
+    'fromName': widget.nickname,
+  });
 
   Future<void> _sendReady() => _sendSignal(<String, dynamic>{
-        'action': 'call_ready',
-        'video': widget.video,
-        'fromName': widget.nickname,
-      });
+    'action': 'call_ready',
+    'video': widget.video,
+    'fromName': widget.nickname,
+  });
 
   void _onRelayEvent(InternetEvent event) {
     if (event.type != 'signal') return;
@@ -304,10 +310,10 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
     if (data['callId']?.toString() != _callId) return;
     final target = data['target']?.toString();
     if (target != null && target.isNotEmpty && target != _profileId) return;
-    final sender = data['from']?.toString() ??
-        data['relaySender']?.toString() ??
-        '';
+    final sender =
+        data['from']?.toString() ?? data['relaySender']?.toString() ?? '';
     if (sender.isEmpty || sender == _profileId) return;
+    if (_peerId != null && _peerId!.isNotEmpty && _peerId != sender) return;
     _adoptPeer(sender);
     final action = data['action']?.toString() ?? '';
     switch (action) {
@@ -317,7 +323,9 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         break;
       case 'call_decline':
         if (mounted) {
-          setState(() => _status = widget.ru ? 'Звонок отклонён' : 'Call declined');
+          setState(
+            () => _status = widget.ru ? 'Звонок отклонён' : 'Call declined',
+          );
           Future<void>.delayed(const Duration(milliseconds: 500), () {
             if (mounted) _finish('declined');
           });
@@ -334,7 +342,9 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         break;
       case 'call_end':
         if (mounted) {
-          setState(() => _status = widget.ru ? 'Звонок завершён' : 'Call ended');
+          setState(
+            () => _status = widget.ru ? 'Звонок завершён' : 'Call ended',
+          );
           Future<void>.delayed(const Duration(milliseconds: 250), () {
             if (mounted) _finish(_connectedAt == null ? 'missed' : 'completed');
           });
@@ -374,15 +384,19 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
         }
       });
       if (mounted) {
-        setState(() => _status = widget.ru
-            ? 'Согласовываем защищённый канал…'
-            : 'Negotiating secure channel…');
+        setState(
+          () => _status = widget.ru
+              ? 'Согласовываем защищённый канал…'
+              : 'Negotiating secure channel…',
+        );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _status = widget.ru
-            ? 'Повторяем подключение…'
-            : 'Retrying connection…');
+        setState(
+          () => _status = widget.ru
+              ? 'Повторяем подключение…'
+              : 'Retrying connection…',
+        );
       }
     }
   }
@@ -670,7 +684,11 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                         OutlinedButton.icon(
                           onPressed: _recoverConnection,
                           icon: const Icon(Icons.refresh_rounded),
-                          label: Text(widget.ru ? 'Повторить соединение' : 'Retry connection'),
+                          label: Text(
+                            widget.ru
+                                ? 'Повторить соединение'
+                                : 'Retry connection',
+                          ),
                         ),
                       ],
                     ],
@@ -689,7 +707,8 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                     child: RTCVideoView(
                       _localRenderer,
                       mirror: true,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                      objectFit:
+                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                     ),
                   ),
                 ),
@@ -721,7 +740,9 @@ class _ChernogramCallScreenState extends State<ChernogramCallScreen> {
                       onPressed: _switchCamera,
                     ),
                   _CallControl(
-                    icon: _speaker ? Icons.volume_up_rounded : Icons.hearing_rounded,
+                    icon: _speaker
+                        ? Icons.volume_up_rounded
+                        : Icons.hearing_rounded,
                     active: _speaker,
                     onPressed: _toggleSpeaker,
                   ),
@@ -756,19 +777,20 @@ class _CallControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton.filled(
-        style: IconButton.styleFrom(
-          backgroundColor: danger
-              ? ChernogramColors.danger
-              : active
-                  ? Colors.white
-                  : Colors.white24,
-          foregroundColor: danger
-              ? Colors.white
-              : active
-                  ? const Color(0xFF10142A)
-                  : Colors.white,
-          minimumSize: const Size(54, 54),
-        ),
-        onPressed: () => onPressed(),
-        icon: Icon(icon),
-      );
+    style: IconButton.styleFrom(
+      backgroundColor: danger
+          ? ChernogramColors.danger
+          : active
+          ? Colors.white
+          : Colors.white24,
+      foregroundColor: danger
+          ? Colors.white
+          : active
+          ? const Color(0xFF10142A)
+          : Colors.white,
+      minimumSize: const Size(54, 54),
+    ),
+    onPressed: () => onPressed(),
+    icon: Icon(icon),
+  );
+}
