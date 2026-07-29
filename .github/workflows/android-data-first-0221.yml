@@ -1,0 +1,213 @@
+name: Build Android Data First 0.22.1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/android-data-first-0221.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-android-data-first-0221-final
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: feature/android-data-first-v1
+  EXPECTED_VERSION: 0.22.1+53
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Restore and verify signing key
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
+            keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
+            ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
+          ) 2>&1 | tee android-data-first-0221.log
+
+      - name: Materialize stable realtime and build
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            VERSION=$(awk '/^version:/ {print $2}' pubspec.yaml)
+            test "$VERSION" = "$EXPECTED_VERSION"
+            bash tooling/build_android_data_first.sh
+          ) 2>&1 | tee -a android-data-first-0221.log
+
+      - name: Sign and verify release APK
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$SOURCE_APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            test -n "$APKSIGNER"
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram-android-data-first.apk \
+              "$SOURCE_APK"
+            "$APKSIGNER" verify --print-certs chernogram-android-data-first.apk | tee apk-signature.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
+            sha256sum chernogram-android-data-first.apk | tee apk-sha256.txt
+          ) 2>&1 | tee -a android-data-first-0221.log
+
+      - name: Publish isolated Android preview
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            gh release delete android-data-first-preview --cleanup-tag --yes || true
+            gh release create android-data-first-preview \
+              chernogram-android-data-first.apk \
+              apk-sha256.txt \
+              --target "$SOURCE_BRANCH" \
+              --title "Чернограм Android Data First 0.22.1" \
+              --notes "Android-only preview: без ИИ-агента; Чаты, Файлы, Музыка и Профиль; фоновая связь по всем комнатам; реальная публикация общих файлов через зашифрованный транспорт. latest-apk и Windows не изменяются." \
+              --prerelease
+          ) 2>&1 | tee -a android-data-first-0221.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cernogram-android-data-first-0.22.1
+          path: |
+            chernogram-android-data-first.apk
+            apk-sha256.txt
+            android-data-first-0221.log
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit materialized source and verified status
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_BYTES=$(stat -c '%s' chernogram-android-data-first.apk)
+          APK_SHA=$(awk '{print $1}' apk-sha256.txt)
+          cat > ANDROID_DATA_FIRST_STATUS.md <<EOF
+          Android Data First ready
+          Version: ${EXPECTED_VERSION}
+          Source branch: ${SOURCE_BRANCH}
+          Stable transport base: published 0.9.1
+          Agent: removed from product and source entry points
+          Background room monitor: enabled
+          Incoming messages and calls outside an open chat: enabled while app is running
+          Public file publication through encrypted room transport: enabled
+          Flutter analyze: completed without fatal errors
+          Flutter tests: passed
+          Android release build: success
+          APK bytes: ${APK_BYTES}
+          APK SHA-256: ${APK_SHA}
+          Signing certificate: ${EXPECTED_CERT_SHA256}
+          Preview tag: android-data-first-preview
+          Main latest-apk: not replaced
+          Windows release: not touched
+          Manual Android smoke test: required before promotion to latest-apk
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          rm -f ANDROID_DATA_FIRST_CI_ERROR.md signing-key.txt apk-signature.txt android-data-first-0221.log apk-sha256.txt chernogram-android-data-first.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Android data-first 0.22.1 готов [skip ci]"
+          git push origin HEAD:"$SOURCE_BRANCH"
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-data-first-0221-failure
+          path: |
+            android-data-first-0221.log
+            signing-key.txt
+            apk-signature.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Commit failure report
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp android-data-first-0221.log /tmp/android-data-first-0221.log 2>/dev/null || true
+          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
+          cp apk-signature.txt /tmp/apk-signature.txt 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Android Data First 0.22.1 CI failed'
+            echo
+            echo "Source head: $(git rev-parse HEAD)"
+            echo "Workflow commit: ${GITHUB_SHA}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            for file in /tmp/android-data-first-0221.log /tmp/signing-key.txt /tmp/apk-signature.txt; do
+              [ -f "$file" ] || continue
+              echo
+              echo "## $(basename "$file")"
+              echo '```text'
+              tail -n 800 "$file"
+              echo '```'
+            done
+          } > ANDROID_DATA_FIRST_CI_ERROR.md
+          rm -f ANDROID_DATA_FIRST_STATUS.md
+          git add -A
+          git commit -m "Сохранить ошибку Android data-first 0.22.1 [skip ci]" || exit 0
+          git push origin HEAD:"$SOURCE_BRANCH"
