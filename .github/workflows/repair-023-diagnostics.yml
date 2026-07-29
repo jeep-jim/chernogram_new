@@ -1,4 +1,4 @@
-name: Diagnose Chernogram 0.23 Repair
+name: Diagnose Chernogram 0.23 with 0.16 features
 
 on:
   push:
@@ -16,7 +16,7 @@ env:
 jobs:
   diagnose:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,8 +40,9 @@ jobs:
           (
             set -euo pipefail
             python tooling/apply_repair_023.py
+            python tooling/restore_v16_features.py
             flutter pub get
-            dart format lib tooling/apply_repair_023.py
+            dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
           ) 2>&1 | tee /tmp/repair-023-diagnostics.log
@@ -56,7 +57,7 @@ jobs:
           git fetch origin "$SOURCE_BRANCH"
           git reset --hard "origin/$SOURCE_BRANCH"
           {
-            echo "# Chernogram 0.23 diagnostics"
+            echo "# Chernogram 0.23 diagnostics with 0.16 features"
             echo
             echo "Outcome: ${OUTCOME}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -68,6 +69,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add REPAIR_023_DIAGNOSTICS.md
-          git commit -m "Сохранить точную диагностику ремонта 0.23 [skip ci]" || true
+          git commit -m "Сохранить диагностику 0.23 с функциями 0.16 [skip ci]" || true
           git push origin HEAD:"$SOURCE_BRANCH"
           test "$OUTCOME" = success
