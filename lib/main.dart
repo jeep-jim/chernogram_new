@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'account_access.dart';
+import 'android_data_first.dart';
 import 'app_navigation.dart';
 import 'brand.dart';
 import 'update_service.dart';
-import 'v07.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,8 @@ void main() {
       statusBarIconBrightness: Brightness.light,
       systemNavigationBarColor: ChernogramColors.background,
       systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarContrastEnforced: false,
+      systemStatusBarContrastEnforced: false,
     ),
   );
   runApp(const ChernogramApp());
@@ -32,7 +35,6 @@ class ChernogramApp extends StatefulWidget {
 class _ChernogramAppState extends State<ChernogramApp> {
   bool? _ru;
   bool _darkMode = true;
-  bool _introDone = false;
   bool _updateScheduled = false;
 
   @override
@@ -42,12 +44,17 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final results = await Future.wait<Object?>([
+      SharedPreferences.getInstance(),
+      Future<void>.delayed(const Duration(milliseconds: 850)),
+    ]);
+    final prefs = results.first! as SharedPreferences;
     if (!mounted) return;
     setState(() {
       _ru = prefs.getString('lang') != 'en';
       _darkMode = prefs.getBool('dark_mode') ?? true;
     });
+    _scheduleUpdateCheck();
   }
 
   Future<void> _toggleLanguage() async {
@@ -64,16 +71,10 @@ class _ChernogramAppState extends State<ChernogramApp> {
     if (mounted) setState(() => _darkMode = next);
   }
 
-  void _finishIntro() {
-    if (!mounted) return;
-    setState(() => _introDone = true);
-    _scheduleUpdateCheck();
-  }
-
   void _scheduleUpdateCheck() {
     if (_updateScheduled || _ru == null) return;
     _updateScheduled = true;
-    Future<void>.delayed(const Duration(seconds: 2), () {
+    Future<void>.delayed(const Duration(seconds: 3), () {
       if (!mounted) return;
       final context = chernogramNavigatorKey.currentContext;
       if (context == null) {
@@ -103,32 +104,29 @@ class _ChernogramAppState extends State<ChernogramApp> {
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       home: !ready
           ? const Scaffold(
-              body: Center(
-                child: ChernogramLogo(size: 112, withPlate: true),
-              ),
+              backgroundColor: ChernogramColors.background,
+              body: Center(child: ChernogramLogo(size: 148)),
             )
-          : !_introDone
-              ? ChernogramAnimatedIntro(
+          : Builder(
+              builder: (context) => CgAccessGate(
+                ru: _ru!,
+                child: ChernogramDataFirst(
                   ru: _ru!,
-                  onDone: _finishIntro,
-                )
-              : Builder(
-                  builder: (context) => ChernogramV07(
-                    ru: _ru!,
-                    darkMode: _darkMode,
-                    onToggleTheme: _toggleTheme,
-                    onChangeLanguage: _toggleLanguage,
-                    onCheckUpdates: () {
-                      unawaited(
-                        ChernogramUpdater.checkAndPrompt(
-                          context,
-                          ru: _ru!,
-                          manual: true,
-                        ),
-                      );
-                    },
-                  ),
+                  darkMode: _darkMode,
+                  onToggleTheme: _toggleTheme,
+                  onChangeLanguage: _toggleLanguage,
+                  onCheckUpdates: () {
+                    unawaited(
+                      ChernogramUpdater.checkAndPrompt(
+                        context,
+                        ru: _ru!,
+                        manual: true,
+                      ),
+                    );
+                  },
                 ),
+              ),
+            ),
     );
   }
 }
