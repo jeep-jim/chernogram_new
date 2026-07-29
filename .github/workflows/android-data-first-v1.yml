@@ -169,6 +169,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp android-data-first-ci.log /tmp/android-data-first-ci.log 2>/dev/null || true
+          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
+          cp apk-signature.txt /tmp/apk-signature.txt 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin feature/android-data-first-v1
@@ -178,10 +181,10 @@ jobs:
             echo
             echo "Commit: ${GITHUB_SHA}"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            for file in android-data-first-ci.log signing-key.txt apk-signature.txt; do
+            for file in /tmp/android-data-first-ci.log /tmp/signing-key.txt /tmp/apk-signature.txt; do
               [ -f "$file" ] || continue
               echo
-              echo "## $file"
+              echo "## $(basename "$file")"
               echo '```text'
               tail -n 500 "$file"
               echo '```'
@@ -191,3 +194,5 @@ jobs:
           git add -A
           git commit -m "Сохранить ошибку Android data-first [skip ci]" || exit 0
           git push origin HEAD:feature/android-data-first-v1
+
+# Trigger after workflow registration.
