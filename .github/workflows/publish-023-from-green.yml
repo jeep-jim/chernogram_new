@@ -1,0 +1,227 @@
+name: Publish green Chernogram 0.23 builds
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-023-from-green.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-chernogram-023
+  cancel-in-progress: true
+
+env:
+  SOURCE_WORKFLOW: repair-023-final-v2.yml
+  SOURCE_BRANCH: fix/realtime-ui-023
+  VERSION_NAME: 0.23.0
+  VERSION_CODE: 55
+  VERSION_FULL: 0.23.0+55
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  publish:
+    name: Publish Android update and Windows downloads
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Locate latest successful final v2 run
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runs = gh api "repos/$env:GITHUB_REPOSITORY/actions/workflows/$env:SOURCE_WORKFLOW/runs?branch=main&status=success&per_page=10" | ConvertFrom-Json
+          $run = $runs.workflow_runs | Where-Object { $_.conclusion -eq 'success' } | Select-Object -First 1
+          if (-not $run) { throw 'No successful Final Chernogram 0.23 v2 run found' }
+          "run_id=$($run.id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "source_sha=$($run.head_sha)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Using successful run $($run.id), commit $($run.head_sha)"
+
+      - name: Download verified Android and Windows artifacts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist/android, dist/windows | Out-Null
+          gh run download $env:RUN_ID -n chernogram-android-0.23.0-v2 -D dist/android
+          if ($LASTEXITCODE -ne 0) { throw 'Android artifact download failed' }
+          gh run download $env:RUN_ID -n chernogram-windows-0.23.0-v2 -D dist/windows
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact download failed' }
+          if (-not (Test-Path 'dist/android/chernogram-android-0.23.0.apk')) { throw 'Verified Android APK is missing' }
+          if (-not (Test-Path 'dist/windows/chernogram-windows-0.23.0.zip')) { throw 'Verified Windows ZIP is missing' }
+
+      - name: Prepare Android in-app update
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item 'dist/android/chernogram-android-0.23.0.apk' 'chernogram.apk' -Force
+          $apkHash = (Get-FileHash 'chernogram.apk' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = [ordered]@{
+            versionName = $env:VERSION_NAME
+            versionCode = [int]$env:VERSION_CODE
+            apkUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=$env:VERSION_CODE"
+            sha256 = $apkHash
+            certificateSha256 = $env:EXPECTED_CERT_SHA256
+            notesRu = 'Чернограм 0.23: восстановлены функции 0.16, исправлены интерфейс, разрешения, свайпы, выбор сообщений и файлов, приглашения, тема, чат и ограничение зависаний звонков. Android и Windows собраны одной проверенной веткой.'
+            notesEn = 'Chernogram 0.23 restores 0.16 features and repairs UI, permissions, swipes, message/file selection, invitations, themes, chat transport and bounded call startup. Android and Windows were built from one verified branch.'
+          }
+          $manifest | ConvertTo-Json | Set-Content 'update.json' -Encoding utf8
+
+      - name: Prepare Windows portable package and installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item 'dist/windows/chernogram-windows-0.23.0.zip' 'chernogram-windows-portable.zip' -Force
+          New-Item -ItemType Directory -Force -Path windows-package | Out-Null
+          Expand-Archive -Path 'chernogram-windows-portable.zip' -DestinationPath windows-package -Force
+          if (-not (Test-Path 'windows-package/chernogram.exe')) { throw 'chernogram.exe is missing from verified Windows package' }
+
+          foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+            $source = Join-Path $env:WINDIR "System32/$dll"
+            if (Test-Path $source) { Copy-Item $source windows-package -Force }
+          }
+
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+
+          $iss = @"
+          #define MyAppName "Чернограм"
+          #define MyAppVersion "$env:VERSION_NAME"
+          #define MyAppPublisher "Chernogram"
+          #define MyAppExeName "chernogram.exe"
+
+          [Setup]
+          AppId={{B6C33A77-38D4-4CA0-BE3A-B0C431E40F16}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+          DefaultDirName={localappdata}\Programs\Chernogram
+          DefaultGroupName=Чернограм
+          DisableProgramGroupPage=yes
+          DisableDirPage=yes
+          OutputDir=.
+          OutputBaseFilename=Chernogram-Windows-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          PrivilegesRequired=lowest
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          MinVersion=10.0
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          CloseApplications=yes
+          RestartApplications=no
+
+          [Languages]
+          Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Files]
+          Source: "windows-package\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          Name: "{autodesktop}\Чернограм"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Запустить Чернограм"; Flags: nowait runascurrentuser
+          "@
+          Set-Content 'chernogram-windows.iss' -Value $iss -Encoding utf8
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' 'chernogram-windows.iss'
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'Chernogram-Windows-Setup.exe')) { throw 'Windows installer creation failed' }
+
+          $portableHash = (Get-FileHash 'chernogram-windows-portable.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerHash = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{
+            versionName = $env:VERSION_NAME
+            versionFull = $env:VERSION_FULL
+            versionCode = [int]$env:VERSION_CODE
+            architecture = 'x64'
+            minimumWindows = '10'
+            portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=$env:VERSION_CODE"
+            portableSha256 = $portableHash
+            installerUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=$env:VERSION_CODE"
+            installerSha256 = $installerHash
+            packageType = 'portable-zip-and-installer-v5'
+          } | ConvertTo-Json | Set-Content 'windows-update.json' -Encoding utf8
+
+      - name: Publish Android and Windows releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          gh release delete latest-apk --cleanup-tag --yes 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+          gh release create latest-apk `
+            'chernogram.apk' `
+            'update.json' `
+            --target "$env:SOURCE_BRANCH" `
+            --title "Чернограм Android $env:VERSION_NAME" `
+            --notes "Проверенная сборка 0.23. Обновляется поверх установленного приложения штатной кнопкой внутри Чернограма." `
+            --prerelease
+          if ($LASTEXITCODE -ne 0) { throw 'Android release publication failed' }
+
+          gh release delete latest-windows --cleanup-tag --yes 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+          gh release create latest-windows `
+            'Chernogram-Windows-Setup.exe' `
+            'chernogram-windows-portable.zip' `
+            'windows-update.json' `
+            --target "$env:SOURCE_BRANCH" `
+            --title "Чернограм Windows $env:VERSION_NAME" `
+            --notes "Проверенная Windows-сборка 0.23: установщик и переносимая версия." `
+            --prerelease
+          if ($LASTEXITCODE -ne 0) { throw 'Windows release publication failed' }
+
+      - name: Publish update manifests on main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item update.json "$env:RUNNER_TEMP/update.json" -Force
+          Copy-Item windows-update.json "$env:RUNNER_TEMP/windows-update.json" -Force
+          git fetch origin main
+          git reset --hard origin/main
+          Copy-Item "$env:RUNNER_TEMP/update.json" update.json -Force
+          Copy-Item "$env:RUNNER_TEMP/windows-update.json" windows-update.json -Force
+          @(
+            'Chernogram 0.23 published',
+            "Version: $env:VERSION_FULL",
+            "Source workflow run: ${{ steps.source.outputs.run_id }}",
+            'Android channel: latest-apk',
+            'Windows channel: latest-windows',
+            "Time: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+          ) | Set-Content RELEASE_023_STATUS.md -Encoding utf8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json windows-update.json RELEASE_023_STATUS.md
+          git commit -m 'Опубликовать Чернограм 0.23 для Android и Windows [skip ci]'
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-chernogram-0.23
+          path: |
+            chernogram.apk
+            update.json
+            Chernogram-Windows-Setup.exe
+            chernogram-windows-portable.zip
+            windows-update.json
+          if-no-files-found: warn
+          retention-days: 14
