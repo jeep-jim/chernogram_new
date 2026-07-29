@@ -1,0 +1,158 @@
+name: Diagnose Chernogram 0.23 platforms
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-023-platform-diagnostics.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: fix/realtime-ui-023
+
+jobs:
+  android-diagnostic:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Diagnose Android release compilation
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          (
+            python tooling/apply_repair_023.py &&
+            python tooling/restore_v16_features.py &&
+            flutter pub get &&
+            dart format lib &&
+            flutter build apk --release
+          ) 2>&1 | tee android-platform-023.log
+          code=${PIPESTATUS[0]}
+          echo "$code" > android-platform-023.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-platform-023-diagnostic
+          path: |
+            android-platform-023.log
+            android-platform-023.exit
+          retention-days: 14
+
+  windows-diagnostic:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Diagnose Windows release compilation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $all = @()
+          $commands = @(
+            'python tooling/apply_repair_023.py',
+            'python tooling/restore_v16_features.py',
+            'flutter config --enable-windows-desktop',
+            'flutter pub get',
+            'dart format lib',
+            'flutter build windows --release'
+          )
+          $exitCode = 0
+          foreach ($command in $commands) {
+            "`n> $command" | Tee-Object -FilePath windows-platform-023.log -Append
+            Invoke-Expression $command 2>&1 | Tee-Object -FilePath windows-platform-023.log -Append
+            if ($LASTEXITCODE -ne 0) {
+              $exitCode = $LASTEXITCODE
+              break
+            }
+          }
+          Set-Content -Path windows-platform-023.exit -Value $exitCode
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-platform-023-diagnostic
+          path: |
+            windows-platform-023.log
+            windows-platform-023.exit
+          retention-days: 14
+
+  collect:
+    if: always()
+    needs: [android-diagnostic, windows-diagnostic]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-platform-023-diagnostic'
+          path: platform-diagnostics
+          merge-multiple: true
+      - name: Commit exact platform logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp platform-diagnostics/android-platform-023.log /tmp/android.log 2>/dev/null || true
+          cp platform-diagnostics/windows-platform-023.log /tmp/windows.log 2>/dev/null || true
+          ANDROID_EXIT=$(cat platform-diagnostics/android-platform-023.exit 2>/dev/null || echo missing)
+          WINDOWS_EXIT=$(cat platform-diagnostics/windows-platform-023.exit 2>/dev/null || echo missing)
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Chernogram 0.23 platform diagnostics'
+            echo
+            echo "Android exit: $ANDROID_EXIT"
+            echo "Windows exit: $WINDOWS_EXIT"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo '## Android'
+            echo '```text'
+            tail -n 1000 /tmp/android.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Windows'
+            echo '```text'
+            tail -n 1000 /tmp/windows.log 2>/dev/null || true
+            echo '```'
+          } > REPAIR_023_PLATFORM_DIAGNOSTICS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add REPAIR_023_PLATFORM_DIAGNOSTICS.md
+          git commit -m "Сохранить логи Android и Windows 0.23 [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
