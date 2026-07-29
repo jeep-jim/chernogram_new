@@ -2,7 +2,7 @@
 
 Outcome: success
 Reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)
-Time: 2026-07-29T15:56:59Z
+Time: 2026-07-29T15:58:46Z
 
 ```text
 Restored exact working 0.7.3+14 chat and WebRTC video calls from d1cad8649d00259ab615e65ea196213713b2385f
@@ -63,7 +63,7 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 22 files (17 changed) in 0.43 seconds.
+Formatted 22 files (17 changed) in 0.46 seconds.
 Analyzing chernogram_new...                                     
 
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/android_data_first.dart:1330:7 • use_build_context_synchronously
@@ -97,7 +97,7 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-30 issues found. (ran in 12.7s)
+30 issues found. (ran in 13.4s)
 
 ✅ basic smoke test
 
