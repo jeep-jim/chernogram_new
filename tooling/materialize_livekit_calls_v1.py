@@ -32,6 +32,37 @@ def patch_pubspec() -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_livekit_screen() -> None:
+    path = ROOT / "lib" / "livekit_test_screen.dart"
+    source = path.read_text(encoding="utf-8")
+
+    # Participant is intentionally accepted as the common base type. Its
+    # publication can still contain an audio Track, so narrow it explicitly
+    # before passing it to VideoTrackRenderer on Android and Windows.
+    source = source.replace(
+        """      final track = publication.track;
+      if (track != null && !publication.muted) return track;
+""",
+        """      final track = publication.track;
+      if (track is lk.VideoTrack && !publication.muted) return track;
+""",
+    )
+
+    # Dispose asynchronously without passing a Future<bool> tear-off through
+    # Future.whenComplete. This keeps the code accepted by strict Dart
+    # analysis on both hosted runners.
+    source = source.replace(
+        "    unawaited(_room.disconnect().whenComplete(_room.dispose));\n",
+        """    unawaited(() async {
+      await _room.disconnect();
+      await _room.dispose();
+    }());
+""",
+    )
+
+    path.write_text(source, encoding="utf-8")
+
+
 def patch_navigation() -> None:
     path = ROOT / "lib" / "v12.dart"
     source = path.read_text(encoding="utf-8")
@@ -106,6 +137,48 @@ def patch_navigation() -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_android_manifest() -> None:
+    path = ROOT / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
+    source = path.read_text(encoding="utf-8")
+
+    required_permissions = [
+        '    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />',
+        '    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />',
+    ]
+    anchor = '    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />'
+    for permission in required_permissions:
+        if permission not in source:
+            source = replace_once(
+                source,
+                anchor + "\n",
+                anchor + "\n" + permission + "\n",
+                label=f"Android permission {permission}",
+            )
+            anchor = permission
+
+    camera_feature = (
+        '    <uses-feature android:name="android.hardware.camera" '
+        'android:required="false" />'
+    )
+    microphone_feature = (
+        '    <uses-feature android:name="android.hardware.microphone" '
+        'android:required="false" />'
+    )
+    if camera_feature not in source:
+        source = replace_once(
+            source,
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n',
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+            + camera_feature
+            + "\n"
+            + microphone_feature
+            + "\n",
+            label="Android LiveKit features",
+        )
+
+    path.write_text(source, encoding="utf-8")
+
+
 def patch_gitignore() -> None:
     path = ROOT / ".gitignore"
     source = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -122,7 +195,9 @@ def patch_gitignore() -> None:
 
 def main() -> None:
     patch_pubspec()
+    patch_livekit_screen()
     patch_navigation()
+    patch_android_manifest()
     patch_gitignore()
     print("LiveKit Calls v1 source materialized")
 
