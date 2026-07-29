@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — fast chats, calls, music recognition and direct file exchange
 publish_to: 'none'
-version: 0.22.1+53
+version: 0.22.2+54
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
