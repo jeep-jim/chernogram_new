@@ -1,0 +1,201 @@
+name: Publish chat-only stability test 0.23.1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/chat-only-fast-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: test/chat-only-fast-v1
+  EXPECTED_VERSION: 0.23.1+56
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+concurrency:
+  group: cernogram-chat-only-fast-test
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Restore permanent Android key
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-chat-only.txt
+          ACTUAL=$(grep -m1 'SHA256:' signing-chat-only.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Analyze and build only the chat test
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$EXPECTED_VERSION"
+            flutter pub get
+            dart format lib/main.dart lib/chat_only_app.dart lib/chat_only_transport.dart
+            flutter analyze lib/main.dart lib/chat_only_app.dart lib/chat_only_transport.dart --no-fatal-infos --no-fatal-warnings
+            flutter build apk --release
+            test -s build/app/outputs/flutter-apk/app-release.apk
+          ) 2>&1 | tee chat-only-build.log
+
+      - name: Sign and verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee chat-only-signature.txt
+          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' chat-only-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$APK_CERT" = "$EXPECTED"
+          sha256sum chernogram.apk | tee chat-only-sha256.txt
+
+      - name: Prepare update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA=$(awk '{print $1}' chat-only-sha256.txt)
+          cat > update.json <<EOF
+          {
+            "versionName": "0.23.1",
+            "versionCode": 56,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=56",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${EXPECTED_CERT_SHA256}",
+            "notesRu": "Тест стабильности чата: только фирменный логотип, создать чат, поделиться и мгновенные текстовые сообщения. Полностью убрана надпись подключения. Сообщения показываются сразу и автоматически повторяются через три бесплатных зашифрованных relay-канала.",
+            "notesEn": "Chat stability test: only the official mark, create, share and instant text messages. Connection status labels are removed. Messages appear immediately and retry automatically over three free encrypted relay channels."
+          }
+          EOF
+
+      - name: Publish through the existing in-app channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view latest-apk >/dev/null 2>&1; then
+            gh release upload latest-apk chernogram.apk update.json --clobber
+            gh release edit latest-apk \
+              --target "$SOURCE_BRANCH" \
+              --title "Чернограм Chat Test 0.23.1" \
+              --notes "Минимальная Android-сборка только для проверки скорости и надёжности текстового чата." \
+              --prerelease
+          else
+            gh release create latest-apk chernogram.apk update.json \
+              --target "$SOURCE_BRANCH" \
+              --title "Чернограм Chat Test 0.23.1" \
+              --notes "Минимальная Android-сборка только для проверки скорости и надёжности текстового чата." \
+              --prerelease
+          fi
+
+      - name: Publish manifest on main and save status
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp update.json /tmp/chat-only-update.json
+          APK_SHA=$(awk '{print $1}' chat-only-sha256.txt)
+          APK_BYTES=$(stat -c '%s' chernogram.apk)
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/chat-only-update.json update.json
+          cat > CHAT_ONLY_TEST_STATUS.md <<EOF
+          Chernogram chat-only test published
+          Version: ${EXPECTED_VERSION}
+          Source: ${SOURCE_BRANCH}
+          UI: official logo, Create, Share, chat composer
+          Connection label: absent
+          Relays: three encrypted free ntfy relays
+          Local-first messages: enabled
+          Silent automatic retry: enabled
+          Android signed release: success
+          APK bytes: ${APK_BYTES}
+          APK SHA-256: ${APK_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json CHAT_ONLY_TEST_STATUS.md
+          git commit -m "Опубликовать минимальный тест чата 0.23.1 [skip ci]"
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-chat-only-0.23.1
+          path: |
+            chernogram.apk
+            update.json
+            chat-only-build.log
+            chat-only-signature.txt
+            chat-only-sha256.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save exact failure log
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp chat-only-build.log /tmp/chat-only-build.log 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Chat-only test build failed'
+            echo
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo '```text'
+            tail -n 900 /tmp/chat-only-build.log 2>/dev/null || true
+            echo '```'
+          } > CHAT_ONLY_TEST_ERROR.md
+          git add CHAT_ONLY_TEST_ERROR.md
+          git commit -m "Сохранить ошибку минимального теста чата [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
