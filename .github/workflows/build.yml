@@ -1,199 +1,203 @@
-name: Build Recovery APK
+name: Validate Phonebook v1
 
 on:
   push:
     branches:
-      - rebuild/realtime-core
+      - feature/phonebook-v1
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: chernogram-recovery-apk
+  group: cernogram-phonebook-v1
   cancel-in-progress: true
 
-env:
-  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
-
 jobs:
-  build:
-    name: Build Cernogram Recovery APK
+  validate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
+    timeout-minutes: 25
     steps:
-      - name: Checkout recovery source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: rebuild/realtime-core
+          ref: feature/phonebook-v1
           fetch-depth: 0
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Restore permanent signing key
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: chernogram-stable-signing-v2
-          fail-on-cache-miss: false
-
-      - name: Restore key backup and verify certificate
-        shell: bash
-        env:
-          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.android"
-          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
-            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
-          fi
-          test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
-          ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
-
-      - name: Setup Flutter 3.44.8
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.44.8"
           channel: stable
           cache: false
 
-      - name: Materialize pending realtime source
-        id: materialize
+      - name: Connect phone book to contacts tab
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f tooling/apply_realtime_outbox_once.py ]; then
-            python3 tooling/apply_realtime_outbox_once.py
-            echo "applied=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "applied=false" >> "$GITHUB_OUTPUT"
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Format, validate and build
+          path = Path('lib/v12.dart')
+          source = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global source
+              if new in source:
+                  return
+              if old not in source:
+                  raise SystemExit(f'{label}: source block not found')
+              source = source.replace(old, new, 1)
+
+          replace_once(
+              "import 'pending_call.dart';\n",
+              "import 'pending_call.dart';\nimport 'phonebook_screen.dart';\n",
+              'phonebook import',
+          )
+          replace_once(
+              """  @override
+  void dispose() {
+""",
+              """  Future<void> _openPhonebook() async {
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgPhonebookScreen(ru: widget.ru),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+""",
+              'open phonebook method',
+          )
+          replace_once(
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+      ),
+      CgAgentScreen(""",
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+        onOpenPhonebook: _openPhonebook,
+      ),
+      CgAgentScreen(""",
+              'phonebook callback',
+          )
+          replace_once(
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+
+  const _V12ContactsScreen({
+""",
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+  final VoidCallback onOpenPhonebook;
+
+  const _V12ContactsScreen({
+""",
+              'phonebook field',
+          )
+          replace_once(
+              """    required this.privacyLens,
+    required this.onOpen,
+  });
+""",
+              """    required this.privacyLens,
+    required this.onOpen,
+    required this.onOpenPhonebook,
+  });
+""",
+              'phonebook constructor',
+          )
+          replace_once(
+              """        Text(
+          ru ? 'Контакты' : 'Contacts',
+          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 5),
+""",
+              """        Row(
+          children: [
+            Expanded(
+              child: Text(
+                ru ? 'Контакты' : 'Contacts',
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            IconButton.filledTonal(
+              tooltip: ru ? 'Телефонная книга' : 'Phone book',
+              onPressed: onOpenPhonebook,
+              icon: const Icon(Icons.contact_phone_rounded),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+""",
+              'contacts header',
+          )
+          replace_once(
+              """        const SizedBox(height: 16),
+        if (contacts.isEmpty)
+""",
+              """        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onOpenPhonebook,
+            icon: const Icon(Icons.dialpad_rounded),
+            label: Text(
+              ru
+                  ? 'Открыть телефонную книгу и набрать номер'
+                  : 'Open phone book and dial a number',
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (contacts.isEmpty)
+""",
+              'contacts phonebook button',
+          )
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Validate Flutter source
         shell: bash
         run: |
           set -euo pipefail
-          {
-            flutter --version
-            flutter pub get
-            dart format lib
-            flutter analyze --no-fatal-infos --no-fatal-warnings
-            flutter test
-            flutter build apk --release
-          } 2>&1 | tee recovery-build.txt
+          flutter pub get
+          dart format lib/v12.dart lib/phonebook_screen.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
 
-      - name: Re-sign and verify APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          test -n "$APKSIGNER" || { echo '::error::apksigner not found'; exit 1; }
-          "$APKSIGNER" sign \
-            --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out chernogram-recovery.apk \
-            "$SOURCE_APK"
-          "$APKSIGNER" verify --print-certs chernogram-recovery.apk | tee recovery-signature.txt
-          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' recovery-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
-
-      - name: Prepare recovery manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          VERSION_NAME=${VERSION_FULL%%+*}
-          VERSION_CODE=${VERSION_FULL##*+}
-          APK_SHA256=$(sha256sum chernogram-recovery.apk | awk '{print $1}')
-          cat > recovery-update.json <<EOF
-          {
-            "versionName": "${VERSION_NAME}",
-            "versionCode": ${VERSION_CODE},
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/realtime-recovery-apk/chernogram-recovery.apk",
-            "sha256": "${APK_SHA256}",
-            "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Диагностическая foreground-сборка: отключён второй Android isolate, сокращено число публичных relay, устранена четырёхкратная отправка и исправлено игнорирование сетевого timeout. Иконка не изменялась.",
-            "notesEn": "Diagnostic foreground recovery build with the second Android isolate disabled, reduced public relay fan-out, duplicate publishing removed, and network timeout handling fixed. Branding is unchanged."
-          }
-          EOF
-
-      - name: Publish recovery prerelease
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          gh release delete realtime-recovery-apk --cleanup-tag --yes || true
-          gh release create realtime-recovery-apk chernogram-recovery.apk recovery-update.json recovery-build.txt \
-            --target rebuild/realtime-core \
-            --title "Cernogram Recovery ${VERSION_FULL}" \
-            --notes "Foreground-only diagnostic build for testing durable message delivery, Android stability and call signaling. Branding is unchanged." \
-            --prerelease
-
-      - name: Save materialized source and recovery status
-        if: success()
+      - name: Commit validated feature
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          cat > RECOVERY_BUILD_STATUS.md <<EOF
-          Recovery APK ready
-          Commit: ${GITHUB_SHA}
-          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          Version: ${VERSION_FULL}
-          Download: https://github.com/jeep-jim/chernogram_new/releases/download/realtime-recovery-apk/chernogram-recovery.apk
-          EOF
-          git add RECOVERY_BUILD_STATUS.md
-          if [ "${{ steps.materialize.outputs.applied }}" = "true" ]; then
-            git add lib/internet_core.dart pubspec.yaml .github/workflows/build.yml
-            git rm -f tooling/apply_realtime_outbox_once.py
-            git rm -f .github/workflows/apply-realtime-outbox-once.yml
-          fi
-          if git ls-files --error-unmatch RECOVERY_CI_ERROR.txt >/dev/null 2>&1; then
-            git rm -f RECOVERY_CI_ERROR.txt
-          fi
-          git commit -m "Recovery ${VERSION_FULL} готов и исходники сохранены [skip ci]" || true
-          git push origin HEAD:rebuild/realtime-core || true
+          git rm -f .github/workflows/apply-phonebook-v1.yml PHONEBOOK_TRIGGER.txt || true
+          git add lib/v12.dart lib/phonebook_screen.dart
+          git commit -m "Добавить телефонную книгу и системный набор номера"
+          git push origin HEAD:feature/phonebook-v1
 
-      - name: Save recovery failure diagnostics
+      - name: Save failure details
         if: failure()
         shell: bash
         run: |
           set +e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          cp recovery-build.txt /tmp/recovery-build.txt 2>/dev/null || true
-          cp signing-key.txt /tmp/signing-key.txt 2>/dev/null || true
-          cp recovery-signature.txt /tmp/recovery-signature.txt 2>/dev/null || true
-          git fetch origin rebuild/realtime-core
-          git reset --hard origin/rebuild/realtime-core
-          {
-            echo 'Cernogram recovery build failed'
-            echo "Commit: ${GITHUB_SHA}"
-            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            for file in /tmp/signing-key.txt /tmp/recovery-signature.txt /tmp/recovery-build.txt; do
-              if [ -f "$file" ]; then
-                echo "===== $(basename "$file") ====="
-                cat "$file"
-              fi
-            done
-          } > RECOVERY_CI_ERROR.txt
-          git add -f RECOVERY_CI_ERROR.txt
-          git commit -m "Сохранить ошибку recovery-сборки [skip ci]" || true
-          git push origin HEAD:rebuild/realtime-core || true
+          git fetch origin feature/phonebook-v1
+          git reset --hard origin/feature/phonebook-v1
+          cat > PHONEBOOK_CI_ERROR.txt <<EOF
+          Phonebook v1 validation failed
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git add PHONEBOOK_CI_ERROR.txt
+          git commit -m "Сохранить ошибку Phonebook CI [skip ci]" || true
+          git push origin HEAD:feature/phonebook-v1 || true
