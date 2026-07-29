@@ -1,0 +1,95 @@
+name: Analyze Android 0.22.2 Restored Features
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/android-0222-analyze.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-android-0222-analyze
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: feature/android-data-first-v1
+
+jobs:
+  analyze:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - name: Materialize and analyze
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            STABLE_SOURCE=0ef99e8bd8692bf69d1650da42a364bcb2963ae3
+            git show "${STABLE_SOURCE}:lib/v07.dart" > lib/v07.dart
+            git show "${STABLE_SOURCE}:lib/agent_screen.dart" > lib/agent_screen.dart
+            python tooling/fix_v07_compile.py
+            python tooling/fix_v09_media_calls.py
+            python tooling/fix_v09_compile.py
+            rm -f lib/v07.dart lib/agent_screen.dart
+            python tooling/materialize_android_data_first_v1.py
+            python tooling/finalize_android_data_first_v1.py
+            python tooling/materialize_data_first_realtime_v1.py
+            python tooling/prepare_restore_android_features.py
+            python tooling/prepare_restore_reply_state.py
+            python tooling/prepare_restore_chat_contract.py
+            python tooling/restore_android_features_v1.py
+            python tooling/cleanup_android_chat_materialization.py
+            flutter pub get
+            dart format lib/main.dart lib/brand.dart lib/account_access.dart lib/android_data_first.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/chat_media.dart lib/app_monitor.dart
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+          ) 2>&1 | tee /tmp/android-0222-analyze.log
+
+      - name: Save exact result on main
+        if: always()
+        shell: bash
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          set -euo pipefail
+          cp /tmp/android-0222-analyze.log /tmp/analyze.log 2>/dev/null || true
+          git fetch origin main
+          git checkout -B main origin/main
+          {
+            echo "Android 0.22.2 restored feature analysis: ${CHECK_OUTCOME}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Source: ${SOURCE_BRANCH}"
+            echo
+            echo '```text'
+            tail -n 1200 /tmp/analyze.log 2>/dev/null || true
+            echo '```'
+          } > ANDROID_0222_ANALYZE_STATUS.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ANDROID_0222_ANALYZE_STATUS.md
+          git commit -m "Сохранить проверку Android 0.22.2 [skip ci]" || true
+          git push origin HEAD:main
+          test "$CHECK_OUTCOME" = success
