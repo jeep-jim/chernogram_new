@@ -15,6 +15,7 @@ rm -f lib/v07.dart lib/agent_screen.dart
 
 python tooling/materialize_android_data_first_v1.py
 python tooling/finalize_android_data_first_v1.py
+python tooling/materialize_data_first_realtime_v1.py
 
 flutter --version
 flutter pub get
