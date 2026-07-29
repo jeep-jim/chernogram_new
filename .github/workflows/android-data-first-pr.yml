@@ -1,8 +1,9 @@
 name: Android Data First PR Check
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -13,12 +14,13 @@ concurrency:
 
 jobs:
   android:
-    if: github.head_ref == 'feature/android-data-first-v1'
+    if: github.event.pull_request.head.ref == 'feature/android-data-first-v1'
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: jeep-jim/chernogram_new
           ref: feature/android-data-first-v1
           fetch-depth: 0
       - uses: actions/setup-java@v4
