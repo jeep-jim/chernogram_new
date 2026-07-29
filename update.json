@@ -4,6 +4,6 @@
   "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=55",
   "sha256": "4aee300478696e01327eda2cbf922b58bdee64d766d4e77b1b7e6462beaff317",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "notesRu": "Чернограм 0.23: восстановлены функции 0.16, исправлены интерфейс, разрешения, свайпы, выбор сообщений и файлов, приглашения, тема, чат и ограничение зависаний звонков. Android и Windows собраны одной проверенной веткой.",
-  "notesEn": "Chernogram 0.23 restores 0.16 features and repairs UI, permissions, swipes, message/file selection, invitations, themes, chat transport and bounded call startup. Android and Windows were built from one verified branch."
+  "notesRu": "Аварийный возврат на утверждённую версию Чернограм 0.23 с дизайном 0.22. Версия 0.24 отозвана.",
+  "notesEn": "Emergency rollback to approved Chernogram 0.23 with the 0.22 design. Version 0.24 has been withdrawn."
 }

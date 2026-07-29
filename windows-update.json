@@ -7,6 +7,6 @@
   "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=55",
   "portableSha256": "fe59a6c89f4167bb9b690c07abca1b35072224fb22142d2ca6c9487dc1119e6e",
   "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=55",
-  "installerSha256": "e9bab7f048363e2909f3f789ce10fb5a2e79e4c6912da6d0268693056ca1fd41",
+  "installerSha256": "bec770583eacd5f700742deaf772537f241e184a43a5da093f065925091cc9b2",
   "packageType": "portable-zip-and-installer-v5"
 }
