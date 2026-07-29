@@ -67,8 +67,7 @@ class CgRealtimeGatewayClient {
   Stream<CgGatewayPresence> get presence => _presence.stream;
   Stream<CgRealtimeGatewayStatus> get status => _status.stream;
   bool get connected => _authenticated && _socket?.readyState == WebSocket.open;
-  List<CgRealtimeRoomCursor> get rooms =>
-      _rooms.values.toList(growable: false);
+  List<CgRealtimeRoomCursor> get rooms => _rooms.values.toList(growable: false);
 
   Future<void> initialize(Iterable<CgRealtimeRoomCursor> rooms) async {
     await outbox.load();
@@ -82,9 +81,7 @@ class CgRealtimeGatewayClient {
     }
   }
 
-  Future<bool> connect({
-    Duration timeout = const Duration(seconds: 8),
-  }) async {
+  Future<bool> connect({Duration timeout = const Duration(seconds: 8)}) async {
     if (_closed) return false;
     if (connected) return true;
     if (_connecting) {
@@ -188,7 +185,9 @@ class CgRealtimeGatewayClient {
       kind: kind,
       priority: priority,
       createdAt: now,
-      ttlSeconds: ttl.inSeconds.clamp(5, const Duration(days: 30).inSeconds),
+      ttlSeconds: ttl.inSeconds
+          .clamp(5, const Duration(days: 30).inSeconds)
+          .toInt(),
       crypto: Map<String, dynamic>.from(crypto),
       nextAttemptAt: now,
     );
@@ -217,8 +216,8 @@ class CgRealtimeGatewayClient {
         record.packetId,
         attempts: attempts,
         nextAttemptAt: DateTime.now().toUtc().add(
-              Duration(seconds: delaySeconds),
-            ),
+          Duration(seconds: delaySeconds),
+        ),
       );
       return null;
     } finally {
@@ -382,10 +381,7 @@ class CgRealtimeGatewayClient {
     final base = min(30, 1 << min(_reconnectAttempt, 5));
     final jitter = Random.secure().nextInt(max(1, base * 350));
     final delay = Duration(milliseconds: base * 650 + jitter);
-    _emitStatus(
-      'reconnecting',
-      code: 'retry_in_${delay.inMilliseconds}ms',
-    );
+    _emitStatus('reconnecting', code: 'retry_in_${delay.inMilliseconds}ms');
     _reconnectTimer = Timer(delay, () {
       _reconnectTimer = null;
       unawaited(connect());

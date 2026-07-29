@@ -7,10 +7,14 @@ class CgRealtimeGatewayConfig {
   static const String _urlKey = 'cg_gateway_url_v1';
   static const String _deviceIdKey = 'cg_gateway_device_id_v1';
 
-  static const bool compileEnabled =
-      bool.fromEnvironment('CG_GATEWAY_ENABLED', defaultValue: false);
-  static const String compileUrl =
-      String.fromEnvironment('CG_GATEWAY_URL', defaultValue: '');
+  static const bool compileEnabled = bool.fromEnvironment(
+    'CG_GATEWAY_ENABLED',
+    defaultValue: false,
+  );
+  static const String compileUrl = String.fromEnvironment(
+    'CG_GATEWAY_URL',
+    defaultValue: '',
+  );
 
   final bool enabled;
   final Uri? uri;
@@ -32,7 +36,8 @@ class CgRealtimeGatewayConfig {
     final runtimeUrl = prefs.getString(_urlKey)?.trim() ?? '';
     final selectedUrl = runtimeUrl.isNotEmpty ? runtimeUrl : compileUrl;
     final uri = Uri.tryParse(selectedUrl);
-    final validUri = uri != null &&
+    final validUri =
+        uri != null &&
         uri.hasAuthority &&
         (uri.scheme == 'wss' || uri.scheme == 'ws');
     return CgRealtimeGatewayConfig(

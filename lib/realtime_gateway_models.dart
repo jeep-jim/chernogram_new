@@ -2,15 +2,12 @@ class CgRealtimeRoomCursor {
   final String roomId;
   final int lastRoomSeq;
 
-  const CgRealtimeRoomCursor({
-    required this.roomId,
-    this.lastRoomSeq = 0,
-  });
+  const CgRealtimeRoomCursor({required this.roomId, this.lastRoomSeq = 0});
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'roomId': roomId,
-        'lastRoomSeq': lastRoomSeq,
-      };
+    'roomId': roomId,
+    'lastRoomSeq': lastRoomSeq,
+  };
 }
 
 class CgGatewayEvent {
@@ -41,26 +38,28 @@ class CgGatewayEvent {
   });
 
   factory CgGatewayEvent.fromJson(Map<String, dynamic> json) => CgGatewayEvent(
-        packetId: json['packetId']?.toString() ?? '',
-        roomId: json['roomId']?.toString() ?? '',
-        kind: json['kind']?.toString() ?? '',
-        priority: json['priority']?.toString() ?? 'normal',
-        serverSeq: int.tryParse(json['serverSeq']?.toString() ?? '') ?? 0,
-        roomSeq: int.tryParse(json['roomSeq']?.toString() ?? '') ?? 0,
-        senderProfileId: json['fromProfileId']?.toString() ??
-            json['senderProfileId']?.toString() ??
-            '',
-        senderDeviceId: json['fromDeviceId']?.toString() ??
-            json['senderDeviceId']?.toString() ??
-            '',
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '')
-                ?.toUtc() ??
-            DateTime.now().toUtc(),
-        replay: json['replay'] == true,
-        crypto: json['crypto'] is Map
-            ? Map<String, dynamic>.from(json['crypto'] as Map)
-            : const <String, dynamic>{},
-      );
+    packetId: json['packetId']?.toString() ?? '',
+    roomId: json['roomId']?.toString() ?? '',
+    kind: json['kind']?.toString() ?? '',
+    priority: json['priority']?.toString() ?? 'normal',
+    serverSeq: int.tryParse(json['serverSeq']?.toString() ?? '') ?? 0,
+    roomSeq: int.tryParse(json['roomSeq']?.toString() ?? '') ?? 0,
+    senderProfileId:
+        json['fromProfileId']?.toString() ??
+        json['senderProfileId']?.toString() ??
+        '',
+    senderDeviceId:
+        json['fromDeviceId']?.toString() ??
+        json['senderDeviceId']?.toString() ??
+        '',
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+    replay: json['replay'] == true,
+    crypto: json['crypto'] is Map
+        ? Map<String, dynamic>.from(json['crypto'] as Map)
+        : const <String, dynamic>{},
+  );
 }
 
 class CgGatewayAck {
@@ -81,15 +80,15 @@ class CgGatewayAck {
   });
 
   factory CgGatewayAck.fromJson(Map<String, dynamic> json) => CgGatewayAck(
-        packetId: json['packetId']?.toString() ?? '',
-        roomId: json['roomId']?.toString() ?? '',
-        serverSeq: int.tryParse(json['serverSeq']?.toString() ?? '') ?? 0,
-        roomSeq: int.tryParse(json['roomSeq']?.toString() ?? '') ?? 0,
-        status: json['status']?.toString() ?? 'stored',
-        storedAt: DateTime.tryParse(json['storedAt']?.toString() ?? '')
-                ?.toUtc() ??
-            DateTime.now().toUtc(),
-      );
+    packetId: json['packetId']?.toString() ?? '',
+    roomId: json['roomId']?.toString() ?? '',
+    serverSeq: int.tryParse(json['serverSeq']?.toString() ?? '') ?? 0,
+    roomSeq: int.tryParse(json['roomSeq']?.toString() ?? '') ?? 0,
+    status: json['status']?.toString() ?? 'stored',
+    storedAt:
+        DateTime.tryParse(json['storedAt']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+  );
 }
 
 class CgGatewayPresence {
@@ -107,20 +106,20 @@ class CgGatewayPresence {
     required this.at,
   });
 
-  factory CgGatewayPresence.fromJson(Map<String, dynamic> json) =>
-      CgGatewayPresence(
-        roomId: json['roomId']?.toString() ?? '',
-        onlineProfiles:
-            int.tryParse(json['onlineProfiles']?.toString() ?? '') ?? 0,
-        onlineDevices:
-            int.tryParse(json['onlineDevices']?.toString() ?? '') ?? 0,
-        members: ((json['members'] as List?) ?? const <dynamic>[])
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList(growable: false),
-        at: DateTime.tryParse(json['at']?.toString() ?? '')?.toUtc() ??
-            DateTime.now().toUtc(),
-      );
+  factory CgGatewayPresence.fromJson(
+    Map<String, dynamic> json,
+  ) => CgGatewayPresence(
+    roomId: json['roomId']?.toString() ?? '',
+    onlineProfiles: int.tryParse(json['onlineProfiles']?.toString() ?? '') ?? 0,
+    onlineDevices: int.tryParse(json['onlineDevices']?.toString() ?? '') ?? 0,
+    members: ((json['members'] as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false),
+    at:
+        DateTime.tryParse(json['at']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+  );
 }
 
 class CgGatewayOutboxRecord {
@@ -148,10 +147,7 @@ class CgGatewayOutboxRecord {
     required this.nextAttemptAt,
   });
 
-  CgGatewayOutboxRecord copyWith({
-    int? attempts,
-    DateTime? nextAttemptAt,
-  }) =>
+  CgGatewayOutboxRecord copyWith({int? attempts, DateTime? nextAttemptAt}) =>
       CgGatewayOutboxRecord(
         packetId: packetId,
         requestId: requestId,
@@ -166,49 +162,49 @@ class CgGatewayOutboxRecord {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'packetId': packetId,
-        'requestId': requestId,
-        'roomId': roomId,
-        'kind': kind,
-        'priority': priority,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'ttlSeconds': ttlSeconds,
-        'crypto': crypto,
-        'attempts': attempts,
-        'nextAttemptAt': nextAttemptAt.toUtc().toIso8601String(),
-      };
+    'packetId': packetId,
+    'requestId': requestId,
+    'roomId': roomId,
+    'kind': kind,
+    'priority': priority,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'ttlSeconds': ttlSeconds,
+    'crypto': crypto,
+    'attempts': attempts,
+    'nextAttemptAt': nextAttemptAt.toUtc().toIso8601String(),
+  };
 
-  factory CgGatewayOutboxRecord.fromJson(Map<String, dynamic> json) =>
-      CgGatewayOutboxRecord(
-        packetId: json['packetId']?.toString() ?? '',
-        requestId: json['requestId']?.toString() ?? '',
-        roomId: json['roomId']?.toString() ?? '',
-        kind: json['kind']?.toString() ?? 'message',
-        priority: json['priority']?.toString() ?? 'normal',
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '')
-                ?.toUtc() ??
-            DateTime.now().toUtc(),
-        ttlSeconds: int.tryParse(json['ttlSeconds']?.toString() ?? '') ?? 604800,
-        crypto: json['crypto'] is Map
-            ? Map<String, dynamic>.from(json['crypto'] as Map)
-            : const <String, dynamic>{},
-        attempts: int.tryParse(json['attempts']?.toString() ?? '') ?? 0,
-        nextAttemptAt:
-            DateTime.tryParse(json['nextAttemptAt']?.toString() ?? '')
-                    ?.toUtc() ??
-                DateTime.now().toUtc(),
-      );
+  factory CgGatewayOutboxRecord.fromJson(
+    Map<String, dynamic> json,
+  ) => CgGatewayOutboxRecord(
+    packetId: json['packetId']?.toString() ?? '',
+    requestId: json['requestId']?.toString() ?? '',
+    roomId: json['roomId']?.toString() ?? '',
+    kind: json['kind']?.toString() ?? 'message',
+    priority: json['priority']?.toString() ?? 'normal',
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+    ttlSeconds: int.tryParse(json['ttlSeconds']?.toString() ?? '') ?? 604800,
+    crypto: json['crypto'] is Map
+        ? Map<String, dynamic>.from(json['crypto'] as Map)
+        : const <String, dynamic>{},
+    attempts: int.tryParse(json['attempts']?.toString() ?? '') ?? 0,
+    nextAttemptAt:
+        DateTime.tryParse(json['nextAttemptAt']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+  );
 
   Map<String, dynamic> toEventFrame() => <String, dynamic>{
-        'type': 'event',
-        'protocol': 1,
-        'requestId': requestId,
-        'packetId': packetId,
-        'roomId': roomId,
-        'kind': kind,
-        'priority': priority,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'ttlSeconds': ttlSeconds,
-        'crypto': crypto,
-      };
+    'type': 'event',
+    'protocol': 1,
+    'requestId': requestId,
+    'packetId': packetId,
+    'roomId': roomId,
+    'kind': kind,
+    'priority': priority,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'ttlSeconds': ttlSeconds,
+    'crypto': crypto,
+  };
 }

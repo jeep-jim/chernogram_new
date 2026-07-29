@@ -71,10 +71,11 @@ class CgGatewayOutboxStore {
   Future<List<CgGatewayOutboxRecord>> pending() async {
     await load();
     final now = DateTime.now().toUtc();
-    final result = _records.values
-        .where((record) => !record.nextAttemptAt.isAfter(now))
-        .toList(growable: false)
-      ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
+    final result =
+        _records.values
+            .where((record) => !record.nextAttemptAt.isAfter(now))
+            .toList(growable: false)
+          ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
     return result;
   }
 
