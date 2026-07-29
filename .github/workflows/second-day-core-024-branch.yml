@@ -43,7 +43,7 @@ jobs:
             git show d1cad8649d00259ab615e65ea196213713b2385f:lib/internet_core.dart > reference/working_073/internet_core.dart.txt
             git show d1cad8649d00259ab615e65ea196213713b2385f:lib/call_service.dart > reference/working_073/call_service.dart.txt
             git show d1cad8649d00259ab615e65ea196213713b2385f:lib/chat_screen.dart > reference/working_073/chat_screen.dart.txt
-            python tooling/materialize_second_day_core_024.py
+            python tooling/materialize_exact_073_core_024.py
             flutter pub get
             dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
