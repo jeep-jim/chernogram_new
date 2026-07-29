@@ -186,3 +186,5 @@ jobs:
           git add -A
           git commit -m "Сохранить ошибку Android 0.22.2 [skip ci]" || exit 0
           git push origin HEAD:"$SOURCE_BRANCH"
+
+# Retry after duplicate cleanup.
