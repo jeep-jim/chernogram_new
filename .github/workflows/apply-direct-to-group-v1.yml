@@ -1,0 +1,174 @@
+name: Apply Direct to Group v1
+
+on:
+  push:
+    branches:
+      - feature/direct-to-group-v1
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/direct-to-group-v1
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Add explicit direct-to-group conversion
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/chat_screen.dart')
+          source = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global source
+              if old not in source:
+                  raise SystemExit(f'{label}: source block not found')
+              source = source.replace(old, new, 1)
+
+          replace_once(
+              """                    Text(
+                      widget.ru ? 'Права участников' : 'Member permissions',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+""",
+              """                    if (_tunnel.id.startsWith('dm_')) ...[
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withValues(alpha: .45),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.ru
+                                  ? 'Личная переписка'
+                                  : 'Private conversation',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.ru
+                                  ? 'Можно добавить людей и превратить этот диалог в групповой чат без потери истории.'
+                                  : 'Add people and turn this conversation into a group without losing history.',
+                            ),
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => Navigator.pop(context, 'group'),
+                                icon: const Icon(Icons.group_add_rounded),
+                                label: Text(
+                                  widget.ru
+                                      ? 'Превратить в групповой чат'
+                                      : 'Convert to group chat',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    Text(
+                      widget.ru ? 'Права участников' : 'Member permissions',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+""",
+              'direct conversion action',
+          )
+
+          replace_once(
+              """    if (action == 'save' && _isOwner) {
+      final updated = _tunnel.copyWith(
+""",
+              """    if (action == 'group' && _isOwner) {
+      final requestedName = name.text.trim();
+      final groupName = requestedName.isEmpty || requestedName == _tunnel.name
+          ? (widget.ru ? 'Новый групповой чат' : 'New group chat')
+          : requestedName;
+      final updated = _tunnel.copyWith(
+        name: groupName,
+        isPrivate: isPrivate,
+        permissions: permissions.copyWith(canInvite: true),
+        revision: _tunnel.revision + 1,
+      );
+      name.dispose();
+      await _applyOwnerUpdate(updated);
+      if (mounted) await _showInvite();
+      return;
+    }
+    if (action == 'save' && _isOwner) {
+      final updated = _tunnel.copyWith(
+""",
+              'direct conversion handler',
+          )
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Validate Flutter source
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart format lib/chat_screen.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Commit direct-to-group feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-direct-to-group-v1.yml
+          git add lib/chat_screen.dart
+          git commit -m "Добавить преобразование личного диалога в группу"
+          git push origin HEAD:feature/direct-to-group-v1
+
+      - name: Save failure details
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin feature/direct-to-group-v1
+          git reset --hard origin/feature/direct-to-group-v1
+          cat > DIRECT_GROUP_CI_ERROR.txt <<EOF
+          Direct-to-group v1 validation failed
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Inspect GitHub Actions for compiler output.
+          EOF
+          git add DIRECT_GROUP_CI_ERROR.txt
+          git commit -m "Сохранить ошибку Direct Group CI [skip ci]" || true
+          git push origin HEAD:feature/direct-to-group-v1 || true
