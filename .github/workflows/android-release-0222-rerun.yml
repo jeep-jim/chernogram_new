@@ -1,0 +1,188 @@
+name: Retry Android 0.22.2 In-App Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/android-release-0222-rerun.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-android-release-0222
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: feature/android-data-first-v1
+  EXPECTED_VERSION: 0.22.2+54
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Build and sign Android
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore"
+            keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
+            ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$ACTUAL" = "$EXPECTED"
+            VERSION=$(awk '/^version:/ {print $2}' pubspec.yaml)
+            test "$VERSION" = "$EXPECTED_VERSION"
+            bash tooling/build_android_data_first.sh
+            SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$SOURCE_APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram.apk "$SOURCE_APK"
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$APK_CERT" = "$EXPECTED"
+            sha256sum chernogram.apk | tee apk-sha256.txt
+          ) 2>&1 | tee android-release-0222.log
+
+      - name: Publish update to installed clients
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
+            VERSION_NAME=${VERSION_FULL%%+*}
+            VERSION_CODE=${VERSION_FULL##*+}
+            APK_SHA256=$(awk '{print $1}' apk-sha256.txt)
+            cat > update.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA256}",
+            "certificateSha256": "${EXPECTED_CERT_SHA256}",
+            "notesRu": "Версия 0.22.2 возвращает функции прежнего Чернограма в новом интерфейсе: приватный экран, ответы, пересылку, копирование и выделение текста, кликабельные ссылки. Файлы, голосовые и кружки снова отображаются отдельно от текстовых облаков. Исправлено воспроизведение музыки и возвращена прежняя иконка приложения.",
+            "notesEn": "Version 0.22.2 restores previous Chernogram functions in the new interface: privacy screen, replies, forwarding, copy and text selection, and clickable links. Files, voice notes, and circles are again displayed outside text bubbles. Music playback and the previous launcher icon are restored."
+          }
+          EOF
+            gh release delete latest-apk --cleanup-tag --yes || true
+            gh release create latest-apk chernogram.apk update.json --target "$SOURCE_BRANCH" --title "Чернограм Android 0.22.2" --notes "Штатное обновление из установленного приложения." --prerelease
+          ) 2>&1 | tee -a android-release-0222.log
+
+      - name: Save validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_BYTES=$(stat -c '%s' chernogram.apk)
+          APK_SHA=$(awk '{print $1}' apk-sha256.txt)
+          cp update.json /tmp/chernogram-update-0222.json
+          cat > ANDROID_DATA_FIRST_STATUS.md <<EOF
+          Android 0.22.2 published for in-app update
+          Version: ${EXPECTED_VERSION}
+          Previous launcher icon: restored
+          Privacy settings: restored
+          Reply, forwarding, copy, selection and clickable links: restored
+          Files, voice notes and circles: outside text bubbles
+          Music playback: fixed
+          Analyze: success
+          Tests: success
+          Release build: success
+          APK bytes: ${APK_BYTES}
+          APK SHA-256: ${APK_SHA}
+          Signing certificate: ${EXPECTED_CERT_SHA256}
+          Tag: latest-apk
+          Windows: not touched
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          rm -f ANDROID_DATA_FIRST_CI_ERROR.md signing-key.txt apk-signature.txt apk-sha256.txt android-release-0222.log chernogram.apk update.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Android 0.22.2 проверен и опубликован [skip ci]"
+          git push origin HEAD:"$SOURCE_BRANCH"
+
+      - name: Update manifest on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/chernogram-update-0222.json update.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json
+          git commit -m "Раздать Android 0.22.2 через приложение [skip ci]"
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cernogram-android-0.22.2-rerun
+          path: |
+            chernogram.apk
+            update.json
+            android-release-0222.log
+            apk-signature.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save failure report
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp android-release-0222.log /tmp/build.log 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Android 0.22.2 release failed'
+            echo
+            echo "Source head: $(git rev-parse HEAD)"
+            echo "Workflow commit: ${GITHUB_SHA}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo '```text'
+            tail -n 1000 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > ANDROID_DATA_FIRST_CI_ERROR.md
+          rm -f ANDROID_DATA_FIRST_STATUS.md
+          git add -A
+          git commit -m "Сохранить ошибку Android 0.22.2 [skip ci]" || exit 0
+          git push origin HEAD:"$SOURCE_BRANCH"
