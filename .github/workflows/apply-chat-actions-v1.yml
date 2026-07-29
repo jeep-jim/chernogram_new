@@ -1,0 +1,211 @@
+name: Apply Chat Actions v1
+
+on:
+  push:
+    branches:
+      - feature/chat-actions-v1
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/chat-actions-v1
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Apply message copy and media long-press fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'{label}: source block not found')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'lib/chat_screen.dart',
+              """              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(widget.ru ? 'Ответить' : 'Reply'),
+                onTap: () => Navigator.pop(context, '__reply__'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.forward_rounded),""",
+              """              if (message.text.trim().isNotEmpty && !widget.privacyLens)
+                ListTile(
+                  leading: const Icon(Icons.copy_all_rounded),
+                  title: Text(widget.ru ? 'Копировать текст' : 'Copy text'),
+                  onTap: () => Navigator.pop(context, '__copy__'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(widget.ru ? 'Ответить' : 'Reply'),
+                onTap: () => Navigator.pop(context, '__reply__'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.forward_rounded),""",
+              'copy action tile',
+          )
+
+          replace_once(
+              'lib/chat_screen.dart',
+              """    if (selected == '__delete__') {
+      await _deleteMessage(message);
+    } else if (selected == '__reply__') {""",
+              """    if (selected == '__delete__') {
+      await _deleteMessage(message);
+    } else if (selected == '__copy__') {
+      await Clipboard.setData(ClipboardData(text: message.text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.ru ? 'Текст скопирован' : 'Text copied'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } else if (selected == '__reply__') {""",
+              'copy action handler',
+          )
+
+          replace_once(
+              'lib/chat_screen.dart',
+              """  Widget build(BuildContext context) {
+    return Text.rich(TextSpan(style: widget.style, children: _spans()));
+  }
+}""",
+              """  Widget build(BuildContext context) {
+    final span = TextSpan(style: widget.style, children: _spans());
+    if (Platform.isWindows) {
+      return SelectableText.rich(span);
+    }
+    return Text.rich(span);
+  }
+}""",
+              'desktop selectable text',
+          )
+
+          replace_once(
+              'lib/chat_screen.dart',
+              """                    onPlayAudio: onPlayAudio,
+                    onDelete: message.authorId.isEmpty || message.deleted
+                        ? null
+                        : () => onDelete(message),
+                    canDownload: canDownload,""",
+              """                    onPlayAudio: onPlayAudio,
+                    onLongPress: onLongPress,
+                    onDelete: mine && !message.deleted
+                        ? () => onDelete(message)
+                        : null,
+                    canDownload: canDownload,""",
+              'pass attachment long press',
+          )
+
+          replace_once(
+              'lib/chat_media.dart',
+              """  final Future<void> Function(CgAttachment attachment, File file)? onPlayAudio;
+  final Future<void> Function()? onDelete;
+  final bool canDownload;""",
+              """  final Future<void> Function(CgAttachment attachment, File file)? onPlayAudio;
+  final VoidCallback? onLongPress;
+  final Future<void> Function()? onDelete;
+  final bool canDownload;""",
+              'attachment long press field',
+          )
+
+          replace_once(
+              'lib/chat_media.dart',
+              """    this.onEnsure,
+    this.onPlayAudio,
+    this.onDelete,
+    this.canDownload = true,""",
+              """    this.onEnsure,
+    this.onPlayAudio,
+    this.onLongPress,
+    this.onDelete,
+    this.canDownload = true,""",
+              'attachment long press constructor',
+          )
+
+          replace_once(
+              'lib/chat_media.dart',
+              """  Widget _imagePreview(File file) => GestureDetector(
+        onTap: _showImage,
+        child: ClipRRect(""",
+              """  Widget _imagePreview(File file) => GestureDetector(
+        onTap: _showImage,
+        onLongPress: widget.onLongPress,
+        child: ClipRRect(""",
+              'image long press',
+          )
+
+          replace_once(
+              'lib/chat_media.dart',
+              """      return GestureDetector(
+        onTap: _activate,
+        child: ClipOval(child: SizedBox.square(dimension: 170, child: preview)),
+      );
+    }
+    return GestureDetector(
+      onTap: _activate,
+      child: ClipRRect(""",
+              """      return GestureDetector(
+        onTap: _activate,
+        onLongPress: widget.onLongPress,
+        child: ClipOval(child: SizedBox.square(dimension: 170, child: preview)),
+      );
+    }
+    return GestureDetector(
+      onTap: _activate,
+      onLongPress: widget.onLongPress,
+      child: ClipRRect(""",
+              'video and circle long press',
+          )
+
+          replace_once(
+              'lib/chat_media.dart',
+              """      child: InkWell(
+        onTap: _loading ? null : _activate,
+        borderRadius: BorderRadius.circular(14),""",
+              """      child: InkWell(
+        onTap: _loading ? null : _activate,
+        onLongPress: widget.onLongPress,
+        borderRadius: BorderRadius.circular(14),""",
+              'generic attachment long press',
+          )
+          PY
+
+      - name: Validate Flutter source
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart format lib/chat_screen.dart lib/chat_media.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Commit validated chat actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-chat-actions-v1.yml
+          git add lib/chat_screen.dart lib/chat_media.dart
+          git commit -m "Добавить копирование текста и удаление кружков удержанием"
+          git push origin HEAD:feature/chat-actions-v1
