@@ -1,0 +1,49 @@
+name: Android Data First PR Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-data-first-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    if: github.head_ref == 'feature/android-data-first-v1'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/android-data-first-v1
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Build Android from stable transport
+        shell: bash
+        run: |
+          set -o pipefail
+          bash tooling/build_android_data_first.sh 2>&1 | tee android-data-first-pr.log
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-data-first-pr-log
+          path: android-data-first-pr.log
+          if-no-files-found: warn
+          retention-days: 14
