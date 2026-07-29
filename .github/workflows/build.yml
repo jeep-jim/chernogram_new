@@ -1,30 +1,33 @@
-name: Publish Cernogram Experience Suite
+name: Publish Cernogram LiveKit 0.21
 
 on:
   push:
     branches:
       - main
+    paths:
+      - .github/workflows/build.yml
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: cernogram-experience-release-020
-  cancel-in-progress: true
+  group: cernogram-livekit-release-021
+  cancel-in-progress: false
 
 env:
-  SOURCE_BRANCH: feature/experience-suite-020
+  SOURCE_BRANCH: feature/livekit-calls-v1
+  FLUTTER_VERSION: "3.44.8"
   EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
 
 jobs:
   android:
-    name: Publish Android 0.20
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
+    name: Publish Android 0.21
+    runs-on: ubuntu-22.04
+    timeout-minutes: 70
 
     steps:
-      - name: Checkout validated source
+      - name: Checkout validated LiveKit source
         uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_BRANCH }}
@@ -35,6 +38,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - name: Restore permanent signing key
         uses: actions/cache/restore@v4
@@ -63,9 +67,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.8"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: false
+          cache: true
+
+      - name: Install pinned Android CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
 
       - name: Validate and build Android
         shell: bash
@@ -73,10 +83,11 @@ jobs:
           set -euo pipefail
           flutter --version
           flutter pub get
-          dart format --output=none --set-exit-if-changed lib
+          dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
           flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
           flutter build apk --release
+          test -s build/app/outputs/flutter-apk/app-release.apk
 
       - name: Re-sign and verify APK
         shell: bash
@@ -112,8 +123,8 @@ jobs:
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA256}",
             "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Experience Suite 0.20: новый цифровой Агент с голосом и потоковыми ответами, полноценная музыкальная медиатека с очередью, плейлистами, repeat/shuffle и восстановлением позиции, телефонная книга и набор номера. Связь и утверждённая иконка в этом выпуске не изменялись.",
-            "notesEn": "Experience Suite 0.20 adds the voice-enabled streaming Agent, a full music library with queues, playlists, repeat/shuffle and position restore, plus the device phone book and dialer. Realtime transport and the approved icon are unchanged in this release."
+            "notesRu": "Версия 0.21: добавлен отдельный медиаканал LiveKit для проверки звонков Android ↔ Windows, Python broker короткоживущих токенов и локальная серверная конфигурация LiveKit/Redis.",
+            "notesEn": "Version 0.21 adds a separate LiveKit media channel for Android-to-Windows call testing, a Python short-lived token broker, and local LiveKit/Redis server configuration."
           }
           EOF
 
@@ -128,26 +139,27 @@ jobs:
           gh release delete latest-apk --cleanup-tag --yes || true
           gh release create latest-apk chernogram.apk update.json \
             --target "$SOURCE_BRANCH" \
-            --title "Cernogram ${VERSION_NAME}" \
-            --notes "Experience Suite: Агент, музыка, медиатека, плейлисты, телефонная книга и набор номера. Иконка и транспорт связи не изменялись." \
+            --title "Cernogram Android ${VERSION_NAME}" \
+            --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." \
             --prerelease
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cernogram-android-0.20
+          name: cernogram-android-0.21
           path: |
             chernogram.apk
             update.json
+          if-no-files-found: error
           retention-days: 14
 
   windows:
-    name: Publish Windows 0.20
-    runs-on: windows-latest
-    timeout-minutes: 55
+    name: Publish Windows 0.21
+    runs-on: windows-2022
+    timeout-minutes: 70
 
     steps:
-      - name: Checkout validated source
+      - name: Checkout validated LiveKit source
         uses: actions/checkout@v4
         with:
           ref: ${{ env.SOURCE_BRANCH }}
@@ -156,9 +168,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.8"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: false
+          cache: true
 
       - name: Validate and build Windows
         shell: pwsh
@@ -169,11 +181,24 @@ jobs:
           if (-not (Test-Path 'windows/CMakeLists.txt')) {
             flutter create --platforms=windows --project-name chernogram --no-pub .
           }
+
+          $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
+          $cmakeLines = Get-Content $cmakePath
+          if (-not ($cmakeLines -contains $definition)) {
+            $patched = @($cmakeLines[0], '', $definition) + $cmakeLines[1..($cmakeLines.Length - 1)]
+            Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
+          }
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+
           flutter pub get
-          dart format --output=none --set-exit-if-changed lib
+          dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
           flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
           flutter build windows --release
+
+          $exe = Join-Path $PWD 'build/windows/x64/runner/Release/chernogram.exe'
+          if (-not (Test-Path $exe)) { throw "chernogram.exe was not produced" }
 
       - name: Smoke test Windows executable
         shell: pwsh
@@ -181,7 +206,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $release = Join-Path $PWD 'build/windows/x64/runner/Release'
           $exe = Join-Path $release 'chernogram.exe'
-          if (-not (Test-Path $exe)) { throw 'chernogram.exe was not produced' }
           $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
           Start-Sleep -Seconds 8
           if ($process.HasExited) { throw "Cernogram exited during startup smoke test: $($process.ExitCode)" }
@@ -200,11 +224,13 @@ jobs:
 
           $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
           $versionName = ($versionFull -split '\+')[0]
+          $versionCode = ($versionFull -split '\+')[1]
           $sha = (Get-FileHash 'Cernogram-Windows-x64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
           $manifest = [ordered]@{
             versionName = $versionName
             versionFull = $versionFull
-            portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Cernogram-Windows-x64.zip"
+            versionCode = [int]$versionCode
+            portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Cernogram-Windows-x64.zip?v=$versionCode"
             portableSha256 = $sha
           }
           $manifest | ConvertTo-Json | Set-Content -Path 'windows-update.json' -Encoding UTF8
@@ -222,14 +248,15 @@ jobs:
           gh release create latest-windows Cernogram-Windows-x64.zip windows-update.json `
             --target "$env:SOURCE_BRANCH" `
             --title "Cernogram Windows $versionName" `
-            --notes "Experience Suite для Windows: Агент, музыкальная медиатека, плейлисты и расширенный плеер." `
+            --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." `
             --prerelease
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cernogram-windows-0.20
+          name: cernogram-windows-0.21
           path: |
             Cernogram-Windows-x64.zip
             windows-update.json
+          if-no-files-found: error
           retention-days: 14
