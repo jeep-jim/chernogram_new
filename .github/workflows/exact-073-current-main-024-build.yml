@@ -1,0 +1,273 @@
+name: Build current Chernogram 0.24 on exact working 0.7.3 core
+
+on:
+  push:
+    branches: [fix/exact-073-current-main-024]
+    paths:
+      - .github/workflows/exact-073-current-main-024-build.yml
+      - tooling/materialize_exact_073_core_024.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-exact-073-current-main-024
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: fix/exact-073-current-main-024
+  EXPECTED_VERSION: 0.24.0+56
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Verify exact 0.7.3 core against current main
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            python tooling/materialize_exact_073_core_024.py
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$EXPECTED_VERSION"
+            flutter pub get
+            dart format lib/internet_core.dart lib/call_service.dart lib/app_monitor.dart
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+          ) 2>&1 | tee verify-current-main-073-024.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-current-main-073-024-log
+          path: verify-current-main-073-024.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  android:
+    needs: verify
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+      - name: Restore stable Android certificate
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android > android-certificate-current-main-024.txt
+          ACTUAL=$(grep -m1 'SHA256:' android-certificate-current-main-024.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+      - name: Build signed Android 0.24
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            python tooling/materialize_exact_073_core_024.py
+            flutter pub get
+            dart format lib/internet_core.dart lib/call_service.dart lib/app_monitor.dart
+            flutter build apk --release
+            APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram-android-0.24.0.apk "$APK"
+            "$APKSIGNER" verify --print-certs chernogram-android-0.24.0.apk | tee android-signature-current-main-024.txt
+            sha256sum chernogram-android-0.24.0.apk | tee android-sha256-current-main-024.txt
+          ) 2>&1 | tee android-current-main-073-024.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-android-0.24.0-current-main-exact-073
+          path: |
+            chernogram-android-0.24.0.apk
+            android-signature-current-main-024.txt
+            android-sha256-current-main-024.txt
+            android-current-main-073-024.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    needs: verify
+    runs-on: windows-2022
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Build Windows 0.24
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $log = Join-Path $PWD 'windows-current-main-073-024.log'
+          function Invoke-Logged {
+            param([scriptblock]$Command, [string]$Name)
+            "===== $Name =====" | Tee-Object -FilePath $log -Append
+            & $Command *>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE" }
+          }
+          try {
+            Invoke-Logged { python tooling/materialize_exact_073_core_024.py } 'Restore exact 0.7.3 core'
+            Invoke-Logged { flutter config --enable-windows-desktop } 'Enable Windows desktop'
+            if (-not (Test-Path 'windows/CMakeLists.txt')) {
+              Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
+            }
+            $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+            $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
+            $lines = Get-Content $cmakePath
+            if (-not ($lines -contains $definition)) {
+              $patched = @($lines[0], '', $definition) + $lines[1..($lines.Length - 1)]
+              Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
+            }
+            $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+            Invoke-Logged { flutter pub get } 'Flutter pub get'
+            Invoke-Logged { dart format lib/internet_core.dart lib/call_service.dart lib/app_monitor.dart } 'Format restored core'
+            Invoke-Logged { flutter build windows --release } 'Build Windows release'
+            $release = 'build/windows/x64/runner/Release'
+            if (-not (Test-Path "$release/chernogram.exe")) { throw 'Windows executable was not produced' }
+            Compress-Archive -Path "$release/*" -DestinationPath chernogram-windows-0.24.0.zip -Force
+            Get-FileHash chernogram-windows-0.24.0.zip -Algorithm SHA256 | Format-List | Out-File windows-sha256-current-main-024.txt
+          } catch {
+            "ERROR: $($_.Exception.Message)" | Tee-Object -FilePath $log -Append
+            throw
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-windows-0.24.0-current-main-exact-073
+          path: |
+            chernogram-windows-0.24.0.zip
+            windows-sha256-current-main-024.txt
+            windows-current-main-073-024.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  finalize:
+    needs: [verify, android, windows]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Commit source proven against current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tooling/materialize_exact_073_core_024.py
+          flutter pub get
+          dart format lib/internet_core.dart lib/call_service.dart lib/app_monitor.dart
+          cat > EXACT_073_CURRENT_MAIN_024_STATUS.md <<EOF
+          Chernogram 0.24 exact 0.7.3 core ready on current main
+          Version: ${EXPECTED_VERSION}
+          Base: current main
+          Historical reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)
+          Chat transport: success
+          WebRTC audio/video calls: success
+          Analyze and tests: success
+          Signed Android release: success
+          Windows release: success
+          Current interface and newer features: preserved
+          Public update channel: not changed yet
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          rm -f EXACT_073_CURRENT_MAIN_024_BUILD_ERROR.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Чернограм 0.24 от текущего main на рабочем ядре 0.7.3 готов [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
+
+  failure-report:
+    if: failure()
+    needs: [verify, android, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - name: Save exact failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > EXACT_073_CURRENT_MAIN_024_BUILD_ERROR.md <<EOF
+          # Chernogram 0.24 exact 0.7.3 build failed on current main
+
+          Reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)
+          Workflow commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+          Verify, Android or Windows failed. Detailed logs are stored in workflow artifacts.
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add EXACT_073_CURRENT_MAIN_024_BUILD_ERROR.md
+          git commit -m "Сохранить сбой 0.24 от текущего main на ядре 0.7.3 [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
