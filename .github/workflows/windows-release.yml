@@ -1,59 +1,116 @@
-name: Windows Release
+name: Publish Cernogram Windows 0.21
 
 on:
   push:
     branches:
       - main
+    paths:
+      - .github/workflows/windows-release.yml
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: chernogram-windows-release
+  group: cernogram-windows-release-021
   cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: feature/livekit-calls-v1
+  FLUTTER_VERSION: "3.44.8"
 
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 80
 
     steps:
-      - name: Checkout
+      - name: Checkout validated LiveKit source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
 
-      - name: Setup Flutter 3.44.8
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.8"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-          cache: false
+          cache: true
 
-      - name: Build Windows application
+      - name: Build Windows 0.21
         shell: pwsh
-        run: ./tooling/build_windows.ps1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = 'windows-build.txt'
+          Set-Content -Path $log -Value '===== WINDOWS 0.21 BUILD =====' -Encoding UTF8
 
-      - name: Package portable application and repair installer
+          function Invoke-Logged {
+            param([scriptblock]$Command, [string]$Name)
+            "===== $Name =====" | Tee-Object -FilePath $log -Append
+            & $Command *>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE" }
+          }
+
+          try {
+            Invoke-Logged { flutter --version } 'Flutter version'
+            Invoke-Logged { flutter config --enable-windows-desktop } 'Enable Windows desktop'
+            if (-not (Test-Path 'windows/CMakeLists.txt')) {
+              Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
+            }
+
+            $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+            $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
+            $cmakeLines = Get-Content $cmakePath
+            if (-not ($cmakeLines -contains $definition)) {
+              $patched = @($cmakeLines[0], '', $definition) + $cmakeLines[1..($cmakeLines.Length - 1)]
+              Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
+            }
+            $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+
+            Invoke-Logged { flutter pub get } 'Flutter pub get'
+            Invoke-Logged { dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart } 'Dart format check'
+            Invoke-Logged { flutter analyze --no-fatal-infos --no-fatal-warnings } 'Flutter analyze'
+            Invoke-Logged { flutter test } 'Flutter test'
+            Invoke-Logged { flutter build windows --release } 'Build Windows release'
+
+            $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+            if ($versionFull -ne '0.21.0+51') { throw "Unexpected version: $versionFull" }
+
+            $release = Join-Path $PWD 'build/windows/x64/runner/Release'
+            $exe = Join-Path $release 'chernogram.exe'
+            if (-not (Test-Path $exe)) { throw 'chernogram.exe was not produced' }
+
+            $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
+            Start-Sleep -Seconds 8
+            if ($process.HasExited) { throw "Cernogram exited during startup smoke test: $($process.ExitCode)" }
+            Stop-Process -Id $process.Id -Force
+          }
+          catch {
+            $message = "WINDOWS BUILD ERROR: $($_.Exception.Message)"
+            Write-Host $message -ForegroundColor Red
+            Add-Content -Path $log -Value $message -Encoding UTF8
+            throw
+          }
+
+      - name: Package portable application and installer
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $log = 'windows-package.txt'
-          Set-Content -Path $log -Value '===== WINDOWS PACKAGE AND REPAIR INSTALLER =====' -Encoding UTF8
+          Set-Content -Path $log -Value '===== WINDOWS 0.21 PACKAGE =====' -Encoding UTF8
           try {
             $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+            if ($versionFull -ne '0.21.0+51') { throw "Unexpected version: $versionFull" }
             $versionName = ($versionFull -split '\+')[0]
+            $versionCode = ($versionFull -split '\+')[1]
             $release = 'build/windows/x64/runner/Release'
             $appExe = Join-Path $release 'chernogram.exe'
-            if (-not (Test-Path $appExe)) {
-              throw 'chernogram.exe was not produced'
-            }
+            if (-not (Test-Path $appExe)) { throw 'chernogram.exe was not produced' }
 
             foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
               $source = Join-Path $env:WINDIR "System32/$dll"
-              if (Test-Path $source) {
-                Copy-Item $source $release -Force
-                Add-Content $log "Bundled $dll into app"
-              }
+              if (Test-Path $source) { Copy-Item $source $release -Force }
             }
 
             $package = 'windows-package'
@@ -67,34 +124,24 @@ jobs:
             $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
             if (-not $vsPath) { throw 'Visual Studio C++ tools were not found' }
             $vcvars = Join-Path $vsPath 'VC/Auxiliary/Build/vcvars64.bat'
-            if (-not (Test-Path $vcvars)) { throw 'vcvars64.bat was not found' }
             $compile = "call `"$vcvars`" && cl.exe /nologo /O2 /MT /EHsc /DUNICODE /D_UNICODE tooling\windows_bootstrap.cpp shell32.lib /link /SUBSYSTEM:WINDOWS /OUT:`"$bootstrap`""
             cmd.exe /D /S /C $compile 2>&1 | Tee-Object -FilePath $log -Append
-            if ($LASTEXITCODE -ne 0) { throw "Bootstrap compilation failed: $LASTEXITCODE" }
-            if (-not (Test-Path $bootstrap)) { throw 'Windows bootstrap was not created' }
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $bootstrap)) { throw 'Bootstrap compilation failed' }
 
             foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
               $source = Join-Path $release $dll
-              if (Test-Path $source) {
-                Copy-Item $source $package -Force
-                Add-Content $log "Bundled $dll beside bootstrap"
-              }
+              if (Test-Path $source) { Copy-Item $source $package -Force }
             }
 
-            $readme = @(
+            @(
               'ЧЕРНОГРАМ ДЛЯ WINDOWS',
               '',
               "Версия: $versionFull",
               'Поддержка: Windows 10 и Windows 11, 64-бит.',
               '',
               'Запускайте chernogram.exe из корня распакованной папки.',
-              'Папка app содержит основные файлы программы и не должна удаляться.',
-              '',
-              'Если старая переносимая версия закрывается при обновлении и остаётся прежней,',
-              'один раз запустите Chernogram-Windows-Setup.exe из релиза. После установки',
-              'используйте созданный ярлык «Чернограм» — следующие обновления будут ставиться в установленную папку.'
-            )
-            Set-Content -Path "$package/README-RU.txt" -Value $readme -Encoding UTF8
+              'Папка app содержит основные файлы программы и не должна удаляться.'
+            ) | Set-Content -Path "$package/README-RU.txt" -Encoding UTF8
 
             $zip = 'chernogram-windows-portable.zip'
             if (Test-Path $zip) { Remove-Item $zip -Force }
@@ -149,35 +196,31 @@ jobs:
           "@
             Set-Content 'chernogram-windows.iss' -Value $iss -Encoding UTF8
             & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' 'chernogram-windows.iss' 2>&1 | Tee-Object -FilePath $log -Append
-            if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
-            if (-not (Test-Path 'Chernogram-Windows-Setup.exe')) { throw 'Setup EXE was not created' }
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'Chernogram-Windows-Setup.exe')) { throw 'Installer was not created' }
 
-            $portableHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-            $installerHash = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLower()
-            $manifest = @{
+            $portableHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+            $installerHash = (Get-FileHash 'Chernogram-Windows-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+            [ordered]@{
               versionName = $versionName
               versionFull = $versionFull
+              versionCode = [int]$versionCode
               architecture = 'x64'
               minimumWindows = '10'
-              portableUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+              portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip?v=$versionCode"
               portableSha256 = $portableHash
-              installerUrl = 'https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe'
+              installerUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe?v=$versionCode"
               installerSha256 = $installerHash
-              packageType = 'portable-zip-bootstrap-v3-with-repair-installer'
-            } | ConvertTo-Json
-            Set-Content -Path 'windows-update.json' -Value $manifest -Encoding UTF8
-            Add-Content $log "Created $zip"
-            Add-Content $log "Portable SHA256: $portableHash"
-            Add-Content $log "Installer SHA256: $installerHash"
+              packageType = 'portable-zip-bootstrap-v4-livekit'
+            } | ConvertTo-Json | Set-Content -Path 'windows-update.json' -Encoding UTF8
           }
           catch {
             $message = "PACKAGE ERROR: $($_.Exception.Message)"
             Write-Host $message -ForegroundColor Red
-            Add-Content $log $message
-            exit 1
+            Add-Content -Path $log -Value $message -Encoding UTF8
+            throw
           }
 
-      - name: Publish Windows release
+      - name: Publish Windows 0.21 release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -186,13 +229,14 @@ jobs:
           $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
           $versionName = ($versionFull -split '\+')[0]
           gh release delete latest-windows --cleanup-tag --yes 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
           gh release create latest-windows `
             'Chernogram-Windows-Setup.exe' `
             'chernogram-windows-portable.zip' `
             'windows-update.json' `
-            --target main `
+            --target "$env:SOURCE_BRANCH" `
             --title "Чернограм Windows $versionName" `
-            --notes "Исправление только для Windows. Добавлен обычный установщик Chernogram-Windows-Setup.exe для перехода со старой переносимой версии, которая закрывается, но не заменяет файлы. Установщик создаёт новый рабочий ярлык и запускает актуальную версию." `
+            --notes "Версия 0.21.0+51 с LiveKit Calls для проверки связи Android ↔ Windows." `
             --prerelease 2>&1 | Tee-Object -FilePath 'windows-release.txt'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -208,7 +252,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           $lines = @(
-            'Windows build failed',
+            'Windows 0.21 build failed',
             "Commit: $env:GITHUB_SHA",
             "Time: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))"
           )
@@ -220,11 +264,11 @@ jobs:
             }
           }
           Set-Content 'WINDOWS_CI_ERROR.txt' -Value $lines -Encoding UTF8
-          git add -f WINDOWS_CI_ERROR.txt
-          git commit -m "Сохранить подробную ошибку Windows сборки [skip ci]" 2>$null
+          git add -A
+          git commit -m "Сохранить ошибку Windows 0.21 [skip ci]" 2>$null
           git push origin HEAD:main
 
-      - name: Mark Windows ready
+      - name: Mark Windows 0.21 ready
         if: success()
         shell: pwsh
         run: |
@@ -235,16 +279,14 @@ jobs:
           git reset --hard origin/main
           @(
             'Windows ready',
-            "Commit: $env:GITHUB_SHA",
+            "Source: feature/livekit-calls-v1",
             "Time: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))",
             "Version: $versionFull",
             'Architecture: x64',
             'Supported: Windows 10 and Windows 11',
-            'Package: portable ZIP plus repair installer',
-            'Installer: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Chernogram-Windows-Setup.exe',
-            'Portable: https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/chernogram-windows-portable.zip'
+            'Package: portable ZIP plus installer',
+            'Tag: latest-windows'
           ) | Set-Content 'WINDOWS_BUILD_STATUS.md' -Encoding UTF8
-          git add WINDOWS_BUILD_STATUS.md
-          if (git ls-files --error-unmatch WINDOWS_CI_ERROR.txt 2>$null) { git rm -f WINDOWS_CI_ERROR.txt }
-          git commit -m "Windows версия Чернограма готова [skip ci]" 2>$null
+          git add -A
+          git commit -m "Windows 0.21 готов [skip ci]" 2>$null
           git push origin HEAD:main
