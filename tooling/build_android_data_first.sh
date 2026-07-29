@@ -20,6 +20,7 @@ python tooling/prepare_restore_android_features.py
 python tooling/prepare_restore_reply_state.py
 python tooling/prepare_restore_chat_contract.py
 python tooling/restore_android_features_v1.py
+python tooling/cleanup_android_chat_materialization.py
 
 flutter --version
 flutter pub get
