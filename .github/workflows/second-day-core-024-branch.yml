@@ -1,4 +1,4 @@
-name: Chernogram 0.24 second-day core branch check
+name: Chernogram 0.24 exact 0.7.3 core check
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: cernogram-second-day-core-024-branch
+  group: cernogram-exact-073-core-024
   cancel-in-progress: true
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
           flutter-version: '3.44.8'
           channel: stable
           cache: true
-      - name: Diagnose second-day core
+      - name: Restore and diagnose exact 0.7.3 chat and video calls
         id: diagnose
         continue-on-error: true
         shell: bash
@@ -39,19 +39,16 @@ jobs:
           set -o pipefail
           (
             set -euo pipefail
-            mkdir -p reference/second_day
-            cp lib/internet_core.dart /tmp/current-internet.dart
-            cp lib/call_service.dart /tmp/current-call.dart
-            cp lib/app_monitor.dart /tmp/current-monitor.dart
-            git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/internet_core.dart > reference/second_day/internet_core.dart.txt
-            git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/call_service.dart > reference/second_day/call_service.dart.txt
-            git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/app_monitor.dart > reference/second_day/app_monitor.dart.txt
+            mkdir -p reference/working_073
+            git show d1cad8649d00259ab615e65ea196213713b2385f:lib/internet_core.dart > reference/working_073/internet_core.dart.txt
+            git show d1cad8649d00259ab615e65ea196213713b2385f:lib/call_service.dart > reference/working_073/call_service.dart.txt
+            git show d1cad8649d00259ab615e65ea196213713b2385f:lib/chat_screen.dart > reference/working_073/chat_screen.dart.txt
             python tooling/materialize_second_day_core_024.py
             flutter pub get
             dart format lib
             flutter analyze --no-fatal-infos --no-fatal-warnings
             flutter test
-          ) 2>&1 | tee /tmp/second-day-core-024.log
+          ) 2>&1 | tee /tmp/exact-073-core-024.log
       - name: Commit exact result and references
         if: always()
         shell: bash
@@ -59,26 +56,27 @@ jobs:
           OUTCOME: ${{ steps.diagnose.outcome }}
         run: |
           set -euo pipefail
-          cp /tmp/second-day-core-024.log /tmp/diagnostic.log 2>/dev/null || true
+          cp /tmp/exact-073-core-024.log /tmp/diagnostic.log 2>/dev/null || true
           git fetch origin fix/second-day-core-024
           git reset --hard origin/fix/second-day-core-024
-          mkdir -p reference/second_day
-          git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/internet_core.dart > reference/second_day/internet_core.dart.txt
-          git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/call_service.dart > reference/second_day/call_service.dart.txt
-          git show d696e470cb96e61a0e5cc29c9e335b5da5a8f69b:lib/app_monitor.dart > reference/second_day/app_monitor.dart.txt
+          mkdir -p reference/working_073
+          git show d1cad8649d00259ab615e65ea196213713b2385f:lib/internet_core.dart > reference/working_073/internet_core.dart.txt
+          git show d1cad8649d00259ab615e65ea196213713b2385f:lib/call_service.dart > reference/working_073/call_service.dart.txt
+          git show d1cad8649d00259ab615e65ea196213713b2385f:lib/chat_screen.dart > reference/working_073/chat_screen.dart.txt
           {
-            echo '# Chernogram 0.24 second-day core diagnostics'
+            echo '# Chernogram 0.24 exact 0.7.3 diagnostics'
             echo
             echo "Outcome: ${OUTCOME}"
+            echo "Reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)"
             echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo
             echo '```text'
             tail -n 1800 /tmp/diagnostic.log 2>/dev/null || true
             echo '```'
-          } > SECOND_DAY_CORE_024_DIAGNOSTICS.md
+          } > EXACT_073_CORE_024_DIAGNOSTICS.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add reference/second_day SECOND_DAY_CORE_024_DIAGNOSTICS.md
-          git commit -m "Сохранить результат ядра второго дня 0.24 [skip ci]" || true
+          git add reference/working_073 EXACT_073_CORE_024_DIAGNOSTICS.md
+          git commit -m "Сохранить результат точного ядра 0.7.3 для 0.24 [skip ci]" || true
           git push origin HEAD:fix/second-day-core-024
           test "$OUTCOME" = success
