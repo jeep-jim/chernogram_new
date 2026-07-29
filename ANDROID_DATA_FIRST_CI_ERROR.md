@@ -1,11 +1,13 @@
 # Android Data First CI failed
 
-Commit: 022a63393317ecb38977f05ae7f9617b36eaff6c
-Time: 2026-07-29T09:41:56Z
-
-## android-data-first-ci.log
+Commit: 0c6c163974744405750120fdfae1bf9fcafab88c
+Time: 2026-07-29T09:53:36Z
 ```text
+Applied Chernogram 0.8 app-wide calls, sounds and message ordering fixes
+Applied Chernogram 0.9 media library, voice, circles and WebRTC replay fixes
+Applied Chernogram 0.9 compile safeguards
 Android data-first UI materialized
+Android data-first compatibility finalized
 Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
 Framework • revision 058e0af2c2 (6 days ago) • 2026-07-23 10:56:21 -0700
 Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (6 days ago) • 2026-07-23 16:11:34.000Z
@@ -120,7 +122,11 @@ Formatted lib/brand.dart
 Formatted lib/account_access.dart
 Formatted lib/android_data_first.dart
 Formatted lib/chat_screen.dart
-Formatted 5 files (5 changed) in 0.15 seconds.
+Formatted lib/call_service.dart
+Formatted lib/internet_core.dart
+Formatted lib/chat_media.dart
+Formatted lib/app_monitor.dart
+Formatted 9 files (9 changed) in 0.14 seconds.
 Analyzing chernogram_new...                                     
 
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/android_data_first.dart:1178:7 • use_build_context_synchronously
@@ -128,48 +134,40 @@ Analyzing chernogram_new...
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/android_data_first.dart:1244:7 • curly_braces_in_flow_control_structures
    info • Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation • lib/android_data_first.dart:1547:27 • prefer_const_constructors
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/android_data_first.dart:1874:7 • curly_braces_in_flow_control_structures
-   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:275:7 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:277:7 • use_build_context_synchronously
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/brand.dart:3:8 • unnecessary_import
-  error • The method 'replaySignals' isn't defined for the type 'InternetTunnelSession'. Try correcting the name to the name of an existing method, or defining a method named 'replaySignals' • lib/call_service.dart:245:36 • undefined_method
-  error • Expected to find '}' • lib/call_service.dart:775:1 • expected_token
+   info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/call_service.dart:260:11 • curly_braces_in_flow_control_structures
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_media.dart:5:8 • unnecessary_import
-  error • The getter 'purple' isn't defined for the type 'ChernogramColors'. Try importing the library that defines 'purple', correcting the name to the name of an existing getter, or defining a getter or field named 'purple' • lib/chat_media.dart:1377:54 • undefined_getter
-warning • The declaration '_TunnelAvatar' isn't referenced. Try removing the declaration of '_TunnelAvatar' • lib/chat_screen.dart:1402:7 • unused_element
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1045:7 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1119:7 • use_build_context_synchronously
+warning • The declaration '_TunnelAvatar' isn't referenced. Try removing the declaration of '_TunnelAvatar' • lib/chat_screen.dart:1490:7 • unused_element
+warning • The declaration '_AttachmentPreview' isn't referenced. Try removing the declaration of '_AttachmentPreview' • lib/chat_screen.dart:1896:7 • unused_element
 warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/group_call_service.dart:8:8 • unused_import
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/main.dart:86:42 • use_build_context_synchronously
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/media_studio.dart:2:8 • unnecessary_import
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1100:20 • curly_braces_in_flow_control_structures
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:408:7 • use_build_context_synchronously
 
-17 issues found. (ran in 12.7s)
-```
+18 issues found. (ran in 9.5s)
 
-## signing-key.txt
-```text
-Alias name: androiddebugkey
-Creation date: Jul 26, 2026
-Entry type: PrivateKeyEntry
-Certificate chain length: 1
-Certificate[1]:
-Owner: CN=Chernogram Prototype, O=Chernogram, C=RU
-Issuer: CN=Chernogram Prototype, O=Chernogram, C=RU
-Serial number: 967052ca6b03ab0c
-Valid from: Sun Jul 26 08:31:07 UTC 2026 until: Thu Dec 11 08:31:07 UTC 2053
-Certificate fingerprints:
-	 SHA1: 77:F4:C8:E6:D1:BD:16:77:71:73:2B:9E:D3:2F:6A:16:5F:B0:55:69
-	 SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
-Signature algorithm name: SHA256withRSA
-Subject Public Key Algorithm: 2048-bit RSA key
-Version: 3
+✅ basic smoke test
 
-Extensions: 
+🎉 1 test passed.
+Running Gradle task 'assembleRelease'...                        
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): file_picker, flutter_contacts, flutter_webrtc, mobile_scanner, package_info_plus, photo_manager, record_android, share_plus
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
 
-#1: ObjectId: 2.5.29.14 Criticality=false
-SubjectKeyIdentifier [
-KeyIdentifier [
-0000: 5D 0A 01 66 F4 65 7B D0   A3 7E 37 D0 83 15 C4 E2  ]..f.e....7.....
-0010: 5C 63 54 2F                                        \cT/
-]
-]
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing 
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 14540 bytes (99.1% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+Caught exception: Already watching path: /home/runner/work/chernogram_new/chernogram_new/android
+Running Gradle task 'assembleRelease'...                          414.7s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (111.4MB)
 ```
