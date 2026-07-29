@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import subprocess
 from pathlib import Path
 
@@ -223,6 +224,29 @@ def patch_monitor() -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def restore_ringtone_asset() -> None:
+    audio_dir = ROOT / "assets/audio"
+    encoded_parts = []
+    for index in range(1, 7):
+        part = audio_dir / f"incoming_call.part{index}"
+        if not part.exists():
+            raise RuntimeError(f"Missing ringtone source part: {part}")
+        encoded_parts.append("".join(part.read_text(encoding="utf-8").split()))
+
+    joined = "".join(encoded_parts)
+    try:
+        payload = base64.b64decode(joined, validate=True)
+    except Exception:
+        payload = b"".join(
+            base64.b64decode(value + "=" * (-len(value) % 4))
+            for value in encoded_parts
+        )
+    if len(payload) < 10_000:
+        raise RuntimeError("Reconstructed incoming ringtone is unexpectedly small")
+    target = audio_dir / "chernogram_incoming.mp3"
+    target.write_bytes(payload)
+
+
 def bump_version() -> None:
     path = ROOT / "pubspec.yaml"
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -243,6 +267,7 @@ def main() -> None:
         build_call_service(), encoding="utf-8"
     )
     patch_monitor()
+    restore_ringtone_asset()
     bump_version()
     print(f"Restored exact working 0.7.3+14 chat and WebRTC video calls from {BASE}")
 
