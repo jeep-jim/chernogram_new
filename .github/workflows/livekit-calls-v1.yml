@@ -159,6 +159,17 @@ jobs:
             if (-not (Test-Path 'windows/CMakeLists.txt')) {
               Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
             }
+
+            $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+            $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
+            $cmakeLines = Get-Content $cmakePath
+            if (-not ($cmakeLines -contains $definition)) {
+              $patched = @($cmakeLines[0], '', $definition) + $cmakeLines[1..($cmakeLines.Length - 1)]
+              Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
+            }
+            $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+            "Applied MSVC coroutine compatibility definition" | Tee-Object -FilePath $log -Append
+
             Invoke-Logged { flutter pub get } 'Flutter pub get'
             Invoke-Logged { dart format lib/livekit_test_screen.dart lib/v12.dart } 'Dart format'
             Invoke-Logged { flutter analyze --no-fatal-infos --no-fatal-warnings } 'Flutter analyze'
