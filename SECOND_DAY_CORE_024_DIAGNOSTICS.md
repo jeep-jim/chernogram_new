@@ -1,9 +1,7 @@
 # Chernogram 0.24 second-day core diagnostics
 
 Outcome: failure
-Historical transport: d696e470cb96e61a0e5cc29c9e335b5da5a8f69b
-Source: fix/second-day-core-024
-Time: 2026-07-29T15:19:26Z
+Time: 2026-07-29T15:26:20Z
 
 ```text
 Second-day core d696e470cb96e61a0e5cc29c9e335b5da5a8f69b restored for Chernogram 0.24
@@ -65,7 +63,7 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 22 files (18 changed) in 1.20 seconds.
+Formatted 22 files (18 changed) in 0.45 seconds.
 Analyzing chernogram_new...                                     
 
   error • The method 'publishMessage' isn't defined for the type 'ChernogramAppMonitor'. Try correcting the name to the name of an existing method, or defining a method named 'publishMessage' • lib/android_data_first.dart:434:32 • undefined_method
@@ -102,5 +100,5 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-33 issues found. (ran in 13.2s)
+33 issues found. (ran in 12.7s)
 ```
