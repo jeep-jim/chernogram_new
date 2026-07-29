@@ -1,0 +1,71 @@
+name: Extract Chernogram second-day core reference
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/second-day-core-024-extract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: fix/second-day-core-024
+  HISTORICAL_COMMIT: d696e470cb96e61a0e5cc29c9e335b5da5a8f69b
+
+jobs:
+  extract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - name: Extract exact second-day source and API comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          mkdir -p reference/second_day
+          cp lib/internet_core.dart /tmp/current-internet.dart
+          cp lib/call_service.dart /tmp/current-call.dart
+          cp lib/app_monitor.dart /tmp/current-monitor.dart
+          git show "$HISTORICAL_COMMIT:lib/internet_core.dart" > reference/second_day/internet_core.dart.txt
+          git show "$HISTORICAL_COMMIT:lib/call_service.dart" > reference/second_day/call_service.dart.txt
+          git show "$HISTORICAL_COMMIT:lib/app_monitor.dart" > reference/second_day/app_monitor.dart.txt
+          {
+            echo '# Second-day core API comparison'
+            echo
+            echo "Historical commit: $HISTORICAL_COMMIT"
+            echo
+            echo '## Historical internet core public surface'
+            echo '```text'
+            grep -nE '^(class|abstract class|extension|  (static )?Future|  (static )?void|  (static )?(bool|int|String|Stream|List|Map|Internet))' reference/second_day/internet_core.dart.txt || true
+            echo '```'
+            echo
+            echo '## Current internet core public surface'
+            echo '```text'
+            grep -nE '^(class|abstract class|extension|  (static )?Future|  (static )?void|  (static )?(bool|int|String|Stream|List|Map|Internet))' /tmp/current-internet.dart || true
+            echo '```'
+            echo
+            echo '## Historical call service public surface'
+            echo '```text'
+            grep -nE '^(class|abstract class|extension|  (static )?Future|  (static )?void|  (static )?(bool|int|String|Stream|List|Map|Internet))' reference/second_day/call_service.dart.txt || true
+            echo '```'
+            echo
+            echo '## Current call service public surface'
+            echo '```text'
+            grep -nE '^(class|abstract class|extension|  (static )?Future|  (static )?void|  (static )?(bool|int|String|Stream|List|Map|Internet))' /tmp/current-call.dart || true
+            echo '```'
+          } > SECOND_DAY_CORE_024_API.md
+      - name: Commit reference files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reference/second_day SECOND_DAY_CORE_024_API.md
+          git commit -m "Сохранить эталон рабочего ядра второго дня [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
