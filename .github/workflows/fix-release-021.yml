@@ -50,3 +50,5 @@ jobs:
           git add .github/workflows/build.yml
           git commit -m "Устранить сбой Android release 0.21 [skip ci]"
           git push origin HEAD:main
+
+# Triggered after workflow registration.
