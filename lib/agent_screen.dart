@@ -141,7 +141,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
       )) {
         buffer.write(chunk);
         if (!mounted) return;
-        final index = _messages.indexWhere((message) => message.id == assistant.id);
+        final index = _messages.indexWhere(
+          (message) => message.id == assistant.id,
+        );
         if (index < 0) return;
         final updated = List<CgAgentMessage>.from(_messages);
         updated[index] = updated[index].copyWith(text: buffer.toString());
@@ -162,7 +164,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
       if (_config.speakReplies) await _speak(answer);
     } catch (error) {
       if (!mounted) return;
-      final index = _messages.indexWhere((message) => message.id == assistant.id);
+      final index = _messages.indexWhere(
+        (message) => message.id == assistant.id,
+      );
       final updated = List<CgAgentMessage>.from(_messages);
       if (index >= 0) {
         updated[index] = updated[index].copyWith(
@@ -214,7 +218,8 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
     await _stopVoice();
     if (!await _recorder.hasPermission()) return;
     final directory = await getTemporaryDirectory();
-    final path = '${directory.path}${Platform.pathSeparator}'
+    final path =
+        '${directory.path}${Platform.pathSeparator}'
         'agent_input_${DateTime.now().microsecondsSinceEpoch}.m4a';
     await _recorder.start(
       const RecordConfig(
@@ -273,9 +278,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _entityState = _AgentEntityState.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
     }
   }
 
@@ -333,7 +338,10 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
               children: [
                 Text(
                   widget.ru ? 'Настройки агента' : 'Agent settings',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
@@ -356,7 +364,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                   controller: token,
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: widget.ru ? 'Токен (необязательно)' : 'Token (optional)',
+                    labelText: widget.ru
+                        ? 'Токен (необязательно)'
+                        : 'Token (optional)',
                     prefixIcon: const Icon(Icons.key_rounded),
                   ),
                 ),
@@ -374,14 +384,18 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                     Expanded(
                       child: TextField(
                         controller: stt,
-                        decoration: const InputDecoration(labelText: 'STT model'),
+                        decoration: const InputDecoration(
+                          labelText: 'STT model',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: tts,
-                        decoration: const InputDecoration(labelText: 'TTS model'),
+                        decoration: const InputDecoration(
+                          labelText: 'TTS model',
+                        ),
                       ),
                     ),
                   ],
@@ -400,14 +414,18 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                   onChanged: (value) => setSheetState(
                     () => draft = draft.copyWith(speakReplies: value),
                   ),
-                  title: Text(widget.ru ? 'Озвучивать ответы' : 'Speak replies'),
+                  title: Text(
+                    widget.ru ? 'Озвучивать ответы' : 'Speak replies',
+                  ),
                 ),
                 SwitchListTile(
                   value: draft.memoryEnabled,
                   onChanged: (value) => setSheetState(
                     () => draft = draft.copyWith(memoryEnabled: value),
                   ),
-                  title: Text(widget.ru ? 'Память диалога' : 'Conversation memory'),
+                  title: Text(
+                    widget.ru ? 'Память диалога' : 'Conversation memory',
+                  ),
                 ),
                 const Divider(),
                 Text(
@@ -473,7 +491,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                                   _testing = true;
                                   testResult = '';
                                 });
-                                final ok = await CgAgentBackend(candidate).testConnection();
+                                final ok = await CgAgentBackend(
+                                  candidate,
+                                ).testConnection();
                                 setSheetState(() {
                                   _testing = false;
                                   testResult = ok
@@ -484,7 +504,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                         icon: _testing
                             ? const SizedBox.square(
                                 dimension: 17,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.wifi_tethering_rounded),
                         label: Text(widget.ru ? 'Проверить' : 'Test'),
@@ -534,7 +556,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                         if (sheetContext.mounted) Navigator.pop(sheetContext);
                       },
                       icon: const Icon(Icons.delete_sweep_outlined),
-                      label: Text(widget.ru ? 'Очистить историю' : 'Clear history'),
+                      label: Text(
+                        widget.ru ? 'Очистить историю' : 'Clear history',
+                      ),
                     ),
                   ),
                 ],
@@ -604,7 +628,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                       Text(
                         _config.configured
                             ? (widget.ru ? 'Готов к диалогу' : 'Ready to talk')
-                            : (widget.ru ? 'Нужно подключить интеллект' : 'Connect an intelligence backend'),
+                            : (widget.ru
+                                  ? 'Нужно подключить интеллект'
+                                  : 'Connect an intelligence backend'),
                         style: TextStyle(
                           fontSize: 11,
                           color: _config.configured
@@ -696,7 +722,9 @@ class _CgAgentScreenState extends State<CgAgentScreen> {
                         : (widget.ru ? 'Голосовой вопрос' : 'Voice question'),
                     onPressed: _sending ? null : _toggleRecording,
                     color: _recording ? ChernogramColors.danger : null,
-                    icon: Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
+                    icon: Icon(
+                      _recording ? Icons.stop_rounded : Icons.mic_rounded,
+                    ),
                   ),
                   Expanded(
                     child: TextField(
@@ -756,42 +784,42 @@ class _AgentWelcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AgentEntity(state: entityState, size: 150),
-              const SizedBox(height: 18),
-              Text(
-                configured
-                    ? (ru ? 'Я на связи' : 'I am ready')
-                    : (ru ? 'Подключите интеллект' : 'Connect intelligence'),
-                style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                configured
-                    ? (ru
-                        ? 'Пишите или нажмите микрофон. Ответ появляется по мере генерации и может быть озвучен.'
-                        : 'Type or tap the microphone. Replies stream as they are generated and can be spoken aloud.')
-                    : (ru
-                        ? 'Укажите OpenAI‑совместимый сервер: локальный Ollama, собственную модель или ваш защищённый AI‑gateway.'
-                        : 'Provide an OpenAI-compatible server: local Ollama, your own model or a secure AI gateway.'),
-                textAlign: TextAlign.center,
-              ),
-              if (!configured) ...[
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: onConfigure,
-                  icon: const Icon(Icons.link_rounded),
-                  label: Text(ru ? 'Подключить backend' : 'Connect backend'),
-                ),
-              ],
-            ],
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AgentEntity(state: entityState, size: 150),
+          const SizedBox(height: 18),
+          Text(
+            configured
+                ? (ru ? 'Я на связи' : 'I am ready')
+                : (ru ? 'Подключите интеллект' : 'Connect intelligence'),
+            style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
           ),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+            configured
+                ? (ru
+                      ? 'Пишите или нажмите микрофон. Ответ появляется по мере генерации и может быть озвучен.'
+                      : 'Type or tap the microphone. Replies stream as they are generated and can be spoken aloud.')
+                : (ru
+                      ? 'Укажите OpenAI‑совместимый сервер: локальный Ollama, собственную модель или ваш защищённый AI‑gateway.'
+                      : 'Provide an OpenAI-compatible server: local Ollama, your own model or a secure AI gateway.'),
+            textAlign: TextAlign.center,
+          ),
+          if (!configured) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onConfigure,
+              icon: const Icon(Icons.link_rounded),
+              label: Text(ru ? 'Подключить backend' : 'Connect backend'),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 class _AgentBubble extends StatelessWidget {
@@ -836,7 +864,9 @@ class _AgentBubble extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 9),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: mine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!mine) ...[_avatar(context), const SizedBox(width: 7)],
           Flexible(
@@ -847,8 +877,8 @@ class _AgentBubble extends StatelessWidget {
                 color: mine
                     ? scheme.primary.withValues(alpha: .20)
                     : message.failed
-                        ? scheme.errorContainer
-                        : scheme.surfaceContainerHigh,
+                    ? scheme.errorContainer
+                    : scheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
                   topRight: const Radius.circular(18),
@@ -1005,13 +1035,13 @@ class _AgentEntityWidgetState extends State<_AgentEntity>
   }
 
   Widget _eye(double size, Color color) => Container(
-        width: size * .11,
-        height: mathMax(2, size * .018),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(99),
-        ),
-      );
+    width: size * .11,
+    height: mathMax(2, size * .018),
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(99),
+    ),
+  );
 
   double mathMax(num left, num right) =>
       left > right ? left.toDouble() : right.toDouble();

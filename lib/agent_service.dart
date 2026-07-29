@@ -22,30 +22,30 @@ class CgAgentMessage {
   });
 
   CgAgentMessage copyWith({String? text, bool? failed}) => CgAgentMessage(
-        id: id,
-        role: role,
-        text: text ?? this.text,
-        createdAt: createdAt,
-        failed: failed ?? this.failed,
-      );
+    id: id,
+    role: role,
+    text: text ?? this.text,
+    createdAt: createdAt,
+    failed: failed ?? this.failed,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'role': role,
-        'text': text,
-        'createdAt': createdAt.toUtc().toIso8601String(),
-        'failed': failed,
-      };
+    'id': id,
+    'role': role,
+    'text': text,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'failed': failed,
+  };
 
   factory CgAgentMessage.fromJson(Map<String, dynamic> json) => CgAgentMessage(
-        id: json['id']?.toString() ?? '',
-        role: json['role']?.toString() ?? 'user',
-        text: json['text']?.toString() ?? '',
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '')
-                ?.toUtc() ??
-            DateTime.now().toUtc(),
-        failed: json['failed'] == true,
-      );
+    id: json['id']?.toString() ?? '',
+    role: json['role']?.toString() ?? 'user',
+    text: json['text']?.toString() ?? '',
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
+    failed: json['failed'] == true,
+  );
 }
 
 class CgAgentConfig {
@@ -95,49 +95,47 @@ class CgAgentConfig {
     bool? allowContacts,
     bool? allowFiles,
     bool? allowSearch,
-  }) =>
-      CgAgentConfig(
-        baseUrl: baseUrl ?? this.baseUrl,
-        apiToken: apiToken ?? this.apiToken,
-        chatModel: chatModel ?? this.chatModel,
-        transcriptionModel: transcriptionModel ?? this.transcriptionModel,
-        speechModel: speechModel ?? this.speechModel,
-        voice: voice ?? this.voice,
-        speakReplies: speakReplies ?? this.speakReplies,
-        memoryEnabled: memoryEnabled ?? this.memoryEnabled,
-        allowContacts: allowContacts ?? this.allowContacts,
-        allowFiles: allowFiles ?? this.allowFiles,
-        allowSearch: allowSearch ?? this.allowSearch,
-      );
+  }) => CgAgentConfig(
+    baseUrl: baseUrl ?? this.baseUrl,
+    apiToken: apiToken ?? this.apiToken,
+    chatModel: chatModel ?? this.chatModel,
+    transcriptionModel: transcriptionModel ?? this.transcriptionModel,
+    speechModel: speechModel ?? this.speechModel,
+    voice: voice ?? this.voice,
+    speakReplies: speakReplies ?? this.speakReplies,
+    memoryEnabled: memoryEnabled ?? this.memoryEnabled,
+    allowContacts: allowContacts ?? this.allowContacts,
+    allowFiles: allowFiles ?? this.allowFiles,
+    allowSearch: allowSearch ?? this.allowSearch,
+  );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'baseUrl': baseUrl,
-        'apiToken': apiToken,
-        'chatModel': chatModel,
-        'transcriptionModel': transcriptionModel,
-        'speechModel': speechModel,
-        'voice': voice,
-        'speakReplies': speakReplies,
-        'memoryEnabled': memoryEnabled,
-        'allowContacts': allowContacts,
-        'allowFiles': allowFiles,
-        'allowSearch': allowSearch,
-      };
+    'baseUrl': baseUrl,
+    'apiToken': apiToken,
+    'chatModel': chatModel,
+    'transcriptionModel': transcriptionModel,
+    'speechModel': speechModel,
+    'voice': voice,
+    'speakReplies': speakReplies,
+    'memoryEnabled': memoryEnabled,
+    'allowContacts': allowContacts,
+    'allowFiles': allowFiles,
+    'allowSearch': allowSearch,
+  };
 
   factory CgAgentConfig.fromJson(Map<String, dynamic> json) => CgAgentConfig(
-        baseUrl: json['baseUrl']?.toString() ?? '',
-        apiToken: json['apiToken']?.toString() ?? '',
-        chatModel: json['chatModel']?.toString() ?? 'gpt-oss:20b',
-        transcriptionModel:
-            json['transcriptionModel']?.toString() ?? 'whisper-1',
-        speechModel: json['speechModel']?.toString() ?? 'tts-1',
-        voice: json['voice']?.toString() ?? 'alloy',
-        speakReplies: json['speakReplies'] != false,
-        memoryEnabled: json['memoryEnabled'] != false,
-        allowContacts: json['allowContacts'] == true,
-        allowFiles: json['allowFiles'] == true,
-        allowSearch: json['allowSearch'] == true,
-      );
+    baseUrl: json['baseUrl']?.toString() ?? '',
+    apiToken: json['apiToken']?.toString() ?? '',
+    chatModel: json['chatModel']?.toString() ?? 'gpt-oss:20b',
+    transcriptionModel: json['transcriptionModel']?.toString() ?? 'whisper-1',
+    speechModel: json['speechModel']?.toString() ?? 'tts-1',
+    voice: json['voice']?.toString() ?? 'alloy',
+    speakReplies: json['speakReplies'] != false,
+    memoryEnabled: json['memoryEnabled'] != false,
+    allowContacts: json['allowContacts'] == true,
+    allowFiles: json['allowFiles'] == true,
+    allowSearch: json['allowSearch'] == true,
+  );
 }
 
 class CgAgentStore {
@@ -172,7 +170,9 @@ class CgAgentStore {
       if (decoded is! List) return const <CgAgentMessage>[];
       return decoded
           .whereType<Map>()
-          .map((item) => CgAgentMessage.fromJson(Map<String, dynamic>.from(item)))
+          .map(
+            (item) => CgAgentMessage.fromJson(Map<String, dynamic>.from(item)),
+          )
           .where((message) => message.id.isNotEmpty && message.text.isNotEmpty)
           .toList(growable: false);
     } catch (_) {
@@ -211,7 +211,7 @@ class CgAgentBackend {
   final http.Client _client;
 
   CgAgentBackend(this.config, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   Uri _endpoint(String path) {
     final base = config.baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
@@ -220,11 +220,11 @@ class CgAgentBackend {
   }
 
   Map<String, String> _headers({bool json = true}) => <String, String>{
-        if (json) 'Content-Type': 'application/json',
-        'Accept': json ? 'text/event-stream, application/json' : '*/*',
-        if (config.apiToken.trim().isNotEmpty)
-          'Authorization': 'Bearer ${config.apiToken.trim()}',
-      };
+    if (json) 'Content-Type': 'application/json',
+    'Accept': json ? 'text/event-stream, application/json' : '*/*',
+    if (config.apiToken.trim().isNotEmpty)
+      'Authorization': 'Bearer ${config.apiToken.trim()}',
+  };
 
   Stream<String> streamReply({
     required List<CgAgentMessage> messages,
@@ -253,9 +253,9 @@ class CgAgentBackend {
           ),
         ],
       });
-    final response = await _client.send(request).timeout(
-          const Duration(seconds: 30),
-        );
+    final response = await _client
+        .send(request)
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final body = await response.stream.bytesToString();
       throw CgAgentBackendException(
@@ -264,9 +264,10 @@ class CgAgentBackend {
     }
 
     var emitted = false;
-    await for (final line in response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())) {
+    await for (final line
+        in response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
       final trimmed = line.trim();
       if (trimmed.isEmpty || trimmed.startsWith(':')) continue;
       if (!trimmed.startsWith('data:')) continue;
@@ -309,16 +310,16 @@ class CgAgentBackend {
     if (!await audioFile.exists()) {
       throw const CgAgentBackendException('audio_file_missing');
     }
-    final request = http.MultipartRequest(
-      'POST',
-      _endpoint('/v1/audio/transcriptions'),
-    )
-      ..headers.addAll(_headers(json: false))
-      ..fields['model'] = config.transcriptionModel.trim()
-      ..files.add(await http.MultipartFile.fromPath('file', audioFile.path));
-    final response = await _client.send(request).timeout(
-          const Duration(minutes: 2),
-        );
+    final request =
+        http.MultipartRequest('POST', _endpoint('/v1/audio/transcriptions'))
+          ..headers.addAll(_headers(json: false))
+          ..fields['model'] = config.transcriptionModel.trim()
+          ..files.add(
+            await http.MultipartFile.fromPath('file', audioFile.path),
+          );
+    final response = await _client
+        .send(request)
+        .timeout(const Duration(minutes: 2));
     final body = await response.stream.bytesToString();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw CgAgentBackendException(
