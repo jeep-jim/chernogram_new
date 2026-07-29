@@ -32,21 +32,29 @@ jobs:
           cache: pip
           cache-dependency-path: services/livekit_broker/requirements.txt
 
-      - name: Install broker dependencies
-        working-directory: services/livekit_broker
-        run: python -m pip install -r requirements.txt
-
-      - name: Test broker
-        working-directory: services/livekit_broker
+      - name: Validate broker and Docker
+        shell: bash
         run: |
-          python -m compileall -q broker.py test_broker.py
-          python -m unittest -v
+          set -o pipefail
+          (
+            set -euo pipefail
+            cd services/livekit_broker
+            python -m pip install -r requirements.txt
+            python -m compileall -q broker.py test_broker.py
+            python -m unittest -v
+            cd ../..
+            docker compose --env-file .env.livekit.example -f docker-compose.livekit.yml config
+            docker build -t cernogram-livekit-broker-ci services/livekit_broker
+          ) 2>&1 | tee broker-ci.log
 
-      - name: Validate Docker Compose
-        run: docker compose --env-file .env.livekit.example -f docker-compose.livekit.yml config
-
-      - name: Build broker image
-        run: docker build -t cernogram-livekit-broker-ci services/livekit_broker
+      - name: Upload broker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livekit-broker-ci-log
+          path: broker-ci.log
+          if-no-files-found: warn
+          retention-days: 14
 
   android:
     if: github.actor != 'github-actions[bot]'
@@ -75,19 +83,32 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Materialize LiveKit source
-        run: python tooling/materialize_livekit_calls_v1.py
-
       - name: Validate Flutter and build Android
+        shell: bash
         run: |
-          flutter --version
-          flutter pub get
-          dart format lib/livekit_test_screen.dart lib/v12.dart
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-          flutter build apk --debug
+          set -o pipefail
+          (
+            set -euo pipefail
+            python tooling/materialize_livekit_calls_v1.py
+            flutter --version
+            flutter pub get
+            dart format lib/livekit_test_screen.dart lib/v12.dart
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+            flutter build apk --debug
+          ) 2>&1 | tee android-ci.log
+
+      - name: Upload Android diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livekit-android-ci-log
+          path: android-ci.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload Android test APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: cernogram-livekit-android-debug
@@ -116,26 +137,49 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Materialize LiveKit source
-        shell: pwsh
-        run: python tooling/materialize_livekit_calls_v1.py
-
       - name: Validate Flutter and build Windows
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          flutter --version
-          flutter config --enable-windows-desktop
-          if (-not (Test-Path 'windows/CMakeLists.txt')) {
-            flutter create --platforms=windows --project-name chernogram --no-pub .
+          $log = Join-Path $PWD 'windows-ci.log'
+
+          function Invoke-Logged {
+            param([scriptblock]$Command, [string]$Name)
+            "===== $Name =====" | Tee-Object -FilePath $log -Append
+            & $Command *>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) {
+              throw "$Name failed with exit code $LASTEXITCODE"
+            }
           }
-          flutter pub get
-          dart format lib/livekit_test_screen.dart lib/v12.dart
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-          flutter build windows --debug
+
+          try {
+            Invoke-Logged { python tooling/materialize_livekit_calls_v1.py } 'Materialize LiveKit source'
+            Invoke-Logged { flutter --version } 'Flutter version'
+            Invoke-Logged { flutter config --enable-windows-desktop } 'Enable Windows desktop'
+            if (-not (Test-Path 'windows/CMakeLists.txt')) {
+              Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
+            }
+            Invoke-Logged { flutter pub get } 'Flutter pub get'
+            Invoke-Logged { dart format lib/livekit_test_screen.dart lib/v12.dart } 'Dart format'
+            Invoke-Logged { flutter analyze --no-fatal-infos --no-fatal-warnings } 'Flutter analyze'
+            Invoke-Logged { flutter test } 'Flutter test'
+            Invoke-Logged { flutter build windows --debug } 'Build Windows debug'
+          } catch {
+            "ERROR: $($_.Exception.Message)" | Tee-Object -FilePath $log -Append
+            throw
+          }
+
+      - name: Upload Windows diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livekit-windows-ci-log
+          path: windows-ci.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload Windows test build
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: cernogram-livekit-windows-debug
@@ -143,8 +187,8 @@ jobs:
           retention-days: 14
 
   finalize:
-    if: github.actor != 'github-actions[bot]'
-    name: Save validated LiveKit source
+    if: always() && github.actor != 'github-actions[bot]'
+    name: Save LiveKit CI result
     needs:
       - broker
       - android
@@ -158,51 +202,91 @@ jobs:
           ref: feature/livekit-calls-v1
           fetch-depth: 0
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: livekit-*-ci-log
+          path: ci-logs
+          merge-multiple: true
+
       - uses: actions/setup-python@v5
+        if: needs.broker.result == 'success' && needs.android.result == 'success' && needs.windows.result == 'success'
         with:
           python-version: '3.12'
 
       - uses: subosito/flutter-action@v2
+        if: needs.broker.result == 'success' && needs.android.result == 'success' && needs.windows.result == 'success'
         with:
           flutter-version: '3.44.8'
           channel: stable
           cache: false
 
-      - name: Materialize and lock validated source
+      - name: Prepare result files
+        shell: bash
+        env:
+          BROKER_RESULT: ${{ needs.broker.result }}
+          ANDROID_RESULT: ${{ needs.android.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
         run: |
           set -euo pipefail
-          python tooling/materialize_livekit_calls_v1.py
-          flutter pub get
-          dart format lib/livekit_test_screen.dart lib/v12.dart
-          cat > LIVEKIT_CI_STATUS.md <<EOF
+          SUCCESS=false
+          if [ "$BROKER_RESULT" = success ] && [ "$ANDROID_RESULT" = success ] && [ "$WINDOWS_RESULT" = success ]; then
+            SUCCESS=true
+          fi
+
+          if [ "$SUCCESS" = true ]; then
+            python tooling/materialize_livekit_calls_v1.py
+            flutter pub get
+            dart format lib/livekit_test_screen.dart lib/v12.dart
+            cat > LIVEKIT_CI_STATUS.md <<EOF
           LiveKit Calls v1 ready
           Commit: ${GITHUB_SHA}
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Version: 0.21.0+51
-          Platforms: Android and Windows
+          Broker: ${BROKER_RESULT}
+          Android: ${ANDROID_RESULT}
+          Windows: ${WINDOWS_RESULT}
           Media: LiveKit room with microphone, camera and immediate hang-up
-          Broker: Python token service with short-lived room grants
-          Infrastructure: LiveKit Server, Redis and local TURN/UDP through Docker Compose
+          Infrastructure: Python token broker, LiveKit Server, Redis and Docker Compose
           EOF
+            rm -f LIVEKIT_CI_ERROR.md
+          else
+            {
+              echo '# LiveKit Calls v1 CI failed'
+              echo
+              echo "Commit: ${GITHUB_SHA}"
+              echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              echo "Broker: ${BROKER_RESULT}"
+              echo "Android: ${ANDROID_RESULT}"
+              echo "Windows: ${WINDOWS_RESULT}"
+              echo
+              for file in ci-logs/*.log; do
+                [ -f "$file" ] || continue
+                echo "## $(basename "$file")"
+                echo '```text'
+                tail -n 350 "$file"
+                echo '```'
+                echo
+              done
+            } > LIVEKIT_CI_ERROR.md
+            rm -f LIVEKIT_CI_STATUS.md
+          fi
 
-      - name: Commit validated source
+      - name: Commit result
+        shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            .env.livekit.example \
+          git add -A \
             .gitignore \
-            .github/workflows/livekit-calls-v1.yml \
-            LIVEKIT_CI_STATUS.md \
-            docker-compose.livekit.yml \
-            docs/LIVEKIT_CALLS_V1.md \
-            infra/livekit \
+            android/app/src/main/AndroidManifest.xml \
             lib/livekit_test_screen.dart \
             lib/v12.dart \
             pubspec.yaml \
             pubspec.lock \
-            services/livekit_broker \
-            tooling/materialize_livekit_calls_v1.py
-          git commit -m "Добавить LiveKit Core и тест Android ↔ Windows" || true
+            LIVEKIT_CI_STATUS.md \
+            LIVEKIT_CI_ERROR.md \
+            tooling/materialize_livekit_calls_v1.py 2>/dev/null || true
+          git commit -m "Сохранить результат LiveKit CI Android и Windows [skip ci]" || true
           git push origin HEAD:feature/livekit-calls-v1
