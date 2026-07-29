@@ -147,10 +147,7 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
             ? 'Подключаем медиаканал…'
             : 'Connecting media…',
       );
-      const roomOptions = lk.RoomOptions(
-        adaptiveStream: true,
-        dynacast: true,
-      );
+      const roomOptions = lk.RoomOptions(adaptiveStream: true, dynacast: true);
       await _room.prepareConnection(url, token);
       await _room.connect(url, token, roomOptions: roomOptions);
       final local = _room.localParticipant;
@@ -240,7 +237,7 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
   lk.VideoTrack? _firstVideoTrack(lk.Participant participant) {
     for (final publication in participant.videoTrackPublications) {
       final track = publication.track;
-      if (track != null && !publication.muted) return track;
+      if (track is lk.VideoTrack && !publication.muted) return track;
     }
     return null;
   }
@@ -286,7 +283,10 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black.withValues(alpha: 0.78)],
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.78),
+                      ],
                     ),
                   ),
                   child: Row(
@@ -341,7 +341,9 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
               enabled: !_connected && !_busy,
               keyboardType: TextInputType.url,
               decoration: InputDecoration(
-                labelText: widget.ru ? 'Адрес Python broker' : 'Python broker URL',
+                labelText: widget.ru
+                    ? 'Адрес Python broker'
+                    : 'Python broker URL',
                 hintText: 'http://192.168.1.20:8090',
                 prefixIcon: const Icon(Icons.dns_outlined),
               ),
@@ -509,7 +511,9 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
                         ? (widget.ru ? 'Выключить микрофон' : 'Mute')
                         : (widget.ru ? 'Включить микрофон' : 'Unmute'),
                     child: Icon(
-                      _microphoneEnabled ? Icons.mic_rounded : Icons.mic_off_rounded,
+                      _microphoneEnabled
+                          ? Icons.mic_rounded
+                          : Icons.mic_off_rounded,
                     ),
                   ),
                   const SizedBox(width: 18),
@@ -543,7 +547,10 @@ class _CgLiveKitTestScreenState extends State<CgLiveKitTestScreen> {
   @override
   void dispose() {
     _room.removeListener(_onRoomChanged);
-    unawaited(_room.disconnect().whenComplete(_room.dispose));
+    unawaited(() async {
+      await _room.disconnect();
+      await _room.dispose();
+    }());
     _brokerController.dispose();
     _secretController.dispose();
     _roomController.dispose();

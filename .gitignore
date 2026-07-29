@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local LiveKit environment
+.env.livekit
+services/livekit_broker/__pycache__/

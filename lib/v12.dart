@@ -24,6 +24,7 @@ import 'crash_reporter.dart';
 import 'core_models.dart';
 import 'device_contacts_screen.dart';
 import 'group_call_service.dart';
+import 'livekit_test_screen.dart';
 import 'music_player.dart';
 import 'notification_service.dart';
 import 'pending_call.dart';
@@ -1038,6 +1039,21 @@ class _ChernogramV12State extends State<ChernogramV12> {
     }
   }
 
+  Future<void> _openLiveKitTest() async {
+    final profile = _profile;
+    if (profile == null || !mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgLiveKitTestScreen(
+          ru: widget.ru,
+          initialIdentity: profile.id,
+          initialDisplayName: profile.nickname,
+        ),
+      ),
+    );
+  }
+
   Future<void> _togglePrivacy() async {
     final next = !_privacyLens;
     await CgStore.savePrivacyLens(next);
@@ -1125,6 +1141,9 @@ class _ChernogramV12State extends State<ChernogramV12> {
             onSelected: (value) {
               if (value == 'theme') widget.onToggleTheme();
               if (value == 'language') widget.onChangeLanguage();
+              if (value == 'livekit_test') {
+                unawaited(_openLiveKitTest());
+              }
               if (value == 'update') widget.onCheckUpdates();
             },
             itemBuilder: (context) => [
@@ -1146,6 +1165,14 @@ class _ChernogramV12State extends State<ChernogramV12> {
                 child: ListTile(
                   leading: const Icon(Icons.language),
                   title: Text(widget.ru ? 'English' : 'Русский'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'livekit_test',
+                child: ListTile(
+                  leading: const Icon(Icons.video_call_rounded),
+                  title: Text(widget.ru ? 'Тест LiveKit' : 'LiveKit test'),
+                  subtitle: const Text('Android ↔ Windows'),
                 ),
               ),
               PopupMenuItem(
