@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: cernogram-livekit-release-021
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   SOURCE_BRANCH: feature/livekit-calls-v1
@@ -52,17 +52,20 @@ jobs:
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
         run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.android"
-          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
-            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
-          fi
-          test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
-          ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
+          set -o pipefail
+          (
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore" || { echo '::error::Signing key unavailable'; exit 1; }
+            keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee signing-key.txt
+            ACTUAL=$(grep -m1 'SHA256:' signing-key.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$ACTUAL" = "$EXPECTED" || { echo '::error::Signing fingerprint mismatch'; exit 1; }
+          ) 2>&1 | tee android-ci.log
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -71,52 +74,44 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install pinned Android CMake
+      - name: Build, sign and publish Android
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
+          set -o pipefail
+          (
+            set -euo pipefail
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" >/dev/null
+            flutter --version
+            flutter pub get
+            dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+            flutter build apk --release
 
-      - name: Validate and build Android
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter --version
-          flutter pub get
-          dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-          flutter build apk --release
-          test -s build/app/outputs/flutter-apk/app-release.apk
+            SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$SOURCE_APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            test -n "$APKSIGNER"
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram.apk \
+              "$SOURCE_APK"
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
 
-      - name: Re-sign and verify APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          test -n "$APKSIGNER"
-          "$APKSIGNER" sign \
-            --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out chernogram.apk \
-            "$SOURCE_APK"
-          "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
-          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test -n "$APK_CERT" && test "$APK_CERT" = "$EXPECTED"
-
-      - name: Prepare Android manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          VERSION_NAME=${VERSION_FULL%%+*}
-          VERSION_CODE=${VERSION_FULL##*+}
-          APK_SHA256=$(sha256sum chernogram.apk | awk '{print $1}')
-          cat > update.json <<EOF
+            VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
+            VERSION_NAME=${VERSION_FULL%%+*}
+            VERSION_CODE=${VERSION_FULL##*+}
+            test "$VERSION_FULL" = "0.21.0+51"
+            APK_SHA256=$(sha256sum chernogram.apk | awk '{print $1}')
+            cat > update.json <<EOF
           {
             "versionName": "${VERSION_NAME}",
             "versionCode": ${VERSION_CODE},
@@ -128,22 +123,25 @@ jobs:
           }
           EOF
 
-      - name: Publish Android update
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          VERSION_FULL=$(awk '/^version:/ {print $2}' pubspec.yaml)
-          VERSION_NAME=${VERSION_FULL%%+*}
-          gh release delete latest-apk --cleanup-tag --yes || true
-          gh release create latest-apk chernogram.apk update.json \
-            --target "$SOURCE_BRANCH" \
-            --title "Cernogram Android ${VERSION_NAME}" \
-            --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." \
-            --prerelease
+            gh release delete latest-apk --cleanup-tag --yes || true
+            gh release create latest-apk chernogram.apk update.json \
+              --target "$SOURCE_BRANCH" \
+              --title "Cernogram Android ${VERSION_NAME}" \
+              --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." \
+              --prerelease
+          ) 2>&1 | tee -a android-ci.log
 
-      - name: Upload Android artifact
+      - name: Upload Android diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android-log-${{ github.run_attempt }}
+          path: android-ci.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Android release artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: cernogram-android-0.21
@@ -172,86 +170,99 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Validate and build Windows
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          flutter --version
-          flutter config --enable-windows-desktop
-          if (-not (Test-Path 'windows/CMakeLists.txt')) {
-            flutter create --platforms=windows --project-name chernogram --no-pub .
-          }
-
-          $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
-          $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
-          $cmakeLines = Get-Content $cmakePath
-          if (-not ($cmakeLines -contains $definition)) {
-            $patched = @($cmakeLines[0], '', $definition) + $cmakeLines[1..($cmakeLines.Length - 1)]
-            Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
-          }
-          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
-
-          flutter pub get
-          dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-          flutter build windows --release
-
-          $exe = Join-Path $PWD 'build/windows/x64/runner/Release/chernogram.exe'
-          if (-not (Test-Path $exe)) { throw "chernogram.exe was not produced" }
-
-      - name: Smoke test Windows executable
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $release = Join-Path $PWD 'build/windows/x64/runner/Release'
-          $exe = Join-Path $release 'chernogram.exe'
-          $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
-          Start-Sleep -Seconds 8
-          if ($process.HasExited) { throw "Cernogram exited during startup smoke test: $($process.ExitCode)" }
-          Stop-Process -Id $process.Id -Force
-
-      - name: Package Windows portable update
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $release = Join-Path $PWD 'build/windows/x64/runner/Release'
-          $stage = Join-Path $PWD 'app'
-          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          Copy-Item (Join-Path $release '*') $stage -Recurse -Force
-          Compress-Archive -Path $stage -DestinationPath 'Cernogram-Windows-x64.zip' -Force
-
-          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
-          $versionName = ($versionFull -split '\+')[0]
-          $versionCode = ($versionFull -split '\+')[1]
-          $sha = (Get-FileHash 'Cernogram-Windows-x64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
-          $manifest = [ordered]@{
-            versionName = $versionName
-            versionFull = $versionFull
-            versionCode = [int]$versionCode
-            portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Cernogram-Windows-x64.zip?v=$versionCode"
-            portableSha256 = $sha
-          }
-          $manifest | ConvertTo-Json | Set-Content -Path 'windows-update.json' -Encoding UTF8
-
-      - name: Publish Windows update
+      - name: Build, smoke-test and publish Windows
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
-          $versionName = ($versionFull -split '\+')[0]
-          gh release delete latest-windows --cleanup-tag --yes 2>$null
-          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
-          gh release create latest-windows Cernogram-Windows-x64.zip windows-update.json `
-            --target "$env:SOURCE_BRANCH" `
-            --title "Cernogram Windows $versionName" `
-            --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." `
-            --prerelease
+          $log = Join-Path $PWD 'windows-ci.log'
 
-      - name: Upload Windows artifact
+          function Invoke-Logged {
+            param([scriptblock]$Command, [string]$Name)
+            "===== $Name =====" | Tee-Object -FilePath $log -Append
+            & $Command *>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE" }
+          }
+
+          try {
+            Invoke-Logged { flutter --version } 'Flutter version'
+            Invoke-Logged { flutter config --enable-windows-desktop } 'Enable Windows desktop'
+            if (-not (Test-Path 'windows/CMakeLists.txt')) {
+              Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
+            }
+
+            $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+            $cmakePath = Join-Path $PWD 'windows/CMakeLists.txt'
+            $cmakeLines = Get-Content $cmakePath
+            if (-not ($cmakeLines -contains $definition)) {
+              $patched = @($cmakeLines[0], '', $definition) + $cmakeLines[1..($cmakeLines.Length - 1)]
+              Set-Content -Path $cmakePath -Value $patched -Encoding UTF8
+            }
+            $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+            "Pinned windows-2022 and applied coroutine compatibility definition" | Tee-Object -FilePath $log -Append
+
+            Invoke-Logged { flutter pub get } 'Flutter pub get'
+            Invoke-Logged { dart format --output=none --set-exit-if-changed lib/livekit_test_screen.dart lib/v12.dart } 'Dart format check'
+            Invoke-Logged { flutter analyze --no-fatal-infos --no-fatal-warnings } 'Flutter analyze'
+            Invoke-Logged { flutter test } 'Flutter test'
+            Invoke-Logged { flutter build windows --release } 'Build Windows release'
+
+            $release = Join-Path $PWD 'build/windows/x64/runner/Release'
+            $exe = Join-Path $release 'chernogram.exe'
+            if (-not (Test-Path $exe)) { throw 'chernogram.exe was not produced' }
+
+            "===== Windows smoke test =====" | Tee-Object -FilePath $log -Append
+            $process = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
+            Start-Sleep -Seconds 8
+            if ($process.HasExited) { throw "Cernogram exited during startup smoke test: $($process.ExitCode)" }
+            Stop-Process -Id $process.Id -Force
+
+            $stage = Join-Path $PWD 'app'
+            if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+            New-Item -ItemType Directory -Path $stage | Out-Null
+            Copy-Item (Join-Path $release '*') $stage -Recurse -Force
+            Compress-Archive -Path $stage -DestinationPath 'Cernogram-Windows-x64.zip' -Force
+
+            $versionFull = ((Select-String -Path pubspec.yaml -Pattern '^version:').Line -split '\s+')[1]
+            if ($versionFull -ne '0.21.0+51') { throw "Unexpected version: $versionFull" }
+            $versionName = ($versionFull -split '\+')[0]
+            $versionCode = ($versionFull -split '\+')[1]
+            $sha = (Get-FileHash 'Cernogram-Windows-x64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+            $manifest = [ordered]@{
+              versionName = $versionName
+              versionFull = $versionFull
+              versionCode = [int]$versionCode
+              portableUrl = "https://github.com/jeep-jim/chernogram_new/releases/download/latest-windows/Cernogram-Windows-x64.zip?v=$versionCode"
+              portableSha256 = $sha
+            }
+            $manifest | ConvertTo-Json | Set-Content -Path 'windows-update.json' -Encoding UTF8
+
+            gh release delete latest-windows --cleanup-tag --yes 2>$null
+            if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+            Invoke-Logged {
+              gh release create latest-windows Cernogram-Windows-x64.zip windows-update.json `
+                --target "$env:SOURCE_BRANCH" `
+                --title "Cernogram Windows $versionName" `
+                --notes "LiveKit Calls 0.21: тестовый медиаканал Android ↔ Windows и безопасная выдача временных токенов." `
+                --prerelease
+            } 'Publish Windows release'
+          } catch {
+            "ERROR: $($_.Exception.Message)" | Tee-Object -FilePath $log -Append
+            throw
+          }
+
+      - name: Upload Windows diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-log-${{ github.run_attempt }}
+          path: windows-ci.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Windows release artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: cernogram-windows-0.21
@@ -260,3 +271,78 @@ jobs:
             windows-update.json
           if-no-files-found: error
           retention-days: 14
+
+  finalize:
+    name: Save release result
+    if: always()
+    needs:
+      - android
+      - windows
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download release logs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: release-*-log-*
+          path: release-logs
+          merge-multiple: true
+
+      - name: Write result
+        shell: bash
+        env:
+          ANDROID_RESULT: ${{ needs.android.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+        run: |
+          set -euo pipefail
+          if [ "$ANDROID_RESULT" = success ] && [ "$WINDOWS_RESULT" = success ]; then
+            cat > RELEASE_021_STATUS.md <<EOF
+          Cernogram LiveKit 0.21 published
+          Source: feature/livekit-calls-v1
+          Version: 0.21.0+51
+          Android: ${ANDROID_RESULT}
+          Windows: ${WINDOWS_RESULT}
+          Android tag: latest-apk
+          Windows tag: latest-windows
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+            rm -f RELEASE_021_ERROR.md
+          else
+            {
+              echo '# Cernogram LiveKit 0.21 release failed'
+              echo
+              echo "Source: feature/livekit-calls-v1"
+              echo "Android: ${ANDROID_RESULT}"
+              echo "Windows: ${WINDOWS_RESULT}"
+              echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              echo
+              for file in release-logs/*.log; do
+                [ -f "$file" ] || continue
+                echo "## $(basename "$file")"
+                echo '```text'
+                tail -n 450 "$file"
+                echo '```'
+                echo
+              done
+            } > RELEASE_021_ERROR.md
+            rm -f RELEASE_021_STATUS.md
+          fi
+
+      - name: Commit release result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf release-logs
+          git add RELEASE_021_STATUS.md RELEASE_021_ERROR.md 2>/dev/null || true
+          git commit -m "Сохранить результат выпуска LiveKit 0.21 [skip ci]" || exit 0
+          git push origin HEAD:main
