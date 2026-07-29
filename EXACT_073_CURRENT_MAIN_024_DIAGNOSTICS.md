@@ -1,8 +1,8 @@
 # Exact 0.7.3 core diagnostic on current main
 
-Outcome: failure
+Outcome: success
 Reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)
-Time: 2026-07-29T16:17:52Z
+Time: 2026-07-29T16:23:37Z
 
 ```text
 Restored exact working 0.7.3+14 chat and WebRTC video calls from d1cad8649d00259ab615e65ea196213713b2385f
@@ -94,11 +94,10 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1100:20 • curly_braces_in_flow_control_structures
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:408:7 • use_build_context_synchronously
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/v12.dart:3:8 • unnecessary_import
-warning • The asset file 'assets/audio/chernogram_incoming.mp3' doesn't exist. Try creating the file or fixing the path to the file • pubspec.yaml:52:7 • asset_does_not_exist
 
-21 issues found. (ran in 18.4s)
-Error detected in pubspec.yaml:
-No file or variants found for asset: assets/audio/chernogram_incoming.mp3.
+20 issues found. (ran in 14.3s)
 
-Error: Failed to build asset bundle
+✅ basic smoke test
+
+🎉 1 test passed.
 ```
