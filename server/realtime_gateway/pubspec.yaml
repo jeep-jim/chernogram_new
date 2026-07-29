@@ -1,0 +1,11 @@
+name: cernogram_realtime_gateway
+description: Cernogram encrypted realtime WebSocket gateway
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  cryptography: ^2.9.0
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.15
