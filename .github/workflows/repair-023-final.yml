@@ -1,0 +1,197 @@
+name: Final Chernogram 0.23 Android and Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/repair-023-final.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-023-final
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: fix/realtime-ui-023
+  EXPECTED_VERSION: 0.23.0+55
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Analyze repaired source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tooling/apply_repair_023.py
+          python tooling/restore_v16_features.py
+          test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$EXPECTED_VERSION"
+          flutter pub get
+          dart format lib
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+      - name: Restore signing key
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          fi
+          test -s "$HOME/.android/debug.keystore"
+      - name: Build and sign Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tooling/apply_repair_023.py
+          python tooling/restore_v16_features.py
+          flutter pub get
+          dart format lib
+          flutter build apk --release
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram-android-0.23.0.apk "$APK"
+          "$APKSIGNER" verify --print-certs chernogram-android-0.23.0.apk
+          sha256sum chernogram-android-0.23.0.apk > android-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-android-0.23.0
+          path: |
+            chernogram-android-0.23.0.apk
+            android-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Build Windows with coroutine compatibility
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python tooling/apply_repair_023.py
+          python tooling/restore_v16_features.py
+          flutter config --enable-windows-desktop
+          flutter pub get
+          dart format lib
+          $cmake = 'windows/CMakeLists.txt'
+          $source = Get-Content $cmake -Raw
+          if ($source -notmatch '_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS') {
+            $source = $source -replace 'project\(runner LANGUAGES CXX\)', "project(runner LANGUAGES CXX)`r`nadd_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+            Set-Content -Path $cmake -Value $source -Encoding UTF8
+          }
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+          flutter build windows --release --verbose 2>&1 | Tee-Object -FilePath windows-023.log
+          $release = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path "$release/chernogram.exe")) { throw 'Windows executable was not built' }
+          Compress-Archive -Path "$release/*" -DestinationPath chernogram-windows-0.23.0.zip -Force
+          Get-FileHash chernogram-windows-0.23.0.zip -Algorithm SHA256 | Format-List | Out-File windows-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-windows-0.23.0
+          path: |
+            chernogram-windows-0.23.0.zip
+            windows-sha256.txt
+            windows-023.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  finalize:
+    needs: [verify, android, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - run: git fetch --tags --force
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Save passed status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tooling/apply_repair_023.py
+          python tooling/restore_v16_features.py
+          cat > REPAIR_023_STATUS.md <<EOF
+          Chernogram 0.23 ready
+          Version: ${EXPECTED_VERSION}
+          Analyze and tests: passed
+          Android release: passed
+          Windows release: passed
+          Windows coroutine compatibility: applied
+          Functions from 0.16: restored
+          Public update channel: not changed yet
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          rm -f REPAIR_023_V16_CI_ERROR.md REPAIR_023_CI_ERROR.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Чернограм 0.23 Android и Windows готовы [skip ci]" || true
+          git push origin HEAD:"$SOURCE_BRANCH"
