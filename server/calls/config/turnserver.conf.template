@@ -1,0 +1,35 @@
+listening-port=${TURN_PORT}
+tls-listening-port=${TURN_TLS_PORT}
+min-port=${TURN_RELAY_START}
+max-port=${TURN_RELAY_END}
+
+fingerprint
+use-auth-secret
+static-auth-secret=${TURN_SHARED_SECRET}
+realm=${TURN_DOMAIN}
+server-name=${TURN_DOMAIN}
+
+external-ip=${TURN_EXTERNAL_IP}
+listening-ip=0.0.0.0
+relay-ip=0.0.0.0
+
+cert=${TURN_CERT_FILE}
+pkey=${TURN_KEY_FILE}
+
+no-cli
+no-multicast-peers
+no-loopback-peers
+stale-nonce=600
+channel-lifetime=600
+permission-lifetime=300
+max-allocate-lifetime=600
+
+# LiveKit must be reachable from the relay. Deny dangerous destinations while
+# allowing public Internet addresses and the private Docker network used here.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=224.0.0.0-255.255.255.255
+
+log-file=stdout
+verbose
