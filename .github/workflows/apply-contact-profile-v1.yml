@@ -1,0 +1,370 @@
+name: Apply Contact Profile v1
+
+on:
+  push:
+    branches:
+      - feature/contact-profile-v1
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/contact-profile-v1
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Connect profile UI and enforce local policies
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new, label):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'{label}: source block not found')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          patch(
+              'lib/v12.dart',
+              "import 'call_service.dart';\n",
+              "import 'call_service.dart';\nimport 'contact_policy.dart';\nimport 'contact_profile_screen.dart';\n",
+              'v12 contact imports',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """  Future<void> _openNotificationTunnel(String tunnelId) async {
+""",
+              """  Future<void> _openContactProfile(CgContact contact) async {
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgContactProfileScreen(
+          ru: widget.ru,
+          contact: contact,
+          online: _onlineContactIds.contains(contact.id),
+          onOpenChat: _openContact,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotificationTunnel(String tunnelId) async {
+""",
+              'open contact profile method',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+      ),
+      CgAgentScreen(""",
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+        onProfile: _openContactProfile,
+      ),
+      CgAgentScreen(""",
+              'contact profile callback',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+
+  const _V12ContactsScreen({
+""",
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+  final Future<void> Function(CgContact contact) onProfile;
+
+  const _V12ContactsScreen({
+""",
+              'contacts onProfile field',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """    required this.privacyLens,
+    required this.onOpen,
+  });
+""",
+              """    required this.privacyLens,
+    required this.onOpen,
+    required this.onProfile,
+  });
+""",
+              'contacts onProfile constructor',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """                leading: _V12ContactAvatar(
+                  contact: contact,
+                  online: onlineContactIds.contains(contact.id),
+                ),
+""",
+              """                leading: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onProfile(contact),
+                  child: _V12ContactAvatar(
+                    contact: contact,
+                    online: onlineContactIds.contains(contact.id),
+                  ),
+                ),
+""",
+              'avatar opens profile',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """                    Text(
+                      privacyLens ? '••••••••' : _lastSeen(contact.lastSeenAt, ru),
+                    ),
+""",
+              """                    Text(
+                      privacyLens
+                          ? '••••••••'
+                          : onlineContactIds.contains(contact.id)
+                              ? (ru ? 'в сети' : 'online')
+                              : _lastSeen(contact.lastSeenAt, ru),
+                      style: onlineContactIds.contains(contact.id)
+                          ? const TextStyle(
+                              color: Color(0xFF22C7F2),
+                              fontWeight: FontWeight.w800,
+                            )
+                          : null,
+                    ),
+""",
+              'online subtitle',
+          )
+
+          patch(
+              'lib/v12.dart',
+              """    final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+    final incoming = await CgMediaStore.cacheIncomingMessage(
+      CgMessage.fromJson(raw),
+    );
+    if (incoming.authorId != _profile?.id) {
+""",
+              """    final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+    final authorId = raw['authorId']?.toString() ?? '';
+    final policy = await CgContactPolicyStore.load(authorId);
+    if (authorId.isNotEmpty &&
+        authorId != _profile?.id &&
+        (policy.blocked || !policy.allowMessages)) {
+      return;
+    }
+    var incoming = await CgMediaStore.cacheIncomingMessage(
+      CgMessage.fromJson(raw),
+    );
+    if (incoming.authorId != _profile?.id &&
+        incoming.attachment != null &&
+        !policy.allowFiles) {
+      incoming = incoming.copyWith(
+        clearAttachment: true,
+        text: incoming.text.trim().isNotEmpty
+            ? incoming.text
+            : (widget.ru ? 'Файл скрыт настройками контакта' : 'File hidden by contact settings'),
+      );
+    }
+    if (incoming.authorId != _profile?.id && !policy.muted) {
+""",
+              'background message policy',
+          )
+
+          patch(
+              'lib/chat_screen.dart',
+              "import 'call_service.dart';\n",
+              "import 'call_service.dart';\nimport 'contact_policy.dart';\n",
+              'chat policy import',
+          )
+
+          patch(
+              'lib/chat_screen.dart',
+              """      case 'message':
+        if (event.data['message'] is Map) {
+          final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+          _playIncomingMessageSound(raw);
+          unawaited(_mergeMessages([raw]));
+          _rememberContact(
+            raw['authorId']?.toString() ??
+                event.data['relaySender']?.toString() ??
+                '',
+            raw['authorName']?.toString() ??
+                event.data['relaySenderName']?.toString() ??
+                'user',
+          );
+        }
+        break;
+""",
+              """      case 'message':
+        if (event.data['message'] is Map) {
+          final raw = Map<String, dynamic>.from(event.data['message'] as Map);
+          unawaited(_handleIncomingMessage(raw, event.data));
+        }
+        break;
+""",
+              'chat incoming message dispatch',
+          )
+
+          patch(
+              'lib/chat_screen.dart',
+              """      case 'signal':
+        _handleSignal(event.data);
+        break;
+    }
+  }
+
+  void _rememberContact(
+""",
+              """      case 'signal':
+        unawaited(_handleSignalWithPolicy(event.data));
+        break;
+    }
+  }
+
+  Future<void> _handleIncomingMessage(
+    Map<String, dynamic> raw,
+    Map<String, dynamic> relayData,
+  ) async {
+    final authorId = raw['authorId']?.toString() ??
+        relayData['relaySender']?.toString() ??
+        '';
+    final policy = await CgContactPolicyStore.load(authorId);
+    if (authorId.isNotEmpty &&
+        authorId != widget.profile.id &&
+        (policy.blocked || !policy.allowMessages)) {
+      return;
+    }
+    if (raw['attachment'] is Map && !policy.allowFiles) {
+      raw.remove('attachment');
+      if ((raw['text']?.toString().trim() ?? '').isEmpty) {
+        raw['text'] = widget.ru
+            ? 'Файл скрыт настройками контакта'
+            : 'File hidden by contact settings';
+      }
+    }
+    if (!policy.muted) _playIncomingMessageSound(raw);
+    await _mergeMessages(<Map<String, dynamic>>[raw]);
+    _rememberContact(
+      authorId,
+      raw['authorName']?.toString() ??
+          relayData['relaySenderName']?.toString() ??
+          'user',
+    );
+  }
+
+  Future<void> _handleSignalWithPolicy(Map<String, dynamic> data) async {
+    final sender = data['from']?.toString() ??
+        data['relaySender']?.toString() ??
+        '';
+    final policy = await CgContactPolicyStore.load(sender);
+    final video = data['video'] == true;
+    if (policy.blocked || !policy.allowCalls || (video && !policy.allowVideoCalls)) {
+      final action = data['action']?.toString() ?? '';
+      final callId = data['callId']?.toString() ?? '';
+      if (action == 'call_invite' && callId.isNotEmpty && sender.isNotEmpty) {
+        unawaited(_session?.sendSignal(<String, dynamic>{
+          'action': 'call_decline',
+          'callId': callId,
+          'from': widget.profile.id,
+          'target': sender,
+          'reason': 'contact_policy',
+        }));
+      }
+      return;
+    }
+    _handleSignal(data);
+  }
+
+  void _rememberContact(
+""",
+              'chat message and call policy helpers',
+          )
+
+          patch(
+              'lib/chat_screen.dart',
+              """    for (final item in raw) {
+      var incoming = await CgMediaStore.cacheIncomingMessage(
+        CgMessage.fromJson(item),
+      );
+""",
+              """    for (final item in raw) {
+      final authorId = item['authorId']?.toString() ?? '';
+      final policy = await CgContactPolicyStore.load(authorId);
+      if (authorId.isNotEmpty &&
+          authorId != widget.profile.id &&
+          (policy.blocked || !policy.allowMessages)) {
+        continue;
+      }
+      final sanitized = Map<String, dynamic>.from(item);
+      if (sanitized['attachment'] is Map && !policy.allowFiles) {
+        sanitized.remove('attachment');
+        if ((sanitized['text']?.toString().trim() ?? '').isEmpty) {
+          sanitized['text'] = widget.ru
+              ? 'Файл скрыт настройками контакта'
+              : 'File hidden by contact settings';
+        }
+      }
+      var incoming = await CgMediaStore.cacheIncomingMessage(
+        CgMessage.fromJson(sanitized),
+      );
+""",
+              'history message policy',
+          )
+          PY
+
+      - name: Validate contact profile implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart format lib/v12.dart lib/chat_screen.dart lib/contact_policy.dart lib/contact_profile_screen.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Commit contact profile feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-contact-profile-v1.yml
+          git add lib/v12.dart lib/chat_screen.dart lib/contact_policy.dart lib/contact_profile_screen.dart
+          git commit -m "Добавить профили контактов и индивидуальные разрешения"
+          git push origin HEAD:feature/contact-profile-v1
+
+      - name: Save failure details
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin feature/contact-profile-v1
+          git reset --hard origin/feature/contact-profile-v1
+          cat > CONTACT_PROFILE_CI_ERROR.txt <<EOF
+          Contact profile v1 validation failed
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Inspect GitHub Actions for compiler output.
+          EOF
+          git add CONTACT_PROFILE_CI_ERROR.txt
+          git commit -m "Сохранить ошибку Contact Profile CI [skip ci]" || true
+          git push origin HEAD:feature/contact-profile-v1 || true
