@@ -1,0 +1,202 @@
+name: Apply Phonebook v1
+
+on:
+  push:
+    branches:
+      - feature/phonebook-v1
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/phonebook-v1
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: false
+
+      - name: Connect phone book to contacts tab
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/v12.dart')
+          source = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global source
+              if old not in source:
+                  raise SystemExit(f'{label}: source block not found')
+              source = source.replace(old, new, 1)
+
+          replace_once(
+              "import 'pending_call.dart';\n",
+              "import 'pending_call.dart';\nimport 'phonebook_screen.dart';\n",
+              'phonebook import',
+          )
+
+          replace_once(
+              """  @override
+  void dispose() {
+""",
+              """  Future<void> _openPhonebook() async {
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgPhonebookScreen(ru: widget.ru),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+""",
+              'open phonebook method',
+          )
+
+          replace_once(
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+      ),
+      CgAgentScreen(""",
+              """        privacyLens: _privacyLens,
+        onOpen: _openContact,
+        onOpenPhonebook: _openPhonebook,
+      ),
+      CgAgentScreen(""",
+              'phonebook callback',
+          )
+
+          replace_once(
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+
+  const _V12ContactsScreen({
+""",
+              """  final bool privacyLens;
+  final Future<void> Function(CgContact contact) onOpen;
+  final VoidCallback onOpenPhonebook;
+
+  const _V12ContactsScreen({
+""",
+              'phonebook screen field',
+          )
+
+          replace_once(
+              """    required this.privacyLens,
+    required this.onOpen,
+  });
+""",
+              """    required this.privacyLens,
+    required this.onOpen,
+    required this.onOpenPhonebook,
+  });
+""",
+              'phonebook constructor',
+          )
+
+          replace_once(
+              """        Text(
+          ru ? 'Контакты' : 'Contacts',
+          style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 5),
+""",
+              """        Row(
+          children: [
+            Expanded(
+              child: Text(
+                ru ? 'Контакты' : 'Contacts',
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            IconButton.filledTonal(
+              tooltip: ru ? 'Телефонная книга' : 'Phone book',
+              onPressed: onOpenPhonebook,
+              icon: const Icon(Icons.contact_phone_rounded),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+""",
+              'contacts header action',
+          )
+
+          replace_once(
+              """        const SizedBox(height: 16),
+        if (contacts.isEmpty)
+""",
+              """        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onOpenPhonebook,
+            icon: const Icon(Icons.dialpad_rounded),
+            label: Text(
+              ru
+                  ? 'Открыть телефонную книгу и набрать номер'
+                  : 'Open phone book and dial a number',
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (contacts.isEmpty)
+""",
+              'contacts phonebook button',
+          )
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Validate Android and Windows-compatible Flutter source
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          dart format lib/v12.dart lib/phonebook_screen.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Commit phone book feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-phonebook-v1.yml
+          git add lib/v12.dart lib/phonebook_screen.dart
+          git commit -m "Добавить телефонную книгу и системный набор номера"
+          git push origin HEAD:feature/phonebook-v1
+
+      - name: Save failure details
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin feature/phonebook-v1
+          git reset --hard origin/feature/phonebook-v1
+          cat > PHONEBOOK_CI_ERROR.txt <<EOF
+          Phonebook v1 validation failed
+          Commit: ${GITHUB_SHA}
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Inspect the failed GitHub Actions job for the compiler output.
+          EOF
+          git add PHONEBOOK_CI_ERROR.txt
+          git commit -m "Сохранить ошибку Phonebook CI [skip ci]" || true
+          git push origin HEAD:feature/phonebook-v1 || true
