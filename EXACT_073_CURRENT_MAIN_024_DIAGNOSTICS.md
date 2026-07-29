@@ -2,7 +2,7 @@
 
 Outcome: failure
 Reference: d1cad8649d00259ab615e65ea196213713b2385f (0.7.3+14)
-Time: 2026-07-29T16:14:45Z
+Time: 2026-07-29T16:17:52Z
 
 ```text
 Restored exact working 0.7.3+14 chat and WebRTC video calls from d1cad8649d00259ab615e65ea196213713b2385f
@@ -75,19 +75,13 @@ Formatted 3 files (3 changed) in 0.04 seconds.
 Analyzing chernogram_new...                                     
 
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:279:7 • use_build_context_synchronously
-  error • The named parameter 'peerAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'peerAvatarBase64' • lib/app_monitor.dart:380:17 • undefined_named_parameter
-  error • The named parameter 'myAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'myAvatarBase64' • lib/app_monitor.dart:381:17 • undefined_named_parameter
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_media.dart:6:8 • unnecessary_import
 warning • Unused import: 'dart:typed_data'. Try removing the import directive • lib/chat_screen.dart:4:8 • unused_import
    info • The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'. Try removing the import directive • lib/chat_screen.dart:10:8 • unnecessary_import
 warning • The declaration '_attachmentKind' isn't referenced. Try removing the declaration of '_attachmentKind' • lib/chat_screen.dart:955:10 • unused_element
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1366:7 • use_build_context_synchronously
-  error • The named parameter 'peerAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'peerAvatarBase64' • lib/chat_screen.dart:1374:11 • undefined_named_parameter
-  error • The named parameter 'myAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'myAvatarBase64' • lib/chat_screen.dart:1375:11 • undefined_named_parameter
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1401:7 • use_build_context_synchronously
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1527:7 • use_build_context_synchronously
-  error • The named parameter 'peerAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'peerAvatarBase64' • lib/chat_screen.dart:1587:11 • undefined_named_parameter
-  error • The named parameter 'myAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'myAvatarBase64' • lib/chat_screen.dart:1588:11 • undefined_named_parameter
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/chat_screen.dart:1606:7 • use_build_context_synchronously
 warning • Unused import: 'core_models.dart'. Try removing the import directive • lib/group_call_service.dart:8:8 • unused_import
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/main.dart:92:11 • use_build_context_synchronously
@@ -102,5 +96,9 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/v12.dart:3:8 • unnecessary_import
 warning • The asset file 'assets/audio/chernogram_incoming.mp3' doesn't exist. Try creating the file or fixing the path to the file • pubspec.yaml:52:7 • asset_does_not_exist
 
-27 issues found. (ran in 15.1s)
+21 issues found. (ran in 18.4s)
+Error detected in pubspec.yaml:
+No file or variants found for asset: assets/audio/chernogram_incoming.mp3.
+
+Error: Failed to build asset bundle
 ```
