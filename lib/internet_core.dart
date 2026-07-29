@@ -21,14 +21,17 @@ class _PendingEnvelope {
   const _PendingEnvelope(this.kind, this.data);
 }
 
+/// Internet relay for Chernogram tunnels.
+///
+/// Transport:
+/// - standard HTTPS/WSS on port 443, so it works across mobile operators,
+///   home Wi-Fi and different cities without opening custom ports;
+/// - public ntfy relay is used only as an encrypted transport;
+/// - message content is encrypted locally with AES-256-GCM before upload;
+/// - the relay topic is derived from the tunnel secret and is not guessable.
 class InternetTunnelSession {
-  // Temporary recovery transport. Keep one primary and one hot standby;
-  // broadcasting every packet to four public services caused radio load,
-  // duplicate cache replays and long UI stalls on Android.
-  static const List<String> relayHosts = <String>[
-    'ntfy.sh',
-    'ntfy.jae.fi',
-  ];
+  static const String relayBase = 'https://ntfy.sh';
+  static const String relaySocketHost = 'ntfy.sh';
 
   final String tunnelId;
   final String secret;
@@ -39,24 +42,22 @@ class InternetTunnelSession {
       StreamController<InternetEvent>.broadcast(sync: true);
   final Map<String, DateTime> _peers = <String, DateTime>{};
   final Map<String, String> _peerNames = <String, String>{};
+  final List<Map<String, dynamic>> _signalHistory = <Map<String, dynamic>>[];
   final Set<String> _seenPackets = <String>{};
   final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
-  final List<Map<String, dynamic>> _signalHistory = <Map<String, dynamic>>[];
   final List<_PendingEnvelope> _outbox = <_PendingEnvelope>[];
   final http.Client _http = http.Client();
-  final Map<String, WebSocket> _sockets = <String, WebSocket>{};
-  final Map<String, StreamSubscription<dynamic>> _socketSubscriptions =
-      <String, StreamSubscription<dynamic>>{};
-  final Map<String, Timer> _relayRetryTimers = <String, Timer>{};
-  final Set<String> _connectingHosts = <String>{};
 
+  WebSocket? _socket;
+  StreamSubscription<dynamic>? _socketSubscription;
+  Timer? _reconnectTimer;
   Timer? _presenceTimer;
   Timer? _peerCleanupTimer;
-  Timer? _globalRetryTimer;
   SecretKey? _secretKey;
   String? _topic;
   bool _closed = false;
   bool _connecting = false;
+  bool _connected = false;
   int _reconnectAttempt = 0;
 
   InternetTunnelSession({
@@ -67,126 +68,85 @@ class InternetTunnelSession {
   });
 
   Stream<InternetEvent> get events => _events.stream;
-  bool get connected => _sockets.isNotEmpty;
+  bool get connected => _connected;
   int get onlinePeers => _peers.length + 1;
   List<Map<String, dynamic>> get members => <Map<String, dynamic>>[
-        <String, dynamic>{
-          'id': profileId,
-          'name': nickname,
-          'self': true,
-          'seenAt': DateTime.now().toUtc().toIso8601String(),
-        },
-        ..._peers.entries.map(
-          (entry) => <String, dynamic>{
-            'id': entry.key,
-            'name': _peerNames[entry.key] ?? 'пользователь',
-            'self': false,
-            'seenAt': entry.value.toUtc().toIso8601String(),
-          },
-        ),
-      ];
+    <String, dynamic>{'id': profileId, 'name': nickname, 'self': true},
+    ..._peers.entries.map(
+      (entry) => <String, dynamic>{
+        'id': entry.key,
+        'name': _peerNames[entry.key] ?? 'user',
+        'self': false,
+        'seenAt': entry.value.toUtc().toIso8601String(),
+      },
+    ),
+  ];
 
-  Future<void> connect() async {
-    if (_closed || _connecting || connected) return;
-    _connecting = true;
-    _emit('status', const <String, dynamic>{
-      'state': 'connecting',
-      'transport': 'encrypted_https443',
-    });
-    try {
-      await _prepareCryptoAndTopic();
-      final connectHosts = relayHosts.take(2).toList(growable: false);
-      final completer = Completer<void>();
-      var finished = 0;
-      for (final host in connectHosts) {
-        unawaited(
-          _connectHost(host).then((ok) {
-            finished++;
-            if (ok && !completer.isCompleted) completer.complete();
-            if (finished == connectHosts.length && !completer.isCompleted) {
-              completer.complete();
-            }
-          }),
-        );
-      }
-      await completer.future.timeout(
-        const Duration(seconds: 7),
-        onTimeout: () {},
-      );
-      if (_closed) return;
-      if (connected) {
-        _reconnectAttempt = 0;
-        _globalRetryTimer?.cancel();
-        _startTimers();
-        unawaited(_publishPresence());
-        unawaited(_flushOutbox());
-        _emit('status', <String, dynamic>{
-          'state': 'connected',
-          'transport': 'encrypted_https443',
-          'relays': _sockets.keys.toList(),
-        });
-      } else {
-        _emit('status', const <String, dynamic>{
-          'state': 'offline',
-          'code': 'relay_unavailable',
-        });
-        _scheduleGlobalReconnect();
-      }
-    } finally {
-      _connecting = false;
-    }
-  }
-
-  Future<bool> waitUntilConnected([Duration timeout = const Duration(seconds: 4)]) async {
-    if (connected) return true;
+  Future<bool> waitUntilConnected([
+    Duration timeout = const Duration(seconds: 4),
+  ]) async {
+    if (_connected) return true;
     unawaited(connect());
     final deadline = DateTime.now().add(timeout);
     while (!_closed && DateTime.now().isBefore(deadline)) {
-      if (connected) return true;
+      if (_connected) return true;
       await Future<void>.delayed(const Duration(milliseconds: 120));
     }
-    return connected;
+    return _connected;
   }
 
-  Future<bool> _connectHost(String host) async {
-    if (_closed || _sockets.containsKey(host) || !_connectingHosts.add(host)) {
-      return _sockets.containsKey(host);
-    }
+  Future<void> connect() async {
+    if (_closed || _connecting || _connected) return;
+    _connecting = true;
+    _emit('status', {'state': 'connecting', 'transport': 'https443'});
+
     try {
+      await _prepareCryptoAndTopic();
+      final topic = _topic!;
       final uri = Uri(
         scheme: 'wss',
-        host: host,
-        path: '/${_topic!}/ws',
-        queryParameters: const <String, String>{'since': '2m'},
+        host: relaySocketHost,
+        path: '/$topic/ws',
+        queryParameters: const {'since': '12h'},
       );
-      final socket = await WebSocket.connect(uri.toString()).timeout(
-        const Duration(milliseconds: 3200),
-      );
+
+      final socket = await WebSocket.connect(
+        uri.toString(),
+      ).timeout(const Duration(seconds: 14));
       if (_closed) {
         await socket.close();
-        return false;
+        return;
       }
+
       socket.pingInterval = const Duration(seconds: 25);
-      _relayRetryTimers.remove(host)?.cancel();
-      await _socketSubscriptions.remove(host)?.cancel();
-      _sockets[host] = socket;
-      _socketSubscriptions[host] = socket.listen(
-        (raw) => unawaited(_handleSocketMessage(host, raw)),
-        onError: (Object error) => _onHostDisconnected(host, error.toString()),
-        onDone: () => _onHostDisconnected(host, 'socket_closed'),
+      await _socketSubscription?.cancel();
+      _socket = socket;
+      _connected = true;
+      _reconnectAttempt = 0;
+      _emit('status', {'state': 'connected', 'transport': 'https443'});
+      _emitPresence();
+
+      _socketSubscription = socket.listen(
+        (raw) => unawaited(_handleSocketMessage(raw)),
+        onError: (Object error) => _onDisconnected(error.toString()),
+        onDone: () => _onDisconnected('socket_closed'),
         cancelOnError: true,
       );
-      _emit('status', <String, dynamic>{
-        'state': 'connected',
-        'transport': 'encrypted_https443',
-        'relays': _sockets.keys.toList(),
+
+      _startTimers();
+      await _publishPresence();
+      await _flushOutbox();
+    } catch (error) {
+      _connected = false;
+      _socket = null;
+      _emit('status', {
+        'state': 'error',
+        'code': 'relay_unavailable',
+        'debug': error.toString(),
       });
-      return true;
-    } catch (_) {
-      _scheduleHostReconnect(host);
-      return false;
+      _scheduleReconnect();
     } finally {
-      _connectingHosts.remove(host);
+      _connecting = false;
     }
   }
 
@@ -198,13 +158,21 @@ class InternetTunnelSession {
     _topic = 'cg_$encoded';
   }
 
-  Future<void> _handleSocketMessage(String host, dynamic raw) async {
+  Future<void> _handleSocketMessage(dynamic raw) async {
     try {
       final decoded = jsonDecode(raw.toString());
       if (decoded is! Map) return;
       final message = Map<String, dynamic>.from(decoded);
       final event = message['event']?.toString() ?? '';
+      if (event == 'open') {
+        if (!_connected) {
+          _connected = true;
+          _emit('status', {'state': 'connected', 'transport': 'https443'});
+        }
+        return;
+      }
       if (event != 'message') return;
+
       String? encrypted;
       final attachment = message['attachment'];
       if (attachment is Map) {
@@ -212,7 +180,7 @@ class InternetTunnelSession {
         if (url != null && url.isNotEmpty) {
           final response = await _http
               .get(Uri.parse(url))
-              .timeout(const Duration(seconds: 18));
+              .timeout(const Duration(seconds: 30));
           if (response.statusCode >= 200 && response.statusCode < 300) {
             encrypted = utf8.decode(response.bodyBytes, allowMalformed: true);
           }
@@ -220,57 +188,47 @@ class InternetTunnelSession {
       }
       encrypted ??= message['message']?.toString();
       if (encrypted == null || encrypted.isEmpty) return;
-      final unixTime = int.tryParse(message['time']?.toString() ?? '');
-      final relayAt = unixTime == null
-          ? DateTime.now().toUtc()
-          : DateTime.fromMillisecondsSinceEpoch(unixTime * 1000, isUtc: true);
-      await _handleEncryptedPacket(encrypted, relayAt, host);
-    } catch (_) {}
-  }
-
-  void _onHostDisconnected(String host, String reason) {
-    if (_closed) return;
-    _sockets.remove(host);
-    final subscription = _socketSubscriptions.remove(host);
-    if (subscription != null) unawaited(subscription.cancel());
-    _scheduleHostReconnect(host);
-    if (connected) {
-      _emit('status', <String, dynamic>{
-        'state': 'connected',
-        'transport': 'encrypted_https443',
-        'relays': _sockets.keys.toList(),
-      });
-    } else {
-      _emit('status', const <String, dynamic>{
-        'state': 'offline',
-        'transport': 'encrypted_https443',
-      });
-      _scheduleGlobalReconnect();
+      await _handleEncryptedPacket(encrypted);
+    } catch (_) {
+      // A malformed packet must never break the tunnel stream.
     }
   }
 
-  Future<void> _handleEncryptedPacket(
-    String encrypted,
-    DateTime relayAt,
-    String relayHost,
-  ) async {
+  void _onDisconnected(String reason) {
+    if (_closed) return;
+    _connected = false;
+    _socket = null;
+    _emit('presence', {'peers': 1});
+    _emit('status', {
+      'state': 'disconnected',
+      'code': 'relay_unavailable',
+      'debug': reason,
+    });
+    _scheduleReconnect();
+  }
+
+  Future<void> _handleEncryptedPacket(String encrypted) async {
     final envelope = await _decrypt(encrypted);
     if (envelope == null) return;
+
     final packetId = envelope['packetId']?.toString() ?? '';
     final sender = envelope['from']?.toString() ?? '';
     if (packetId.isEmpty || !_seenPackets.add(packetId)) return;
-    if (_seenPackets.length > 5000) _seenPackets.remove(_seenPackets.first);
+    if (_seenPackets.length > 5000) {
+      _seenPackets.remove(_seenPackets.first);
+    }
     if (sender == profileId) return;
 
     final kind = envelope['kind']?.toString() ?? '';
     final sentAt = DateTime.tryParse(envelope['sentAt']?.toString() ?? '');
     if (kind == 'signal' &&
         sentAt != null &&
-        DateTime.now().toUtc().difference(sentAt.toUtc()).inSeconds.abs() > 120) {
+        DateTime.now().toUtc().difference(sentAt.toUtc()).abs() >
+            const Duration(minutes: 2)) {
       return;
     }
 
-    final senderName = envelope['name']?.toString() ?? 'пользователь';
+    final senderName = envelope['name']?.toString() ?? 'user';
     _peers[sender] = DateTime.now();
     _peerNames[sender] = senderName;
     _emit('peer', <String, dynamic>{
@@ -284,25 +242,15 @@ class InternetTunnelSession {
     final data = rawData is Map
         ? Map<String, dynamic>.from(rawData)
         : <String, dynamic>{};
+
     switch (kind) {
       case 'presence':
         break;
       case 'message':
         if (data['message'] is Map) {
           final message = Map<String, dynamic>.from(data['message'] as Map);
-          final rawMeta = message['meta'];
-          final meta = rawMeta is Map
-              ? Map<String, dynamic>.from(rawMeta)
-              : <String, dynamic>{};
-          meta.putIfAbsent('relayAt', () => relayAt.toIso8601String());
-          message['meta'] = meta;
-          _rememberMessage(_sanitizeMessage(message));
-          _emit('message', <String, dynamic>{
-            'message': message,
-            'relaySender': sender,
-            'relaySenderName': senderName,
-            'relayHost': relayHost,
-          });
+          _rememberMessage(message);
+          _emit('message', {'message': message});
         }
         break;
       case 'history':
@@ -311,13 +259,9 @@ class InternetTunnelSession {
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
         for (final message in messages) {
-          _rememberMessage(_sanitizeMessage(message));
+          _rememberMessage(message);
         }
-        _emit('history', <String, dynamic>{
-          'messages': messages,
-          'relaySender': sender,
-          'relaySenderName': senderName,
-        });
+        _emit('history', {'messages': messages});
         break;
       case 'control':
         _emit('control', <String, dynamic>{
@@ -344,8 +288,8 @@ class InternetTunnelSession {
   }
 
   Future<void> sendMessage(Map<String, dynamic> message) async {
-    _rememberMessage(_sanitizeMessage(message));
-    await _sendEnvelope('message', <String, dynamic>{'message': message});
+    _rememberMessage(message);
+    await _sendEnvelope('message', {'message': message});
   }
 
   Future<void> sendControl(Map<String, dynamic> control) async {
@@ -353,17 +297,15 @@ class InternetTunnelSession {
   }
 
   Future<void> sendSignal(Map<String, dynamic> signal) async {
-    await _sendEnvelope('signal', signal, queueOnFailure: false);
+    await _sendEnvelope('signal', signal);
   }
 
   List<Map<String, dynamic>> replaySignals(String callId) {
     if (callId.isEmpty) return const <Map<String, dynamic>>[];
-    final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
-    return _signalHistory.where((signal) {
-      if (signal['callId']?.toString() != callId) return false;
-      final receivedAt = DateTime.tryParse(signal['receivedAt']?.toString() ?? '');
-      return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
-    }).map((signal) => Map<String, dynamic>.from(signal)).toList();
+    return _signalHistory
+        .where((item) => item['callId']?.toString() == callId)
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
 
   Future<void> sendHistory() async {
@@ -377,32 +319,15 @@ class InternetTunnelSession {
   void replaceHistory(List<Map<String, dynamic>> messages) {
     _history.clear();
     for (final message in messages) {
-      _rememberMessage(_sanitizeMessage(message));
+      _rememberMessage(message);
     }
-  }
-
-  Map<String, dynamic> _sanitizeMessage(Map<String, dynamic> message) {
-    final copy = Map<String, dynamic>.from(message);
-    final attachment = copy['attachment'];
-    if (attachment is Map) {
-      final clean = Map<String, dynamic>.from(attachment)
-        ..remove('dataBase64')
-        ..remove('localPath')
-        ..remove('path');
-      copy['attachment'] = clean;
-    }
-    return copy;
   }
 
   Future<void> _publishPresence() async {
-    await _sendEnvelope(
-      'presence',
-      <String, dynamic>{
-        'online': true,
-        'at': DateTime.now().toUtc().toIso8601String(),
-      },
-      queueOnFailure: false,
-    );
+    await _sendEnvelope('presence', <String, dynamic>{
+      'online': true,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    }, queueOnFailure: false);
   }
 
   Future<void> _sendEnvelope(
@@ -412,10 +337,10 @@ class InternetTunnelSession {
   }) async {
     if (_closed) return;
     await _prepareCryptoAndTopic();
-    if (!connected) unawaited(connect());
+    if (!_connected) unawaited(connect());
 
     final body = <String, dynamic>{
-      'v': 7,
+      'v': 4,
       'packetId': CgIds.random(24),
       'from': profileId,
       'name': nickname,
@@ -424,162 +349,60 @@ class InternetTunnelSession {
       'data': data,
     };
     final encrypted = await _encrypt(body);
-    final orderedHosts = <String>[
-      ..._sockets.keys,
-      ...relayHosts.where((host) => !_sockets.containsKey(host)),
-    ];
-    String? successfulHost;
-    Object? lastError;
-    final fastPacket = kind == 'signal' ||
-        kind == 'presence' ||
-        kind == 'control' ||
-        (kind == 'message' && encrypted.length <= 3500);
-    if (fastPacket) {
-      successfulHost = await _publishSignalFast(orderedHosts, encrypted);
-    } else {
-      for (final host in orderedHosts) {
-        try {
-          await _publishEncrypted(
-            host,
-            encrypted,
-            cache: kind != 'presence',
-            priority: 'default',
-          );
-          successfulHost = host;
-          break;
-        } catch (error) {
-          lastError = error;
-          _scheduleHostReconnect(host);
-        }
-      }
-    }
 
-    if (successfulHost != null) {
-      _emit('status', const <String, dynamic>{
-        'state': 'connected',
-        'transport': 'encrypted_https443',
-      });
-      String? backup;
-      for (final host in orderedHosts) {
-        if (host != successfulHost) {
-          backup = host;
-          break;
-        }
-      }
-      if (backup != null && kind != 'presence' && !fastPacket) {
-        unawaited(
-          _publishEncrypted(
-            backup,
-            encrypted,
-            cache: true,
-            priority: kind == 'signal' ? 'max' : 'high',
-          ).catchError((_) {}),
-        );
-      }
-      return;
-    }
-
-    final canQueue = queueOnFailure && (kind == 'message' || kind == 'control');
-    if (canQueue) {
-      String? uniqueId;
+    try {
+      await _publishEncrypted(encrypted, cache: kind != 'presence');
       if (kind == 'message') {
-        final rawMessage = data['message'];
-        if (rawMessage is Map) uniqueId = rawMessage['id']?.toString();
+        _emit('status', {'state': 'connected', 'transport': 'https443'});
+      }
+    } catch (error) {
+      if (queueOnFailure && kind == 'message') {
+        final packetId = (data['message'] as Map?)?['id']?.toString();
+        final duplicate =
+            packetId != null &&
+            _outbox.any(
+              (item) =>
+                  (item.data['message'] as Map?)?['id']?.toString() == packetId,
+            );
+        if (!duplicate) {
+          _outbox.add(_PendingEnvelope(kind, Map<String, dynamic>.from(data)));
+        }
+        _emit('status', {'state': 'queued', 'code': 'relay_unavailable'});
       } else {
-        uniqueId = data['operationId']?.toString();
+        _emit('status', {
+          'state': 'error',
+          'code': 'relay_unavailable',
+          'debug': error.toString(),
+        });
       }
-      final duplicate = uniqueId != null &&
-          _outbox.any((item) {
-            if (item.kind != kind) return false;
-            if (kind == 'message') {
-              final rawMessage = item.data['message'];
-              return rawMessage is Map &&
-                  rawMessage['id']?.toString() == uniqueId;
-            }
-            return item.data['operationId']?.toString() == uniqueId;
-          });
-      if (!duplicate) {
-        _outbox.add(_PendingEnvelope(kind, Map<String, dynamic>.from(data)));
-      }
-      _emit('status', const <String, dynamic>{
-        'state': 'queued',
-        'code': 'relay_unavailable',
-      });
-    } else {
-      _emit('status', <String, dynamic>{
-        'state': 'offline',
-        'code': 'relay_unavailable',
-        'debug': lastError?.toString(),
-      });
+      _scheduleReconnect();
     }
-    _scheduleGlobalReconnect();
-  }
-
-  Future<String?> _publishSignalFast(
-    List<String> hosts,
-    String encrypted,
-  ) async {
-    final selected = hosts.take(2).toList(growable: false);
-    if (selected.isEmpty) return null;
-    final completer = Completer<String?>();
-    var completed = 0;
-    for (final host in selected) {
-      unawaited(
-        _publishEncrypted(
-          host,
-          encrypted,
-          cache: true,
-          priority: 'max',
-          timeout: const Duration(milliseconds: 2600),
-        ).then((_) {
-          if (!completer.isCompleted) completer.complete(host);
-        }).catchError((Object error) {
-          completed++;
-          _scheduleHostReconnect(host);
-          if (completed >= selected.length && !completer.isCompleted) {
-            completer.complete(null);
-          }
-        }),
-      );
-    }
-    return completer.future.timeout(
-      const Duration(milliseconds: 2800),
-      onTimeout: () => null,
-    );
   }
 
   Future<void> _publishEncrypted(
-    String host,
     String encrypted, {
     required bool cache,
-    String priority = 'default',
-    Duration timeout = const Duration(seconds: 4),
   }) async {
-    final bytes = utf8.encode(encrypted);
-    final large = bytes.length > 3500;
     final response = await _http
         .post(
-          Uri.parse('https://$host/${_topic!}'),
+          Uri.parse('$relayBase/${_topic!}'),
           headers: <String, String>{
-            'Content-Type': large
-                ? 'application/octet-stream'
-                : 'text/plain; charset=utf-8',
-            'Title': 'message',
-            'Priority': priority,
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Title': 'Chernogram',
+            'Priority': 'min',
             'Firebase': 'no',
-            if (large) 'Filename': 'packet.cg',
             if (!cache) 'Cache': 'no',
           },
-          body: large ? bytes : encrypted,
+          body: encrypted,
         )
-        .timeout(const Duration(seconds: 6));
+        .timeout(const Duration(seconds: 20));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException('$host:${response.statusCode}');
+      throw HttpException('relay_http_${response.statusCode}');
     }
   }
 
   Future<void> _flushOutbox() async {
-    if (_outbox.isEmpty || !connected) return;
+    if (_outbox.isEmpty) return;
     final pending = List<_PendingEnvelope>.from(_outbox);
     _outbox.clear();
     for (final item in pending) {
@@ -596,7 +419,7 @@ class InternetTunnelSession {
       secretKey: _secretKey!,
       nonce: nonce,
     );
-    return jsonEncode(<String, String>{
+    return jsonEncode({
       'n': base64Url.encode(box.nonce),
       'c': base64Url.encode(box.cipherText),
       'm': base64Url.encode(box.mac.bytes),
@@ -627,11 +450,8 @@ class InternetTunnelSession {
 
   bool _rememberMessage(Map<String, dynamic> message) {
     final id = message['id']?.toString() ?? '';
-    if (id.isEmpty) return false;
-    final index = _history.indexWhere((item) => item['id']?.toString() == id);
-    if (index >= 0) {
-      _history[index] = Map<String, dynamic>.from(message);
-      return true;
+    if (id.isEmpty || _history.any((item) => item['id']?.toString() == id)) {
+      return false;
     }
     _history.add(Map<String, dynamic>.from(message));
     if (_history.length > 500) {
@@ -643,70 +463,47 @@ class InternetTunnelSession {
   void _startTimers() {
     _presenceTimer?.cancel();
     _peerCleanupTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       unawaited(_publishPresence());
     });
-    _peerCleanupTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      final cutoff = DateTime.now().subtract(const Duration(seconds: 32));
-      final removed = _peers.keys
-          .where((id) => _peers[id]?.isBefore(cutoff) == true)
-          .toList();
-      for (final id in removed) {
-        _peers.remove(id);
-        _peerNames.remove(id);
-      }
+    _peerCleanupTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 70));
+      _peers.removeWhere((_, seenAt) => seenAt.isBefore(cutoff));
       _emitPresence();
     });
   }
 
   void _emitPresence() {
-    _emit('presence', <String, dynamic>{
-      'peers': onlinePeers,
-      'members': members,
-    });
+    _emit('presence', {'peers': onlinePeers});
   }
 
-  void _scheduleHostReconnect(String host) {
-    if (_closed || _sockets.containsKey(host)) return;
-    _relayRetryTimers.remove(host)?.cancel();
-    final delay = Duration(seconds: 4 + (_reconnectAttempt * 2).clamp(0, 12).toInt());
-    _relayRetryTimers[host] = Timer(delay, () {
-      unawaited(_connectHost(host));
-    });
-  }
-
-  void _scheduleGlobalReconnect() {
-    if (_closed || connected || _globalRetryTimer?.isActive == true) return;
+  void _scheduleReconnect() {
+    if (_closed || _connected) return;
+    _reconnectTimer?.cancel();
     _reconnectAttempt++;
-    final seconds = (3 + _reconnectAttempt * 3).clamp(3, 18).toInt();
-    _globalRetryTimer = Timer(Duration(seconds: seconds), () {
-      _globalRetryTimer = null;
+    final seconds = _reconnectAttempt <= 1
+        ? 2
+        : (_reconnectAttempt * _reconnectAttempt).clamp(4, 30).toInt();
+    _reconnectTimer = Timer(Duration(seconds: seconds), () {
       unawaited(connect());
     });
   }
 
-  void _emit(String type, [Map<String, dynamic> data = const <String, dynamic>{}]) {
-    if (!_events.isClosed) _events.add(InternetEvent(type, data));
+  void _emit(String type, [Map<String, dynamic> data = const {}]) {
+    if (!_events.isClosed) {
+      _events.add(InternetEvent(type, data));
+    }
   }
 
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _connected = false;
+    _reconnectTimer?.cancel();
     _presenceTimer?.cancel();
     _peerCleanupTimer?.cancel();
-    _globalRetryTimer?.cancel();
-    for (final timer in _relayRetryTimers.values) {
-      timer.cancel();
-    }
-    _relayRetryTimers.clear();
-    for (final subscription in _socketSubscriptions.values) {
-      await subscription.cancel();
-    }
-    _socketSubscriptions.clear();
-    for (final socket in _sockets.values) {
-      await socket.close();
-    }
-    _sockets.clear();
+    await _socketSubscription?.cancel();
+    await _socket?.close();
     _http.close();
     await _events.close();
   }

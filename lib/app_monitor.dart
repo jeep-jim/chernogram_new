@@ -74,7 +74,7 @@ class ChernogramAppMonitor {
     for (final tunnelId in obsolete) {
       await _subscriptions.remove(tunnelId)?.cancel();
       _sessions.remove(tunnelId);
-      unawaited(InternetRelay.close(tunnelId));
+      // Shared 0.7.3 session may still be used by the visible chat/call.
     }
 
     await Future.wait(monitored.map(_ensureTunnel));
