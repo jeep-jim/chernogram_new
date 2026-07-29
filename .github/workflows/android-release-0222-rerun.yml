@@ -187,4 +187,4 @@ jobs:
           git commit -m "Сохранить ошибку Android 0.22.2 [skip ci]" || exit 0
           git push origin HEAD:"$SOURCE_BRANCH"
 
-# Retry after duplicate cleanup.
+# Retry with the complete restored feature set and duplicate cleanup.
