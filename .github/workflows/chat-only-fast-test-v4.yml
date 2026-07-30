@@ -1,0 +1,152 @@
+name: Publish chat-only stability test 0.23.2 v4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/chat-only-fast-test-v4.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cernogram-chat-only-fast-test-v4
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: test/chat-only-fast-v1
+  EXPECTED_VERSION: 0.23.2+57
+  EXPECTED_PACKAGE: com.example.chernogram
+  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  android:
+    name: Build and publish Android chat test 57
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Build, sign and validate exact package version
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore"
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$EXPECTED_VERSION"
+
+            keytool -list -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android | tee signing-chat-only-v4.txt
+            ACTUAL=$(grep -m1 'SHA256:' signing-chat-only-v4.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$ACTUAL" = "$EXPECTED"
+
+            flutter pub get
+            dart format lib/main.dart lib/chat_only_app.dart lib/chat_only_transport.dart
+            flutter analyze lib/main.dart lib/chat_only_app.dart lib/chat_only_transport.dart --no-fatal-infos --no-fatal-warnings
+            flutter build apk --release
+
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+            test -n "$APKSIGNER"
+            test -n "$AAPT"
+
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram.apk \
+              build/app/outputs/flutter-apk/app-release.apk
+
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee chat-only-signature-v4.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' chat-only-signature-v4.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$APK_CERT" = "$EXPECTED"
+
+            "$AAPT" dump badging chernogram.apk | tee chat-only-badging-v4.txt
+            grep -q "package: name='$EXPECTED_PACKAGE'" chat-only-badging-v4.txt
+            grep -q "versionCode='57'" chat-only-badging-v4.txt
+            grep -q "versionName='0.23.2'" chat-only-badging-v4.txt
+
+            sha256sum chernogram.apk | tee chat-only-sha256-v4.txt
+          ) 2>&1 | tee chat-only-build-v4.log
+
+      - name: Replace latest-apk with build 57
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            APK_SHA=$(awk '{print $1}' chat-only-sha256-v4.txt)
+            cat > update.json <<EOF
+          {
+            "versionName": "0.23.2",
+            "versionCode": 57,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=57",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${EXPECTED_CERT_SHA256}",
+            "notesRu": "Минимальный тест стабильного чата. Код сборки 57 гарантированно обновляется поверх 0.24+56 и 0.23.1+56.",
+            "notesEn": "Minimal stable chat test. Build code 57 updates over both 0.24+56 and 0.23.1+56."
+          }
+          EOF
+
+            gh release delete latest-apk --cleanup-tag --yes || true
+            gh release create latest-apk \
+              chernogram.apk \
+              update.json \
+              chat-only-badging-v4.txt \
+              chat-only-sha256-v4.txt \
+              --target "$SOURCE_BRANCH" \
+              --title "Чернограм Chat Test 0.23.2" \
+              --notes "Минимальный текстовый чат. Код сборки 57 для гарантированного обновления из приложения." \
+              --prerelease
+          ) 2>&1 | tee -a chat-only-build-v4.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-chat-only-0.23.2-v4
+          path: |
+            chernogram.apk
+            update.json
+            chat-only-build-v4.log
+            chat-only-signature-v4.txt
+            chat-only-badging-v4.txt
+            chat-only-sha256-v4.txt
+          if-no-files-found: warn
+          retention-days: 14
