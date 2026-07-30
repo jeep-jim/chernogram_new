@@ -1,0 +1,78 @@
+name: Verify published chat-only 0.23.1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-chat-only-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify-chat-only-release
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify main manifest and published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('update.json').read_text(encoding='utf-8-sig'))
+          assert data['versionName'] == '0.23.1', data
+          assert int(data['versionCode']) == 56, data
+          assert data['sha256'] == 'c24580a4187456c1ceb0003e51dfd467350595f91c877fea391b3d9e213d3767', data
+          print('main update.json: OK')
+          PY
+
+          curl --fail --location --retry 4 --retry-all-errors \
+            --output release-update.json \
+            "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/update.json?t=$(date +%s)"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('release-update.json').read_text(encoding='utf-8-sig'))
+          assert data['versionName'] == '0.23.1', data
+          assert int(data['versionCode']) == 56, data
+          assert data['sha256'] == 'c24580a4187456c1ceb0003e51dfd467350595f91c877fea391b3d9e213d3767', data
+          print('release update.json: OK')
+          PY
+
+          curl --fail --location --retry 4 --retry-all-errors \
+            --output chernogram.apk \
+            "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=56"
+          echo "c24580a4187456c1ceb0003e51dfd467350595f91c877fea391b3d9e213d3767  chernogram.apk" | sha256sum --check
+          test "$(stat -c '%s' chernogram.apk)" -gt 50000000
+
+      - name: Save verified status
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > CHAT_ONLY_RELEASE_VERIFIED.md <<EOF
+          Chernogram chat-only release verified
+          Version: 0.23.1+56
+          Main manifest: success
+          Release manifest: success
+          APK download: success
+          APK SHA-256: c24580a4187456c1ceb0003e51dfd467350595f91c877fea391b3d9e213d3767
+          Release tag: latest-apk
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHAT_ONLY_RELEASE_VERIFIED.md
+          git commit -m "Подтвердить публикацию минимального чата 0.23.1 [skip ci]" || true
+          git push origin HEAD:main
