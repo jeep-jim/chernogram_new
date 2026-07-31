@@ -1,0 +1,57 @@
+name: Verify published Chernogram 0.23.3 files-first
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-files-first-0233-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download exactly what installed Android clients receive
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.versionName == "0.23.3"' update.json
+          jq -e '.versionCode == 58' update.json
+          EXPECTED=$(jq -r '.sha256' update.json)
+          URL=$(jq -r '.apkUrl' update.json)
+          curl --fail --location --retry 4 --retry-delay 2 \
+            -H 'Cache-Control: no-cache' \
+            "${URL}&verify=$(date +%s)" \
+            --output chernogram.apk
+          test -s chernogram.apk
+          ACTUAL=$(sha256sum chernogram.apk | awk '{print $1}')
+          test "$ACTUAL" = "$EXPECTED"
+          BYTES=$(stat -c '%s' chernogram.apk)
+          {
+            echo 'Chernogram 0.23.3 release verified'
+            echo 'Version: 0.23.3+58'
+            echo "APK bytes: $BYTES"
+            echo "APK SHA-256: $ACTUAL"
+            echo 'Source: latest-apk/chernogram.apk'
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } > /tmp/FILES_FIRST_0233_RELEASE_VERIFIED.md
+
+      - name: Save verification result
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/FILES_FIRST_0233_RELEASE_VERIFIED.md FILES_FIRST_0233_RELEASE_VERIFIED.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add FILES_FIRST_0233_RELEASE_VERIFIED.md
+          git commit -m 'Подтвердить скачиваемый APK Чернограма 0.23.3 [skip ci]' || true
+          git push origin HEAD:main
