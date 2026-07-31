@@ -1,0 +1,102 @@
+name: Diagnose Chernogram 0.23.4 Stable Core v2
+
+on:
+  push:
+    branches:
+      - feature/stable-core-0234
+    paths:
+      - .github/workflows/stable-core-0234-diagnostics-v2.yml
+      - tooling/materialize_stable_core_0234_v2.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: feature/stable-core-0234
+  FLUTTER_VERSION: 3.44.8
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - name: Fetch source references
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --force
+          for branch in feature/files-first-0233 feature/realtime-client-v1 feature/realtime-gateway-v1; do
+            git branch -f "$branch" "origin/$branch"
+          done
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Run corrected full diagnostics
+        id: diagnose
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            python tooling/materialize_stable_core_0234_v2.py
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = '0.23.4+59'
+            flutter pub get
+            dart format lib test
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test --dart-define=CG_GATEWAY_ENABLED=true --dart-define=CG_GATEWAY_URL=ws://127.0.0.1:18080/v1/realtime --dart-define=CG_GATEWAY_ACCESS_TOKEN=dev
+            cd server/realtime_gateway
+            dart pub get
+            dart format .
+            dart analyze
+            dart test
+            rm -rf data-smoke
+            CG_ALLOW_INSECURE_DEV=1 CG_PORT=18080 CG_DATA_DIR=data-smoke dart run bin/server.dart > gateway-smoke-server.log 2>&1 &
+            SERVER_PID=$!
+            trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent http://127.0.0.1:18080/healthz
+            dart run tool/integration_smoke.dart
+            kill $SERVER_PID
+            wait $SERVER_PID 2>/dev/null || true
+            trap - EXIT
+          ) 2>&1 | tee /tmp/stable-core-0234-v2.log
+      - name: Commit exact result
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.diagnose.outcome }}
+        run: |
+          set -euo pipefail
+          cp /tmp/stable-core-0234-v2.log /tmp/diagnostics.log 2>/dev/null || true
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Chernogram 0.23.4 stable core diagnostics v2'
+            echo
+            echo "Outcome: ${OUTCOME}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo '```text'
+            tail -n 1800 /tmp/diagnostics.log 2>/dev/null || true
+            echo '```'
+          } > STABLE_CORE_0234_DIAGNOSTICS_V2.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add STABLE_CORE_0234_DIAGNOSTICS_V2.md
+          git commit -m 'Сохранить диагностику 0.23.4 v2 [skip ci]' || true
+          git push origin HEAD:"$SOURCE_BRANCH"
+          test "$OUTCOME" = success
