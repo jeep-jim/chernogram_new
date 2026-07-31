@@ -1,5 +1,4 @@
-name: Build Chernogram 0.23.4 Stable Core
-# Manual restart 2026-07-31T16:16:00+07:00
+name: Чернограм 0.23.4 — локальная связь без сервера
 
 on:
   push:
@@ -8,8 +7,12 @@ on:
       - .github/workflows/build-stable-core-0234.yml
   workflow_dispatch:
 
+concurrency:
+  group: chernogram-0234-serverless-build
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
 
 env:
   SOURCE_BRANCH: feature/stable-core-0234
@@ -19,6 +22,7 @@ env:
 
 jobs:
   verify:
+    name: Проверка локального чата и WebRTC
     runs-on: ubuntu-22.04
     timeout-minutes: 70
     steps:
@@ -26,7 +30,8 @@ jobs:
         with:
           ref: ${{ env.SOURCE_BRANCH }}
           fetch-depth: 0
-      - name: Prepare source references
+
+      - name: Подготовить исходные ветки
         shell: bash
         run: |
           set -euo pipefail
@@ -34,15 +39,18 @@ jobs:
           for branch in feature/files-first-0233 feature/realtime-client-v1 feature/realtime-gateway-v1; do
             git branch -f "$branch" "origin/$branch"
           done
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Verify application and gateway
+
+      - name: Собрать исходник без частного Gateway
         shell: bash
         run: |
           set -o pipefail
@@ -50,81 +58,25 @@ jobs:
             set -euo pipefail
             python tooling/materialize_stable_core_0234_v2.py
             test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$EXPECTED_VERSION"
+            ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
+            grep -q "ntfy.sh" lib/internet_core.dart
+            grep -q "openrelay.metered.ca" lib/call_service.dart
             flutter pub get
             dart format lib test
             flutter analyze lib test --no-fatal-infos --no-fatal-warnings
             flutter test
-            cd server/realtime_gateway
-            dart pub get
-            dart format .
-            dart analyze
-            dart test
-            rm -rf data-smoke
-            CG_ALLOW_INSECURE_DEV=1 CG_PORT=18080 CG_DATA_DIR=data-smoke dart run bin/server.dart > gateway-server.log 2>&1 &
-            SERVER_PID=$!
-            trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-            for attempt in $(seq 1 30); do
-              if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then break; fi
-              sleep 1
-            done
-            curl --fail --silent http://127.0.0.1:18080/healthz
-            dart run tool/integration_smoke.dart
-            kill $SERVER_PID
-            wait $SERVER_PID 2>/dev/null || true
-            trap - EXIT
-          ) 2>&1 | tee verify-build-0234.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: stable-core-0234-verify-log
-          path: verify-build-0234.log
-          if-no-files-found: warn
-          retention-days: 14
+          ) 2>&1 | tee serverless-verify-0234.log
 
-  gateway:
-    needs: verify
-    runs-on: ubuntu-22.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.SOURCE_BRANCH }}
-          fetch-depth: 0
-      - name: Prepare and materialize
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --force
-          for branch in feature/files-first-0233 feature/realtime-client-v1 feature/realtime-gateway-v1; do
-            git branch -f "$branch" "origin/$branch"
-          done
-          python tooling/materialize_stable_core_0234_v2.py
-      - name: Validate Compose and build gateway image
-        shell: bash
-        run: |
-          set -o pipefail
-          (
-            set -euo pipefail
-            docker build -t cernogram-realtime-gateway:0.23.4 server/realtime_gateway
-            cp infra/stable-core-0234/.env.example infra/stable-core-0234/.env
-            sed -i 's/realtime.example.com/realtime.local/g; s/turn.example.com/turn.local/g; s/203.0.113.10/127.0.0.1/g' infra/stable-core-0234/.env
-            docker compose --env-file infra/stable-core-0234/.env -f infra/stable-core-0234/docker-compose.yml config >/dev/null
-            docker save cernogram-realtime-gateway:0.23.4 | gzip > cernogram-realtime-gateway-0.23.4.tar.gz
-            sha256sum cernogram-realtime-gateway-0.23.4.tar.gz > gateway-sha256-0234.txt
-          ) 2>&1 | tee gateway-build-0234.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cernogram-gateway-0.23.4
-          path: |
-            cernogram-realtime-gateway-0.23.4.tar.gz
-            gateway-sha256-0234.txt
-            gateway-build-0234.log
-            infra/stable-core-0234/**
+          name: serverless-0234-verify-log
+          path: serverless-verify-0234.log
           if-no-files-found: warn
           retention-days: 14
 
   android:
+    name: Android APK без серверной зависимости
     needs: verify
     runs-on: ubuntu-22.04
     timeout-minutes: 110
@@ -133,7 +85,8 @@ jobs:
         with:
           ref: ${{ env.SOURCE_BRANCH }}
           fetch-depth: 0
-      - name: Prepare source references
+
+      - name: Подготовить исходные ветки
         shell: bash
         run: |
           set -euo pipefail
@@ -141,25 +94,30 @@ jobs:
           for branch in feature/files-first-0233 feature/realtime-client-v1 feature/realtime-gateway-v1; do
             git branch -f "$branch" "origin/$branch"
           done
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+
       - uses: actions/cache/restore@v4
         with:
           path: ~/.android/debug.keystore
           key: chernogram-stable-signing-v2
           fail-on-cache-miss: false
-      - name: Restore permanent signing identity
+
+      - name: Восстановить постоянную подпись
         shell: bash
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
@@ -175,38 +133,35 @@ jobs:
           ACTUAL=$(grep -m1 'SHA256:' signing-0234.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
           test "$ACTUAL" = "$EXPECTED"
-      - name: Build signed APK
+
+      - name: Собрать подписанный APK
         shell: bash
-        env:
-          CG_GATEWAY_URL: ${{ secrets.CG_GATEWAY_URL }}
-          CG_GATEWAY_ACCESS_TOKEN: ${{ secrets.CG_GATEWAY_ACCESS_TOKEN }}
         run: |
           set -o pipefail
           (
             set -euo pipefail
             python tooling/materialize_stable_core_0234_v2.py
+            ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
             flutter pub get
             dart format lib
-            DEFINES=(--dart-define=CG_GATEWAY_ENABLED=true)
-            if [ -n "${CG_GATEWAY_URL:-}" ]; then DEFINES+=(--dart-define="CG_GATEWAY_URL=$CG_GATEWAY_URL"); fi
-            if [ -n "${CG_GATEWAY_ACCESS_TOKEN:-}" ]; then DEFINES+=(--dart-define="CG_GATEWAY_ACCESS_TOKEN=$CG_GATEWAY_ACCESS_TOKEN"); fi
-            flutter build apk --release "${DEFINES[@]}"
+            flutter build apk --release
             SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
             test -s "$SOURCE_APK"
             APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-            "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram-android-0.23.4.apk "$SOURCE_APK"
-            "$APKSIGNER" verify --print-certs chernogram-android-0.23.4.apk | tee apk-signature-0234.txt
+            "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram-android-0.23.4-serverless.apk "$SOURCE_APK"
+            "$APKSIGNER" verify --print-certs chernogram-android-0.23.4-serverless.apk | tee apk-signature-0234.txt
             APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature-0234.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
             EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
             test "$APK_CERT" = "$EXPECTED"
-            sha256sum chernogram-android-0.23.4.apk > android-sha256-0234.txt
+            sha256sum chernogram-android-0.23.4-serverless.apk > android-sha256-0234.txt
           ) 2>&1 | tee android-build-0234.log
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: chernogram-android-0.23.4
+          name: chernogram-android-0.23.4-serverless
           path: |
-            chernogram-android-0.23.4.apk
+            chernogram-android-0.23.4-serverless.apk
             android-sha256-0234.txt
             apk-signature-0234.txt
             android-build-0234.log
@@ -214,6 +169,7 @@ jobs:
           retention-days: 14
 
   windows:
+    name: Windows без серверной зависимости
     needs: verify
     runs-on: windows-2022
     timeout-minutes: 110
@@ -222,26 +178,27 @@ jobs:
         with:
           ref: ${{ env.SOURCE_BRANCH }}
           fetch-depth: 0
-      - name: Prepare source references
+
+      - name: Подготовить исходные ветки
         shell: pwsh
         run: |
           git fetch origin '+refs/heads/*:refs/remotes/origin/*' --force
           git branch -f feature/files-first-0233 origin/feature/files-first-0233
           git branch -f feature/realtime-client-v1 origin/feature/realtime-client-v1
           git branch -f feature/realtime-gateway-v1 origin/feature/realtime-gateway-v1
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Build Windows package
+
+      - name: Собрать Windows ZIP
         shell: pwsh
-        env:
-          CG_GATEWAY_URL: ${{ secrets.CG_GATEWAY_URL }}
-          CG_GATEWAY_ACCESS_TOKEN: ${{ secrets.CG_GATEWAY_ACCESS_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
@@ -252,7 +209,8 @@ jobs:
             & $Command *>&1 | Tee-Object -FilePath $log -Append
             if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE" }
           }
-          Invoke-Logged { python tooling/materialize_stable_core_0234_v2.py } 'Materialize stable core'
+          Invoke-Logged { python tooling/materialize_stable_core_0234_v2.py } 'Materialize serverless core'
+          if (Select-String -Path lib/internet_core.dart -Pattern 'realtime_gateway_client.dart' -Quiet) { throw 'Private gateway dependency remained in app core' }
           Invoke-Logged { flutter config --enable-windows-desktop } 'Enable Windows desktop'
           if (-not (Test-Path 'windows/CMakeLists.txt')) {
             Invoke-Logged { flutter create --platforms=windows --project-name chernogram --no-pub . } 'Create Windows runner'
@@ -267,65 +225,19 @@ jobs:
           $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
           Invoke-Logged { flutter pub get } 'Flutter pub get'
           Invoke-Logged { dart format lib } 'Dart format'
-          $arguments = @('build', 'windows', '--release', '--dart-define=CG_GATEWAY_ENABLED=true')
-          if ($env:CG_GATEWAY_URL) { $arguments += "--dart-define=CG_GATEWAY_URL=$env:CG_GATEWAY_URL" }
-          if ($env:CG_GATEWAY_ACCESS_TOKEN) { $arguments += "--dart-define=CG_GATEWAY_ACCESS_TOKEN=$env:CG_GATEWAY_ACCESS_TOKEN" }
-          Invoke-Logged { flutter @arguments } 'Build Windows release'
+          Invoke-Logged { flutter build windows --release } 'Build Windows release'
           $release = 'build/windows/x64/runner/Release'
           if (-not (Test-Path "$release/chernogram.exe")) { throw 'Windows executable was not built' }
-          Compress-Archive -Path "$release/*" -DestinationPath chernogram-windows-0.23.4.zip -Force
-          Get-FileHash chernogram-windows-0.23.4.zip -Algorithm SHA256 | Format-List | Out-File windows-sha256-0234.txt
+          Compress-Archive -Path "$release/*" -DestinationPath chernogram-windows-0.23.4-serverless.zip -Force
+          Get-FileHash chernogram-windows-0.23.4-serverless.zip -Algorithm SHA256 | Format-List | Out-File windows-sha256-0234.txt
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: chernogram-windows-0.23.4
+          name: chernogram-windows-0.23.4-serverless
           path: |
-            chernogram-windows-0.23.4.zip
+            chernogram-windows-0.23.4-serverless.zip
             windows-sha256-0234.txt
             windows-build-0234.log
           if-no-files-found: warn
           retention-days: 14
-
-  finalize:
-    if: always()
-    needs: [verify, gateway, android, windows]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.SOURCE_BRANCH }}
-          fetch-depth: 0
-      - name: Save exact platform result
-        shell: bash
-        env:
-          VERIFY_RESULT: ${{ needs.verify.result }}
-          GATEWAY_RESULT: ${{ needs.gateway.result }}
-          ANDROID_RESULT: ${{ needs.android.result }}
-          WINDOWS_RESULT: ${{ needs.windows.result }}
-          CG_GATEWAY_URL: ${{ secrets.CG_GATEWAY_URL }}
-        run: |
-          set -euo pipefail
-          if [ -n "${CG_GATEWAY_URL:-}" ]; then ENDPOINT=configured; else ENDPOINT=missing; fi
-          git fetch origin "$SOURCE_BRANCH"
-          git reset --hard "origin/$SOURCE_BRANCH"
-          cat > STABLE_CORE_0234_BUILD_STATUS.md <<EOF
-          Chernogram 0.23.4 build result
-          Version: ${EXPECTED_VERSION}
-          Verify: ${VERIFY_RESULT}
-          Gateway image: ${GATEWAY_RESULT}
-          Android signed APK: ${ANDROID_RESULT}
-          Windows package: ${WINDOWS_RESULT}
-          Production gateway endpoint: ${ENDPOINT}
-          Public latest-apk: unchanged
-          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          EOF
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add STABLE_CORE_0234_BUILD_STATUS.md
-          git commit -m 'Сохранить результат полной сборки 0.23.4 [skip ci]' || true
-          git push origin HEAD:"$SOURCE_BRANCH"
-          test "$VERIFY_RESULT" = success
-          test "$GATEWAY_RESULT" = success
-          test "$ANDROID_RESULT" = success
-          test "$WINDOWS_RESULT" = success
