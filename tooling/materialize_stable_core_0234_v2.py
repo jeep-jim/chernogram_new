@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "tooling/materialize_stable_core_0234.py"
 TEMP = ROOT / "tooling/.materialize_stable_core_0234_runtime.py"
+WORKING_SERVERLESS_REF = "6847a3d4e6ade48ca139c6560c036540865b8bf8"
 
 
 def _patch_materializer_source(source: str) -> str:
@@ -48,6 +50,45 @@ def _patch_materializer_source(source: str) -> str:
     return source.replace(async_marker, async_fix, 1)
 
 
+def _git_show(path: str) -> str:
+    return subprocess.check_output(
+        ["git", "show", f"{WORKING_SERVERLESS_REF}:{path}"],
+        cwd=ROOT,
+        text=True,
+    )
+
+
+def _restore_serverless_realtime_core() -> None:
+    # Restore the exact chat and WebRTC core that was already verified in the
+    # serverless 0.7.3-derived build. No private gateway, hosted backend or
+    # production TURN deployment is required by the application.
+    for path in (
+        "lib/internet_core.dart",
+        "lib/call_service.dart",
+        "lib/app_monitor.dart",
+    ):
+        target = ROOT / path
+        target.write_text(_git_show(path), encoding="utf-8")
+
+    # The stable materializer adds a private gateway background service. Keep
+    # the current UI/lifecycle code, but do not start that service at launch.
+    main_path = ROOT / "lib/main.dart"
+    main = main_path.read_text(encoding="utf-8")
+    main = main.replace(
+        "Future<void> main() async {\n"
+        "  WidgetsFlutterBinding.ensureInitialized();\n"
+        "  await initializeChernogramRealtimeService();\n"
+        "  runApp(const ChernogramApp());\n"
+        "}",
+        "void main() {\n"
+        "  WidgetsFlutterBinding.ensureInitialized();\n"
+        "  runApp(const ChernogramApp());\n"
+        "}",
+        1,
+    )
+    main_path.write_text(main, encoding="utf-8")
+
+
 def _patch_generated_source() -> None:
     pubspec_path = ROOT / "pubspec.yaml"
     pubspec = pubspec_path.read_text(encoding="utf-8")
@@ -62,35 +103,13 @@ def _patch_generated_source() -> None:
         )
         pubspec_path.write_text(pubspec, encoding="utf-8")
 
-    client_path = ROOT / "lib/realtime_gateway_client.dart"
-    client = client_path.read_text(encoding="utf-8")
-    old_ack = '''    _sendFrame(<String, dynamic>{
-      'type': 'ack',
-      'protocol': 1,
-      'roomId': event.roomId,
-      'roomSeq': event.roomSeq,
-    });
-'''
-    new_ack = '''    _sendFrame(<String, dynamic>{
-      'type': 'event_ack',
-      'protocol': 1,
-      'packetId': event.packetId,
-      'roomId': event.roomId,
-      'roomSeq': event.roomSeq,
-    });
-'''
-    if old_ack in client:
-        client = client.replace(old_ack, new_ack, 1)
-        client_path.write_text(client, encoding="utf-8")
-    elif new_ack not in client:
-        raise RuntimeError("recipient delivery ACK block not found")
-
 
 def main() -> None:
     source = _patch_materializer_source(SOURCE.read_text(encoding="utf-8"))
     TEMP.write_text(source, encoding="utf-8")
     try:
         runpy.run_path(str(TEMP), run_name="__main__")
+        _restore_serverless_realtime_core()
         _patch_generated_source()
     finally:
         TEMP.unlink(missing_ok=True)
