@@ -1,0 +1,31 @@
+{$GATEWAY_HOST} {
+    encode zstd gzip
+
+    @health path /healthz
+    handle @health {
+        reverse_proxy gateway:8080
+    }
+
+    @ice path /v1/ice
+    handle @ice {
+        header Access-Control-Allow-Origin "*"
+        header Access-Control-Allow-Methods "GET, OPTIONS"
+        reverse_proxy gateway:8080
+    }
+
+    @realtime path /v1/realtime
+    handle @realtime {
+        reverse_proxy gateway:8080 {
+            transport http {
+                versions h1
+            }
+        }
+    }
+
+    respond "Chernogram realtime gateway" 200
+
+    log {
+        output stdout
+        format console
+    }
+}
