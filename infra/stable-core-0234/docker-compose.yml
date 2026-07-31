@@ -1,0 +1,68 @@
+services:
+  gateway:
+    build:
+      context: ../../server/realtime_gateway
+    restart: unless-stopped
+    environment:
+      CG_BIND: 0.0.0.0
+      CG_PORT: 8080
+      CG_DATA_DIR: /var/lib/cernogram
+      CG_TOKEN_SECRET: ${CG_TOKEN_SECRET}
+      CG_ALLOW_INSECURE_DEV: ${CG_ALLOW_INSECURE_DEV:-0}
+      CG_TURN_URLS: turn:${TURN_HOST}:3478?transport=udp,turn:${TURN_HOST}:3478?transport=tcp
+      CG_TURN_USERNAME: ${TURN_USERNAME}
+      CG_TURN_CREDENTIAL: ${TURN_PASSWORD}
+    volumes:
+      - gateway_data:/var/lib/cernogram
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+      start_period: 10s
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_HOST: ${GATEWAY_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  turn:
+    image: coturn/coturn:4.15.0-r0
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --realm=${TURN_REALM}
+      - --server-name=${TURN_REALM}
+      - --external-ip=${PUBLIC_IP}
+      - --listening-ip=0.0.0.0
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --lt-cred-mech
+      - --user=${TURN_USERNAME}:${TURN_PASSWORD}
+      - --no-cli
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --stale-nonce=600
+
+volumes:
+  gateway_data:
+  caddy_data:
+  caddy_config:
