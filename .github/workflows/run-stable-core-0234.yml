@@ -1,0 +1,124 @@
+name: Run Chernogram 0.23.4 Stable Core Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/run-stable-core-0234.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-stable-core-0234
+  cancel-in-progress: true
+
+env:
+  SOURCE_BRANCH: feature/stable-core-0234
+  FLUTTER_VERSION: 3.44.8
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - name: Fetch all required source branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --force
+          for branch in feature/files-first-0233 feature/realtime-client-v1 feature/realtime-gateway-v1; do
+            git branch -f "$branch" "origin/$branch"
+          done
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Materialize complete 0.23.4 source
+        run: python tooling/materialize_stable_core_0234_v2.py
+      - name: Verify Flutter client
+        id: flutter
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = '0.23.4+59'
+            flutter pub get
+            dart format lib test
+            flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+            flutter test --dart-define=CG_GATEWAY_ENABLED=true --dart-define=CG_GATEWAY_URL=ws://127.0.0.1:18080/v1/realtime --dart-define=CG_GATEWAY_ACCESS_TOKEN=dev
+          ) 2>&1 | tee /tmp/flutter-stable-0234.log
+      - name: Verify gateway persistence and two clients
+        id: gateway
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            cd server/realtime_gateway
+            dart pub get
+            dart format .
+            dart analyze
+            dart test
+            rm -rf data-smoke
+            CG_ALLOW_INSECURE_DEV=1 CG_PORT=18080 CG_DATA_DIR=data-smoke dart run bin/server.dart > gateway-server.log 2>&1 &
+            SERVER_PID=$!
+            trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then break; fi
+              sleep 1
+            done
+            curl --fail --silent http://127.0.0.1:18080/healthz
+            dart run tool/integration_smoke.dart
+            kill $SERVER_PID
+            wait $SERVER_PID 2>/dev/null || true
+            trap - EXIT
+          ) 2>&1 | tee /tmp/gateway-stable-0234.log
+      - name: Commit exact verification result
+        if: always()
+        shell: bash
+        env:
+          FLUTTER_OUTCOME: ${{ steps.flutter.outcome }}
+          GATEWAY_OUTCOME: ${{ steps.gateway.outcome }}
+        run: |
+          set -euo pipefail
+          cp /tmp/flutter-stable-0234.log /tmp/flutter.log 2>/dev/null || true
+          cp /tmp/gateway-stable-0234.log /tmp/gateway.log 2>/dev/null || true
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Chernogram 0.23.4 full verification'
+            echo
+            echo "Flutter: ${FLUTTER_OUTCOME}"
+            echo "Gateway: ${GATEWAY_OUTCOME}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo '## Flutter'
+            echo '```text'
+            tail -n 1000 /tmp/flutter.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Gateway'
+            echo '```text'
+            tail -n 1400 /tmp/gateway.log 2>/dev/null || true
+            echo '```'
+          } > STABLE_CORE_0234_FULL_VERIFICATION.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add STABLE_CORE_0234_FULL_VERIFICATION.md
+          git commit -m 'Сохранить полную проверку стабильного ядра 0.23.4 [skip ci]' || true
+          git push origin HEAD:"$SOURCE_BRANCH"
+          test "$FLUTTER_OUTCOME" = success
+          test "$GATEWAY_OUTCOME" = success
