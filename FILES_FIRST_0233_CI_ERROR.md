@@ -1,12 +1,10 @@
-# Chernogram 0.23.3 files-first v2 failed
+# Chernogram 0.23.3 files-first v3 failed
 
-Workflow commit: 6baf6c4d8d807bdd376b65949d3b61d96b326c0f
-Time: 2026-07-31T02:54:51Z
+Workflow commit: f2cfac48ca7fe4a664177489eca66e3c2b9c23f5
+Time: 2026-07-31T03:07:04Z
 ```text
-Flutter 3.44.8 • channel stable • https://github.com/flutter/flutter.git
-Framework • revision 058e0af2c2 (7 days ago) • 2026-07-23 10:56:21 -0700
-Engine • hash 13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939 (revision 0cd610717b) (7 days ago) • 2026-07-23 16:11:34.000Z
-Tools • Dart 3.12.2 • DevTools 2.57.0
+Chernogram 0.23.3 files-first source materialized
+Files-first local/network payload split finalized
 Resolving dependencies...
 Downloading packages...
   file_picker 10.3.10 (11.0.2 available)
@@ -54,7 +52,7 @@ Formatted lib/call_service.dart
 Formatted lib/group_call_service.dart
 Formatted lib/core_models.dart
 Formatted lib/brand.dart
-Formatted 11 files (7 changed) in 0.28 seconds.
+Formatted 11 files (7 changed) in 0.29 seconds.
 Analyzing chernogram_new...                                     
 
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/android_data_first.dart:1337:7 • use_build_context_synchronously
@@ -82,7 +80,7 @@ warning • Unused import: 'brand.dart'. Try removing the import directive • l
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/tunnels.dart:1100:20 • curly_braces_in_flow_control_structures
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/v06.dart:408:7 • use_build_context_synchronously
 
-24 issues found. (ran in 12.6s)
+24 issues found. (ran in 13.1s)
 
 ✅ basic smoke test
 
@@ -102,7 +100,7 @@ Note: Recompile with -Xlint:deprecation for details.
 Note: Some input files use unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
 Caught exception: Already watching path: /home/runner/work/chernogram_new/chernogram_new/android
-Running Gradle task 'assembleRelease'...                          342.2s
+Running Gradle task 'assembleRelease'...                          348.9s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (112.7MB)
 V3.0 Signer: certificate DN: CN=Chernogram Prototype, O=Chernogram, C=RU
 V3.0 Signer: certificate SHA-256 digest: f4a2c836a83671197810fa6e982d77f4c731d09b189515c013d02d0d942d9bbe
