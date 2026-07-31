@@ -1,12 +1,17 @@
 # Chernogram 0.23.4 stable core diagnostics v2
 
-Outcome: failure
-Time: 2026-07-31T07:39:24Z
+Outcome: cancelled
+Time: 2026-07-31T08:42:49Z
 
 ```text
 Chernogram 0.23.4 stable core materialized
 Resolving dependencies...
 Downloading packages...
++ _fe_analyzer_shared 99.0.0 (105.0.0 available)
++ analyzer 12.1.0 (14.1.0 available)
++ cli_config 0.2.0
++ convert 3.1.2
++ coverage 1.15.1
   file_picker 10.3.10 (11.0.2 available)
 + flutter_background_service 5.1.0
 + flutter_background_service_android 6.3.1
@@ -19,12 +24,17 @@ Downloading packages...
 + flutter_local_notifications_platform_interface 12.1.0
 + flutter_local_notifications_web 1.0.0
 + flutter_local_notifications_windows 3.1.1
++ frontend_server_client 4.0.0
++ glob 2.1.3
   hooks 2.0.2 (2.1.0 available)
++ http_multi_server 3.2.2
++ io 1.0.5
   jni 1.0.0 (1.0.2 available)
   jni_flutter 1.0.1 (1.0.2 available)
   lints 3.0.0 (6.1.0 available)
   matcher 0.12.19 (0.12.20 available)
   meta 1.18.0 (1.19.0 available)
++ node_preamble 2.0.2
   objective_c 9.4.1 (9.5.0 available)
   package_config 2.2.0 (3.0.0 available)
   package_info_plus 8.3.1 (10.2.1 available)
@@ -35,6 +45,7 @@ Downloading packages...
 + permission_handler_html 0.1.3+5
 + permission_handler_platform_interface 4.3.0
 + permission_handler_windows 0.2.1
++ pool 1.5.2
   qr 3.0.2 (4.0.0 available)
   record 6.2.1 (7.1.1 available)
   record_android 1.5.2 (2.1.2 available)
@@ -47,13 +58,25 @@ Downloading packages...
   record_windows 1.0.7 (2.2.2 available)
   share_plus 10.1.4 (13.3.0 available)
   share_plus_platform_interface 5.0.2 (7.2.0 available)
++ shelf 1.4.2
++ shelf_packages_handler 3.0.2
++ shelf_static 1.1.3
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.13
++ test 1.31.0 (1.31.2 available)
   test_api 0.7.11 (0.7.13 available)
++ test_core 0.6.17 (0.6.19 available)
 + timezone 0.11.1
   vector_math 2.2.0 (2.4.1 available)
++ watcher 1.2.1
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
   win32 5.15.0 (6.3.0 available)
   xml 6.6.1 (7.0.1 available)
-Changed 16 dependencies!
-29 packages have newer versions incompatible with dependency constraints.
+Changed 39 dependencies!
+33 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Formatted lib/agent_screen.dart
 Formatted lib/android_data_first.dart
@@ -80,7 +103,7 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 33 files (25 changed) in 0.52 seconds.
+Formatted 33 files (25 changed) in 0.55 seconds.
 Analyzing chernogram_new...                                     
 
 warning • The value of the field '_globalFiles' isn't used. Try removing the field, or using it • lib/android_data_first.dart:1171:28 • unused_field
@@ -118,26 +141,86 @@ warning • The value of the field '_nickname' isn't used. Try removing the fiel
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1937:5 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
-  error • Target of URI doesn't exist: 'package:test/test.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • server/realtime_gateway/test/gateway_core_test.dart:3:8 • uri_does_not_exist
-  error • The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test' • server/realtime_gateway/test/gateway_core_test.dart:8:3 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:14:5 • undefined_function
-  error • Undefined name 'isNotNull'. Try correcting the name to one that is defined, or defining the name • server/realtime_gateway/test/gateway_core_test.dart:14:20 • undefined_identifier
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:15:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:16:5 • undefined_function
-  error • The function 'test' isn't defined. Try importing the library that defines 'test', correcting the name to the name of an existing function, or defining a function named 'test' • server/realtime_gateway/test/gateway_core_test.dart:19:3 • undefined_function
-  error • The function 'addTearDown' isn't defined. Try importing the library that defines 'addTearDown', correcting the name to the name of an existing function, or defining a function named 'addTearDown' • server/realtime_gateway/test/gateway_core_test.dart:21:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:36:5 • undefined_function
-  error • Undefined name 'isFalse'. Try correcting the name to one that is defined, or defining the name • server/realtime_gateway/test/gateway_core_test.dart:36:29 • undefined_identifier
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:37:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:50:5 • undefined_function
-  error • Undefined name 'isTrue'. Try correcting the name to one that is defined, or defining the name • server/realtime_gateway/test/gateway_core_test.dart:50:33 • undefined_identifier
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:51:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:64:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:67:5 • undefined_function
-  error • The function 'hasLength' isn't defined. Try importing the library that defines 'hasLength', correcting the name to the name of an existing function, or defining a function named 'hasLength' • server/realtime_gateway/test/gateway_core_test.dart:67:20 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:68:5 • undefined_function
-  error • The function 'expect' isn't defined. Try importing the library that defines 'expect', correcting the name to the name of an existing function, or defining a function named 'expect' • server/realtime_gateway/test/gateway_core_test.dart:72:5 • undefined_function
-  error • The function 'hasLength' isn't defined. Try importing the library that defines 'hasLength', correcting the name to the name of an existing function, or defining a function named 'hasLength' • server/realtime_gateway/test/gateway_core_test.dart:72:47 • undefined_function
 
-55 issues found. (ran in 13.4s)
+35 issues found. (ran in 14.7s)
+
+✅ basic smoke test
+
+🎉 1 test passed.
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 105.0.0
++ analyzer 14.1.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.15.1
++ crypto 3.0.7
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.0.0
++ glob 2.1.3
++ http_multi_server 3.2.2
++ http_parser 4.1.2
++ io 1.0.5
++ lints 5.1.1 (6.1.0 available)
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.0.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ pool 1.5.2
++ pub_semver 2.2.0
++ shelf 1.4.2
++ shelf_packages_handler 3.0.2
++ shelf_static 1.1.3
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.13
++ source_span 1.10.2
++ stack_trace 1.12.1
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.31.2
++ test_api 0.7.13
++ test_core 0.6.19
++ typed_data 1.4.0
++ vm_service 15.2.0
++ watcher 1.2.1
++ web 1.1.1
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ yaml 3.1.3
+Changed 50 dependencies!
+1 package has newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted bin/mint_token.dart
+Formatted bin/server.dart
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted test/gateway_core_test.dart
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted tool/integration_smoke.dart
+Formatted 4 files (4 changed) in 0.03 seconds.
+Analyzing realtime_gateway...
+No issues found!
+
+::group::✅ Passing tests
+✅ test/gateway_core_test.dart: development token is accepted only in explicit development mode
+✅ test/gateway_core_test.dart: event store persists, deduplicates and replays by room cursor
+::endgroup::
+
+🎉 2 tests passed.
+{"ok":true,"sessions":0,"time":"2026-07-31T07:43:51.126832Z"}gateway smoke passed: live, file_chunk, replay, signal
 ```
