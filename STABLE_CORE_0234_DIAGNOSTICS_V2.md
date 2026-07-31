@@ -1,7 +1,7 @@
 # Chernogram 0.23.4 stable core diagnostics v2
 
-Outcome: failure
-Time: 2026-07-31T10:08:54Z
+Outcome: cancelled
+Time: 2026-07-31T11:19:25Z
 
 ```text
 Chernogram 0.23.4 stable core materialized
@@ -82,6 +82,7 @@ Formatted lib/agent_screen.dart
 Formatted lib/android_data_first.dart
 Formatted lib/background_realtime_service.dart
 Formatted lib/brand.dart
+Formatted lib/call_avatar.dart
 Formatted lib/chat_media.dart
 Formatted lib/chat_screen.dart
 Formatted lib/core_models.dart
@@ -100,24 +101,17 @@ Formatted lib/tunnel_extras.dart
 Formatted lib/tunnels.dart
 Formatted lib/update_service.dart
 Formatted lib/v06.dart
-Formatted 33 files (22 changed) in 0.48 seconds.
+Formatted 34 files (23 changed) in 0.51 seconds.
 Analyzing chernogram_new...                                     
 
-  error • The method 'publishMessage' isn't defined for the type 'ChernogramAppMonitor'. Try correcting the name to the name of an existing method, or defining a method named 'publishMessage' • lib/android_data_first.dart:435:32 • undefined_method
 warning • The value of the field '_globalFiles' isn't used. Try removing the field, or using it • lib/android_data_first.dart:1171:28 • unused_field
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/android_data_first.dart:1347:7 • use_build_context_synchronously
-  error • The method 'publishMessage' isn't defined for the type 'ChernogramAppMonitor'. Try correcting the name to the name of an existing method, or defining a method named 'publishMessage' • lib/android_data_first.dart:1392:34 • undefined_method
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/android_data_first.dart:1421:7 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/android_data_first.dart:1423:7 • curly_braces_in_flow_control_structures
    info • Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation • lib/android_data_first.dart:1855:27 • prefer_const_constructors
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/android_data_first.dart:2186:7 • curly_braces_in_flow_control_structures
-  error • Target of URI doesn't exist: 'call_avatar.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • lib/app_monitor.dart:8:8 • uri_does_not_exist
    info • Don't use 'BuildContext's across async gaps. Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check • lib/app_monitor.dart:279:7 • use_build_context_synchronously
-  error • The method 'CgCallAvatar' isn't defined for the type 'ChernogramAppMonitor'. Try correcting the name to the name of an existing method, or defining a method named 'CgCallAvatar' • lib/app_monitor.dart:282:15 • undefined_method
-  error • The named parameter 'myAvatarBase64' isn't defined. Try correcting the name to an existing named parameter's name, or defining a named parameter with the name 'myAvatarBase64' • lib/app_monitor.dart:370:17 • undefined_named_parameter
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/brand.dart:3:8 • unnecessary_import
-  error • Target of URI doesn't exist: 'call_avatar.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist • lib/call_service.dart:7:8 • uri_does_not_exist
-  error • The method 'CgCallAvatar' isn't defined for the type '_ChernogramCallScreenState'. Try correcting the name to the name of an existing method, or defining a method named 'CgCallAvatar' • lib/call_service.dart:462:23 • undefined_method
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_media.dart:5:8 • unnecessary_import
    info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/chat_screen.dart:4:8 • unnecessary_import
 warning • The declaration '_showMessageActions' isn't referenced. Try removing the declaration of '_showMessageActions' • lib/chat_screen.dart:466:16 • unused_element
@@ -145,5 +139,85 @@ warning • The value of the field '_nickname' isn't used. Try removing the fiel
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1959:9 • curly_braces_in_flow_control_structures
    info • Statements in an if should be enclosed in a block. Try wrapping the statement in a block • lib/v06.dart:1961:9 • curly_braces_in_flow_control_structures
 
-41 issues found. (ran in 13.1s)
+34 issues found. (ran in 15.2s)
+
+✅ basic smoke test
+
+🎉 1 test passed.
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 105.0.0
++ analyzer 14.1.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.15.1
++ crypto 3.0.7
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.0.0
++ glob 2.1.3
++ http_multi_server 3.2.2
++ http_parser 4.1.2
++ io 1.0.5
++ lints 5.1.1 (6.1.0 available)
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.0.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ pool 1.5.2
++ pub_semver 2.2.0
++ shelf 1.4.2
++ shelf_packages_handler 3.0.2
++ shelf_static 1.1.3
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.13
++ source_span 1.10.2
++ stack_trace 1.12.1
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.31.2
++ test_api 0.7.13
++ test_core 0.6.19
++ typed_data 1.4.0
++ vm_service 15.2.0
++ watcher 1.2.1
++ web 1.1.1
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ yaml 3.1.3
+Changed 50 dependencies!
+1 package has newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted bin/mint_token.dart
+Formatted bin/server.dart
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted test/gateway_core_test.dart
+Warning: Package resolution error when reading "analysis_options.yaml" file:
+Failed to resolve package URI "package:flutter_lints/flutter.yaml" in include at "/home/runner/work/chernogram_new/chernogram_new/analysis_options.yaml".
+Formatted tool/integration_smoke.dart
+Formatted 4 files (4 changed) in 0.03 seconds.
+Analyzing realtime_gateway...
+No issues found!
+
+::group::✅ Passing tests
+✅ test/gateway_core_test.dart: development token is accepted only in explicit development mode
+✅ test/gateway_core_test.dart: event store persists, deduplicates and replays by room cursor
+::endgroup::
+
+🎉 2 tests passed.
+{"ok":true,"sessions":0,"time":"2026-07-31T10:20:17.289389Z"}gateway smoke passed: live, file_chunk, replay, signal
 ```
