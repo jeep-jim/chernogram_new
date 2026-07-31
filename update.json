@@ -1,9 +1,9 @@
 {
-  "versionName": "0.23.1",
-  "versionCode": 56,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=56",
-  "sha256": "c24580a4187456c1ceb0003e51dfd467350595f91c877fea391b3d9e213d3767",
+  "versionName": "0.23.3",
+  "versionCode": 58,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=58",
+  "sha256": "2746ad9a7047077f2f9b7b92354f20c91bc63decec8ad242bf77f0a566f210e3",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "notesRu": "Минимальный тест стабильного чата: только наш логотип, создать, поделиться и текстовые сообщения. Надписи подключения нет. Сообщения появляются мгновенно и автоматически повторяются через три зашифрованных бесплатных relay-канала.",
-  "notesEn": "Minimal stable chat test: official mark, create, share and text messages only. No connection label. Messages appear immediately and retry automatically through three free encrypted relay channels."
+  "notesRu": "Чернограм 0.23.3 сохраняет утверждённый интерфейс версии 0.23 и плеер. Чат больше не блокируется состоянием сети: сообщения сохраняются мгновенно, подтверждаются ACK и автоматически повторяются из локальной очереди. Файлы передаются зашифрованными частями и сохраняются отдельно от JSON истории. Сохранены открытые комнаты, единый поиск файлов во всех подключённых комнатах, перенос Chernogram ID между устройствами, аудио- и видеозвонки.",
+  "notesEn": "Chernogram 0.23.3 keeps the approved 0.23 interface and music player. Chat is no longer blocked by network state: messages are saved instantly, acknowledged and automatically retried from a local queue. Files are transferred in encrypted chunks and stored outside JSON history. Public rooms, unified file search across joined rooms, cross-device Chernogram ID transfer, audio and video calls remain available."
 }
