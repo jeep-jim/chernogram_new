@@ -1,0 +1,184 @@
+name: Publish Chernogram 0.23.3 files-first Android v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-files-first-0233-v3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_BRANCH: feature/files-first-0233
+  VERSION_FULL: 0.23.3+58
+  VERSION_NAME: 0.23.3
+  VERSION_CODE: 58
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+concurrency:
+  group: publish-files-first-0233
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Materialize and verify source
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore"
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$VERSION_FULL"
+            python tooling/materialize_files_first_0233.py
+            python tooling/finalize_files_first_0233.py
+            python -m py_compile tooling/materialize_files_first_0233.py tooling/finalize_files_first_0233.py
+            flutter pub get
+            dart format lib/main.dart lib/android_data_first.dart lib/app_monitor.dart lib/chat_screen.dart lib/internet_core.dart lib/chat_media.dart lib/call_service.dart lib/group_call_service.dart lib/account_access.dart lib/core_models.dart lib/brand.dart
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+            flutter build apk --release
+          ) 2>&1 | tee files-first-0233-v3.log
+
+      - name: Sign, inspect and hash APK
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+            "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out chernogram.apk build/app/outputs/flutter-apk/app-release.apk
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature-0233.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature-0233.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$APK_CERT" = "$EXPECTED"
+            "$AAPT" dump badging chernogram.apk | tee apk-badging-0233.txt
+            grep -q "versionCode='$VERSION_CODE'" apk-badging-0233.txt
+            grep -q "versionName='$VERSION_NAME'" apk-badging-0233.txt
+            sha256sum chernogram.apk | tee apk-sha256-0233.txt
+          ) 2>&1 | tee -a files-first-0233-v3.log
+
+      - name: Create manifest and publish latest-apk
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK_SHA=$(awk '{print $1}' apk-sha256-0233.txt)
+          cat > update.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Чернограм 0.23.3 сохраняет утверждённый дизайн 0.23 и плеер. Чат работает локально-мгновенно, сообщения подтверждаются и повторяются из очереди. Файлы передаются зашифрованными частями и хранятся отдельно от JSON. Сохранены открытые комнаты, общий поиск файлов, перенос ID между устройствами, аудио- и видеозвонки.",
+            "notesEn": "Chernogram 0.23.3 keeps the approved 0.23 design and player. Chat is instant and local-first, with acknowledgements and durable retries. Files use encrypted chunks and are stored outside JSON. Public rooms, shared file search, device ID transfer, audio and video calls remain available."
+          }
+          EOF
+          gh release delete latest-apk --cleanup-tag --yes || true
+          gh release create latest-apk chernogram.apk update.json apk-sha256-0233.txt --target "$SOURCE_BRANCH" --title "Чернограм 0.23.3 — быстрый чат и файлы" --notes "Штатное обновление внутри приложения. Дизайн 0.23 и плеер сохранены." --prerelease
+
+      - name: Switch in-app update channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp update.json /tmp/update-0233.json
+          APK_SHA=$(awk '{print $1}' apk-sha256-0233.txt)
+          APK_BYTES=$(stat -c '%s' chernogram.apk)
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/update-0233.json update.json
+          cat > FILES_FIRST_0233_STATUS.md <<EOF
+          Chernogram files-first published
+          Version: ${VERSION_FULL}
+          Design: approved 0.23 / 0.22
+          Chat: local-first, encrypted, ACK and durable retry
+          Files: encrypted chunks and file-system storage
+          Search: files from all joined rooms, including public rooms
+          Device access: encrypted Chernogram ID transfer retained
+          Player: retained
+          Calls and video: retained
+          Android APK bytes: ${APK_BYTES}
+          Android APK SHA-256: ${APK_SHA}
+          Certificate: ${CERT_SHA256}
+          Channel: latest-apk
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json FILES_FIRST_0233_STATUS.md
+          git commit -m "Опубликовать Чернограм 0.23.3 для обновления из приложения [skip ci]"
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-files-first-0.23.3-v3
+          path: |
+            chernogram.apk
+            update.json
+            files-first-0233-v3.log
+            apk-signature-0233.txt
+            apk-badging-0233.txt
+            apk-sha256-0233.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save failure log without committing APK
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp files-first-0233-v3.log /tmp/files-first-0233-v3.log 2>/dev/null || true
+          git fetch origin "$SOURCE_BRANCH"
+          git reset --hard "origin/$SOURCE_BRANCH"
+          {
+            echo '# Chernogram 0.23.3 files-first v3 failed'
+            echo
+            echo "Workflow commit: ${GITHUB_SHA}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo '```text'
+            tail -n 1800 /tmp/files-first-0233-v3.log 2>/dev/null || true
+            echo '```'
+          } > FILES_FIRST_0233_CI_ERROR.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add FILES_FIRST_0233_CI_ERROR.md
+          git commit -m "Сохранить ошибку Чернограма 0.23.3 v3 [skip ci]" || true
+          git push origin HEAD:"SOURCE_BRANCH"
