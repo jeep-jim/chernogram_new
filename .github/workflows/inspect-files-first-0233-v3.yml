@@ -1,0 +1,59 @@
+name: Inspect Chernogram 0.23.3 publication
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-files-first-0233-v3.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wait for publication workflow and save exact result
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          WORKFLOW=publish-files-first-0233-v3.yml
+          for attempt in $(seq 1 20); do
+            RUN_JSON=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?per_page=1")
+            RUN_ID=$(printf '%s' "$RUN_JSON" | jq -r '.workflow_runs[0].id // empty')
+            STATUS=$(printf '%s' "$RUN_JSON" | jq -r '.workflow_runs[0].status // "missing"')
+            CONCLUSION=$(printf '%s' "$RUN_JSON" | jq -r '.workflow_runs[0].conclusion // ""')
+            HEAD_SHA=$(printf '%s' "$RUN_JSON" | jq -r '.workflow_runs[0].head_sha // ""')
+            if [ "$STATUS" = completed ] || [ "$STATUS" = missing ]; then
+              break
+            fi
+            sleep 30
+          done
+          {
+            echo '# Chernogram 0.23.3 publication inspection'
+            echo
+            echo "Run ID: ${RUN_ID:-missing}"
+            echo "Status: ${STATUS:-missing}"
+            echo "Conclusion: ${CONCLUSION:-}"
+            echo "Workflow commit: ${HEAD_SHA:-}"
+            echo "Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } > FILES_FIRST_0233_RUN_STATUS.md
+          if [ -n "${RUN_ID:-}" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+              | jq -r '.jobs[] | "Job: \(.name) | status=\(.status) | conclusion=\(.conclusion) | id=\(.id)"' \
+              >> FILES_FIRST_0233_RUN_STATUS.md
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add FILES_FIRST_0233_RUN_STATUS.md
+          git commit -m "Сохранить итог публикации Чернограма 0.23.3 [skip ci]" || true
+          git push origin HEAD:main
