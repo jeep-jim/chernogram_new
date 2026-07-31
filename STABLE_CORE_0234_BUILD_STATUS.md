@@ -6,4 +6,4 @@ Android signed APK: skipped
 Windows package: skipped
 Production gateway endpoint: missing
 Public latest-apk: unchanged
-Time: 2026-07-31T09:07:59Z
+Time: 2026-07-31T10:30:44Z
