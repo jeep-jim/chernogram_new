@@ -65,10 +65,42 @@ def _restore_serverless_realtime_core() -> None:
     for path in (
         "lib/internet_core.dart",
         "lib/call_service.dart",
+        "lib/call_avatar.dart",
+        "lib/group_call_service.dart",
         "lib/app_monitor.dart",
     ):
         target = ROOT / path
         target.write_text(_git_show(path), encoding="utf-8")
+
+    # Current data-first screens call this compatibility API directly. Add it
+    # to the restored monitor without changing the proven relay/call logic.
+    monitor_path = ROOT / "lib/app_monitor.dart"
+    monitor = monitor_path.read_text(encoding="utf-8")
+    publish_message = '''  static Future<void> publishMessage({
+    required CgProfile profile,
+    required CgTunnel tunnel,
+    required CgMessage message,
+  }) async {
+    _profile ??= profile;
+    _tunnels[tunnel.id] = tunnel;
+    await _ensureTunnel(tunnel);
+    final session = _sessions[tunnel.id];
+    if (session == null) {
+      throw StateError('Room transport is unavailable');
+    }
+    session.replaceHistory(
+      tunnel.messages.map((item) => item.toJson()).toList(),
+    );
+    await session.sendMessage(message.toJson());
+  }
+
+'''
+    stop_marker = "  static Future<void> stop() async {\n"
+    if "static Future<void> publishMessage" not in monitor:
+        if stop_marker not in monitor:
+            raise RuntimeError("app monitor stop marker not found")
+        monitor = monitor.replace(stop_marker, publish_message + stop_marker, 1)
+    monitor_path.write_text(monitor, encoding="utf-8")
 
     # The stable materializer adds a private gateway background service. Keep
     # the current UI/lifecycle code, but do not start that service at launch.
