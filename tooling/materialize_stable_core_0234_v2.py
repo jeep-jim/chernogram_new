@@ -9,6 +9,7 @@ TEMP = ROOT / "tooling/.materialize_stable_core_0234_runtime.py"
 
 
 def main() -> None:
+    # v2 keeps the original materializer intact while correcting two anchors.
     source = SOURCE.read_text(encoding="utf-8")
 
     old_imports = '''        source = replace_once(
