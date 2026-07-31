@@ -40,8 +40,8 @@ def main() -> None:
     )
 '''
     async_fix = async_marker + '''    source = source.replace(
-        "    required bool playSound,\\n  ) {",
-        "    required bool playSound,\\n  ) async {",
+        "    required bool playSound,\\n  }) {",
+        "    required bool playSound,\\n  }) async {",
         1,
     )
 '''
