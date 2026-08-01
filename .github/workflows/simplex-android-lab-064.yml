@@ -13,13 +13,25 @@ on:
       - lib/simplex_lab.dart
       - pubspec.yaml
       - .github/workflows/simplex-android-lab-064.yml
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - android/app/build.gradle.kts
+      - android/app/src/main/AndroidManifest.xml
+      - android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
+      - android/app/src/main/kotlin/chat/simplex/common/platform/Core.kt
+      - lib/device_product_panels.dart
+      - lib/simplex_lab.dart
+      - pubspec.yaml
+      - .github/workflows/simplex-android-lab-064.yml
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: chernogram-simplex-android-lab-064
+  group: chernogram-simplex-android-lab-064-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
