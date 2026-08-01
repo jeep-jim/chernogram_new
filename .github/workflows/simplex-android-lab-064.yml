@@ -1,0 +1,258 @@
+name: Чернограм Лаб 0.64.0+64 — Android SimpleX core
+
+on:
+  push:
+    branches:
+      - experiment/simplex-core-064
+    paths:
+      - android/app/build.gradle.kts
+      - android/app/src/main/AndroidManifest.xml
+      - android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
+      - android/app/src/main/kotlin/chat/simplex/common/platform/Core.kt
+      - lib/device_product_panels.dart
+      - lib/simplex_lab.dart
+      - pubspec.yaml
+      - .github/workflows/simplex-android-lab-064.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chernogram-simplex-android-lab-064
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+  LAB_VERSION_NAME: 0.64.0
+  LAB_VERSION_CODE: 64
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+
+jobs:
+  build_lab_apk:
+    name: Собрать отдельный APK и проверить JNI SimpleX
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Получить экспериментальную ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/simplex-core-064
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Скачать проверенную официальную Android-сборку SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 3 \
+            -o simplex-aarch64.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex-aarch64.apk | sha256sum --check
+          unzip -l simplex-aarch64.apk | tee simplex-apk-files.txt
+
+      - name: Извлечь только нативное ядро и его зависимости
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import shutil
+          import subprocess
+          import zipfile
+
+          apk = Path('simplex-aarch64.apk')
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          output.mkdir(parents=True, exist_ok=True)
+          temp = Path('.simplex-libs')
+          if temp.exists():
+              shutil.rmtree(temp)
+          temp.mkdir()
+
+          system = {
+              'libandroid.so', 'libc.so', 'libdl.so', 'libEGL.so',
+              'libGLESv2.so', 'libjnigraphics.so', 'liblog.so',
+              'libm.so', 'libOpenSLES.so', 'libvulkan.so', 'libz.so',
+          }
+
+          with zipfile.ZipFile(apk) as archive:
+              entries = {
+                  Path(name).name: name
+                  for name in archive.namelist()
+                  if name.startswith('lib/arm64-v8a/') and name.endswith('.so')
+              }
+              required = ['libapp-lib.so', 'libsimplex.so', 'libsupport.so']
+              queue = list(required)
+              copied = set()
+
+              while queue:
+                  library = queue.pop(0)
+                  if library in copied or library in system:
+                      continue
+                  member = entries.get(library)
+                  if member is None:
+                      raise RuntimeError(f'В APK отсутствует зависимость {library}')
+                  extracted = Path(archive.extract(member, temp))
+                  destination = output / library
+                  shutil.copy2(extracted, destination)
+                  copied.add(library)
+
+                  dynamic = subprocess.check_output(
+                      ['readelf', '-d', str(destination)],
+                      text=True,
+                      errors='replace',
+                  )
+                  for dependency in re.findall(
+                      r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic
+                  ):
+                      if dependency not in copied and dependency not in system:
+                          queue.append(dependency)
+
+          missing = [name for name in required if not (output / name).is_file()]
+          if missing:
+              raise RuntimeError(f'Не извлечены обязательные библиотеки: {missing}')
+
+          print('Упаковываются библиотеки:')
+          for path in sorted(output.glob('*.so')):
+              print(f'  {path.name}: {path.stat().st_size} bytes')
+          PY
+
+          readelf -Ws android/app/src/main/jniLibs/arm64-v8a/libapp-lib.so \
+            | tee simplex-jni-symbols.txt
+          grep -q 'Java_chat_simplex_common_platform_CoreKt_initHS' simplex-jni-symbols.txt
+          grep -q 'Java_chat_simplex_common_platform_CoreKt_chatMigrateInit' simplex-jni-symbols.txt
+          grep -q 'Java_chat_simplex_common_platform_CoreKt_chatSendCmdRetry' simplex-jni-symbols.txt
+          grep -q 'Java_chat_simplex_common_platform_CoreKt_chatRecvMsgWait' simplex-jni-symbols.txt
+
+      - name: Добавить вход в лабораторию в профиль тестовой сборки
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/android_data_first.dart')
+          text = path.read_text(encoding='utf-8')
+
+          import_anchor = "import 'core_models.dart';\n"
+          if "import 'device_product_panels.dart';" not in text:
+              if import_anchor not in text:
+                  raise RuntimeError('Не найден импорт core_models.dart')
+              text = text.replace(
+                  import_anchor,
+                  import_anchor + "import 'device_product_panels.dart';\n",
+                  1,
+              )
+
+          if "title: ru ? 'Лаборатория связи'" not in text:
+              update_anchor = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.system_update_alt_rounded,\n"
+                  "        title: ru ? 'Проверить обновления' : 'Check updates',\n"
+              )
+              if update_anchor not in text:
+                  raise RuntimeError('Не найден пункт проверки обновлений')
+              lab_action = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.science_outlined,\n"
+                  "        title: ru ? 'Лаборатория связи' : 'Connection laboratory',\n"
+                  "        subtitle: ru\n"
+                  "            ? 'Проверка официального ядра SimpleX внутри Чернограма.'\n"
+                  "            : 'Official SimpleX core probe inside Chernogram.',\n"
+                  "        onTap: () => showChernogramProductInfo(context, ru: ru),\n"
+                  "      ),\n"
+                  "      const SizedBox(height: 8),\n"
+              )
+              text = text.replace(update_anchor, lab_action + update_anchor, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          dart format \
+            lib/android_data_first.dart \
+            lib/device_product_panels.dart \
+            lib/simplex_lab.dart
+
+          grep -q "import 'device_product_panels.dart';" lib/android_data_first.dart
+          grep -q "Лаборатория связи" lib/android_data_first.dart
+          grep -q "chernogram/simplex_lab" lib/simplex_lab.dart
+
+      - name: Получить зависимости, выполнить анализ и тесты
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Собрать отдельный Android Lab APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk \
+            --release \
+            --target-platform android-arm64
+
+          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$SOURCE_APK"
+          cp "$SOURCE_APK" chernogram-lab-0.64.0-build64.apk
+
+      - name: Проверить APK, пакет, версию и нативное ядро
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=chernogram-lab-0.64.0-build64.apk
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+
+          "$AAPT" dump badging "$APK" | tee lab-apk-badging.txt
+          grep -q "package: name='com.example.chernogram.lab'" lab-apk-badging.txt
+          grep -q "versionCode='64'" lab-apk-badging.txt
+          grep -q "versionName='0.64.0'" lab-apk-badging.txt
+          grep -q "application-label:'Чернограм Лаб'" lab-apk-badging.txt
+
+          "$APKSIGNER" verify --print-certs "$APK" | tee lab-apk-signature.txt
+          unzip -l "$APK" | tee lab-apk-files.txt
+          grep -q 'lib/arm64-v8a/libapp-lib.so' lab-apk-files.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' lab-apk-files.txt
+          grep -q 'lib/arm64-v8a/libsupport.so' lab-apk-files.txt
+
+          sha256sum "$APK" | tee lab-apk-sha256.txt
+          cat > lab-build-info.txt <<EOF
+          product=Чернограм Лаб
+          package=com.example.chernogram.lab
+          version=0.64.0+64
+          simplex=${SIMPLEX_VERSION}
+          source_commit=${GITHUB_SHA}
+          EOF
+
+      - name: Сохранить проверенный APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-lab-0.64.0-build64
+          path: |
+            chernogram-lab-0.64.0-build64.apk
+            lab-apk-sha256.txt
+            lab-apk-signature.txt
+            lab-apk-badging.txt
+            lab-build-info.txt
+            simplex-jni-symbols.txt
+            simplex-apk-files.txt
+          if-no-files-found: error
+          retention-days: 14
