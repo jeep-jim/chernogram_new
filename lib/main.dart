@@ -23,13 +23,14 @@ class ChernogramApp extends StatefulWidget {
 }
 
 class _ChernogramAppState extends State<ChernogramApp> {
-  bool? _ru;
+  bool _ru = true;
   bool _darkMode = true;
   bool _updateScheduled = false;
 
   @override
   void initState() {
     super.initState();
+    _applySystemUi(_darkMode);
     unawaited(_loadSettings());
   }
 
@@ -51,35 +52,59 @@ class _ChernogramAppState extends State<ChernogramApp> {
     SystemChrome.setSystemUIOverlayStyle(_overlay(dark));
   }
 
+  Future<SharedPreferences?> _preferences() async {
+    try {
+      return await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 2),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final dark = prefs.getBool('dark_mode') ?? true;
+    final prefs = await _preferences();
+    final dark = prefs?.getBool('dark_mode') ?? true;
+    final ru = prefs?.getString('lang') != 'en';
     _applySystemUi(dark);
     if (!mounted) return;
     setState(() {
-      _ru = prefs.getString('lang') != 'en';
+      _ru = ru;
       _darkMode = dark;
     });
     _scheduleUpdateCheck();
   }
 
   Future<void> _toggleLanguage() async {
-    final next = !(_ru ?? true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lang', next ? 'ru' : 'en');
+    final next = !_ru;
     if (mounted) setState(() => _ru = next);
+    final prefs = await _preferences();
+    try {
+      await prefs?.setString('lang', next ? 'ru' : 'en').timeout(
+        const Duration(seconds: 2),
+      );
+    } catch (_) {
+      // Интерфейс уже переключён. Ошибка локального хранилища не должна
+      // блокировать работу приложения.
+    }
   }
 
   Future<void> _toggleTheme() async {
     final next = !_darkMode;
     _applySystemUi(next);
     if (mounted) setState(() => _darkMode = next);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode', next);
+    final prefs = await _preferences();
+    try {
+      await prefs?.setBool('dark_mode', next).timeout(
+        const Duration(seconds: 2),
+      );
+    } catch (_) {
+      // Тема применяется сразу, даже если Windows временно не сохранил её.
+    }
   }
 
   void _scheduleUpdateCheck() {
-    if (_updateScheduled || _ru == null) return;
+    if (_updateScheduled) return;
     _updateScheduled = true;
     Future<void>.delayed(const Duration(seconds: 3), () {
       if (!mounted) return;
@@ -90,14 +115,13 @@ class _ChernogramAppState extends State<ChernogramApp> {
         return;
       }
       unawaited(
-        ChernogramUpdater.checkAndPrompt(context, ru: _ru!, manual: false),
+        ChernogramUpdater.checkAndPrompt(context, ru: _ru, manual: false),
       );
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final ready = _ru != null;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: _overlay(_darkMode),
       child: MaterialApp(
@@ -108,33 +132,26 @@ class _ChernogramAppState extends State<ChernogramApp> {
         darkTheme: chernogramTheme(),
         themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
         themeAnimationDuration: Duration.zero,
-        home: !ready
-            ? Scaffold(
-                backgroundColor: _darkMode
-                    ? ChernogramColors.background
-                    : const Color(0xFFF2F5FC),
-                body: const Center(child: ChernogramLogo(size: 148)),
-              )
-            : Builder(
-                builder: (context) => CgAccessGate(
-                  ru: _ru!,
-                  child: ChernogramDataFirst(
-                    ru: _ru!,
-                    darkMode: _darkMode,
-                    onToggleTheme: _toggleTheme,
-                    onChangeLanguage: _toggleLanguage,
-                    onCheckUpdates: () {
-                      unawaited(
-                        ChernogramUpdater.checkAndPrompt(
-                          context,
-                          ru: _ru!,
-                          manual: true,
-                        ),
-                      );
-                    },
+        home: Builder(
+          builder: (context) => CgAccessGate(
+            ru: _ru,
+            child: ChernogramDataFirst(
+              ru: _ru,
+              darkMode: _darkMode,
+              onToggleTheme: _toggleTheme,
+              onChangeLanguage: _toggleLanguage,
+              onCheckUpdates: () {
+                unawaited(
+                  ChernogramUpdater.checkAndPrompt(
+                    context,
+                    ru: _ru,
+                    manual: true,
                   ),
-                ),
-              ),
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
