@@ -1,0 +1,73 @@
+name: Диагностика публикации Чернограм Лаб build 65
+
+on:
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - .github/workflows/inspect-lab65-failure.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  inspect_failed_publication:
+    name: Найти и показать точную ошибку публикации Lab 65
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Получить последний run публикации
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow simplex-android-lab-065-publish.yml \
+            --branch experiment/simplex-core-064 \
+            --limit 5 \
+            --json databaseId,status,conclusion,name,url,headSha,createdAt \
+            | tee lab65-runs.json
+
+          RUN_ID=$(python3 - <<'PY'
+          import json
+          runs = json.load(open('lab65-runs.json', encoding='utf-8'))
+          if not runs:
+              raise SystemExit('Не найден ни один run публикации Lab 65')
+          print(runs[0]['databaseId'])
+          PY
+          )
+          echo "LAB65_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          echo "Найден run: $RUN_ID"
+
+      - name: Показать задания и упавший лог
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          gh run view "$LAB65_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,url,jobs \
+            | tee lab65-run.json
+          gh run view "$LAB65_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --log-failed \
+            | tee lab65-failed.log
+          test -s lab65-failed.log
+
+      - name: Сохранить диагностический лог
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-lab65-failure-diagnostics
+          path: |
+            lab65-runs.json
+            lab65-run.json
+            lab65-failed.log
+          if-no-files-found: warn
+          retention-days: 7
