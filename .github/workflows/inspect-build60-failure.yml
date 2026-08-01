@@ -1,0 +1,96 @@
+name: Диагностика падения публикации build 60
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-build60-failure.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Получить точный упавший run и лог
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: a3a450126e4d3ed0479b921a17d8c4d9fba837a4
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          gh api "/repos/${REPO}/actions/runs?head_sha=${TARGET_SHA}&per_page=20" > runs.json
+          RUN_ID=$(python - <<'PY'
+          import json
+          data=json.load(open('runs.json', encoding='utf-8'))
+          runs=data.get('workflow_runs', [])
+          failed=[r for r in runs if r.get('conclusion')=='failure']
+          pool=failed or runs
+          print(pool[0]['id'] if pool else '')
+          PY
+          )
+          if [ -z "$RUN_ID" ]; then
+            cat > BUILD60_FAILURE_DIAGNOSTIC.md <<EOF
+          # Build 60 diagnostic
+
+          No workflow run found for ${TARGET_SHA}.
+          EOF
+          else
+            gh api "/repos/${REPO}/actions/runs/${RUN_ID}" > run.json
+            gh api "/repos/${REPO}/actions/runs/${RUN_ID}/jobs?filter=latest&per_page=100" > jobs.json
+            FAILED_JOB_ID=$(python - <<'PY'
+          import json
+          data=json.load(open('jobs.json', encoding='utf-8'))
+          jobs=data.get('jobs', [])
+          failed=[j for j in jobs if j.get('conclusion')=='failure']
+          pool=failed or jobs
+          print(pool[0]['id'] if pool else '')
+          PY
+            )
+            : > failed-job.log
+            if [ -n "$FAILED_JOB_ID" ]; then
+              gh api "/repos/${REPO}/actions/jobs/${FAILED_JOB_ID}/logs" > failed-job.log || true
+            fi
+            python - <<'PY'
+          import json
+          run=json.load(open('run.json', encoding='utf-8'))
+          jobs=json.load(open('jobs.json', encoding='utf-8')).get('jobs', [])
+          failed=[j for j in jobs if j.get('conclusion')=='failure']
+          log=open('failed-job.log', encoding='utf-8', errors='replace').read()
+          tail='\n'.join(log.splitlines()[-500:])
+          with open('BUILD60_FAILURE_DIAGNOSTIC.md','w',encoding='utf-8') as f:
+              f.write('# Build 60 failure diagnostic\n\n')
+              f.write(f"Run id: {run.get('id')}\n\n")
+              f.write(f"Status: {run.get('status')}\n\n")
+              f.write(f"Conclusion: {run.get('conclusion')}\n\n")
+              f.write(f"URL: {run.get('html_url')}\n\n")
+              f.write('## Failed jobs\n\n')
+              for j in failed:
+                  f.write(f"- {j.get('name')} — {j.get('conclusion')} — job id {j.get('id')}\n")
+                  for s in j.get('steps', []):
+                      if s.get('conclusion')=='failure':
+                          f.write(f"  - failed step: {s.get('name')}\n")
+              f.write('\n## Failed log tail\n\n```text\n')
+              f.write(tail)
+              f.write('\n```\n')
+          PY
+          fi
+
+      - name: Сохранить диагностику
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add BUILD60_FAILURE_DIAGNOSTIC.md
+          git commit -m "Сохранить точную причину падения build 60 [skip ci]" || true
+          git push origin HEAD:main
