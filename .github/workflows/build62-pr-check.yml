@@ -2,7 +2,7 @@ name: Чернограм build 62 — точная PR-проверка
 
 on:
   pull_request:
-    branches: [main]
+    branches: [fix/current-ui-working-core-061]
     paths:
       - lib/**
       - android/**
