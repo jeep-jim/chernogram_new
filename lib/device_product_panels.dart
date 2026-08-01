@@ -70,11 +70,11 @@ class _CgDeviceStorageCardState extends State<CgDeviceStorageCard> {
   Widget build(BuildContext context) {
     final total = _totalBytes;
     final free = _freeBytes;
-    final used = total != null && free != null
-        ? (total - free).clamp(0, total)
+    final int? used = total != null && free != null
+        ? (total - free).clamp(0, total).toInt()
         : null;
-    final ratio = total != null && total > 0 && used != null
-        ? (used / total).clamp(0.0, 1.0)
+    final double ratio = total != null && total > 0 && used != null
+        ? (used / total).clamp(0.0, 1.0).toDouble()
         : 0.0;
     final scheme = Theme.of(context).colorScheme;
 
