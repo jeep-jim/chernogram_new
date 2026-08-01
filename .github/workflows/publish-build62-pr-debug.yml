@@ -1,0 +1,132 @@
+name: Чернограм build 62 — проверяемая публикация
+
+on:
+  pull_request:
+    branches: [fix/current-ui-working-core-061]
+    paths:
+      - .github/workflows/publish-build62-pr-debug.yml
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  SOURCE_RUN_ID: 30687669478
+  SOURCE_ARTIFACT: build62-signed-icon-check
+  RELEASE_TAG: chernogram-0.24.2-build62
+  VERSION_NAME: 0.24.2
+  VERSION_CODE: 62
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+concurrency:
+  group: chernogram-publish-verified-build62
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Скачать зелёный APK, создать Release и включить update.json
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Скачать проверенный артефакт
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf verified-build62
+          mkdir -p verified-build62
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" \
+            --dir verified-build62
+          find verified-build62 -maxdepth 2 -type f -printf '%p %s bytes\n'
+          test -s verified-build62/chernogram.apk
+          test -s verified-build62/apk-signature.txt
+          test -s verified-build62/apk-badging.txt
+          test -s verified-build62/apk-sha256.txt
+
+      - name: Проверить APK перед публикацией
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "versionCode='$VERSION_CODE'" verified-build62/apk-badging.txt
+          grep -q "versionName='$VERSION_NAME'" verified-build62/apk-badging.txt
+          EXPECTED_APK_SHA=$(awk '{print $1}' verified-build62/apk-sha256.txt)
+          ACTUAL_APK_SHA=$(sha256sum verified-build62/chernogram.apk | awk '{print $1}')
+          test "$ACTUAL_APK_SHA" = "$EXPECTED_APK_SHA"
+          APK_CERT=$(sed -n \
+            -e 's/^Signer #1 certificate SHA-256 digest: //p' \
+            -e 's/^V2 Signer: certificate SHA-256 digest: //p' \
+            -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' \
+            verified-build62/apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED_CERT=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          echo "APK SHA256: $ACTUAL_APK_SHA"
+          echo "APK certificate: $APK_CERT"
+          test -n "$APK_CERT"
+          test "$APK_CERT" = "$EXPECTED_CERT"
+          printf '%s\n' "$ACTUAL_APK_SHA" > verified-build62/apk-sha.txt
+
+      - name: Создать Release build 62
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create "$RELEASE_TAG" \
+            verified-build62/chernogram.apk \
+            verified-build62/apk-signature.txt \
+            verified-build62/apk-badging.txt \
+            verified-build62/apk-sha256.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 9d160aa31cce1f36ac7de2445678277b40f724e1 \
+            --title "Чернограм 0.24.2+62 — память, версия, QR и единый логотип" \
+            --notes "Проверено зелёным run 30687669478: анализ, тесты, Android release, точная launcher-иконка и прежняя подпись." \
+            --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+
+      - name: Переключить автообновление на build 62
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA=$(cat verified-build62/apk-sha.txt)
+          git fetch origin main
+          git reset --hard origin/main
+          cat > update.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/${RELEASE_TAG}/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "В разделе Файлы показаны занятое, свободное и общее место. В профиле добавлены версия, номер сборки, ссылка и QR-код. Иконка рабочего стола повторяет полосатый логотип приложения.",
+            "notesEn": "Files shows used, free and total storage. Profile includes version, build, link and QR code. The launcher icon matches the striped in-app logo."
+          }
+          EOF
+          python -m json.tool update.json >/dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json
+          git commit -m "Включить обновление Чернограма 0.24.2+62 [skip ci]"
+          git push origin HEAD:main
+
+      - name: Финальная проверка
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh api "/repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" \
+            --jq '.content' | tr -d '\n' | base64 --decode > published-update.json
+          python -m json.tool published-update.json >/dev/null
+          grep -q '"versionCode": 62' published-update.json
+          grep -q "$RELEASE_TAG/chernogram.apk" published-update.json
+          grep -q "$(cat verified-build62/apk-sha.txt)" published-update.json
