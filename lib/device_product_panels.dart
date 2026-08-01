@@ -220,7 +220,7 @@ Future<void> showChernogramProductInfo(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: const QrImageView(
+              child: QrImageView(
                 data: chernogramProductUrl,
                 size: 202,
                 backgroundColor: Colors.white,
