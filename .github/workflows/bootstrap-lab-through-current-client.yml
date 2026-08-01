@@ -1,0 +1,146 @@
+name: Установить Чернограм Лаб через текущий клиент
+
+on:
+  push:
+    branches:
+      - experiment/simplex-core-064
+    paths:
+      - .github/workflows/bootstrap-lab-through-current-client.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: chernogram-lab-bootstrap-current-client
+  cancel-in-progress: true
+
+env:
+  ARTIFACT_ID: 8816645827
+  RELEASE_TAG: chernogram-lab-bootstrap-0.64.0-build64
+  VERSION_NAME: 0.64.0
+  VERSION_CODE: 64
+  EXPECTED_PACKAGE: com.example.chernogram.lab
+  EXPECTED_CERT_SHA256: 56DB5B8F4D4C687D560DB9299DDB2234794A3556F1613AF2064F0294CC0B2488
+
+jobs:
+  publish_bootstrap:
+    name: Опубликовать Lab APK и включить установку в текущем клиенте
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Получить ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/simplex-core-064
+          fetch-depth: 0
+
+      - name: Скачать уже проверенный артефакт build 64
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > lab64-artifact.zip
+          unzip -q lab64-artifact.zip -d lab64-artifact
+          test -s lab64-artifact/chernogram-lab-0.64.0-build64.apk
+          cp lab64-artifact/chernogram-lab-0.64.0-build64.apk chernogram-lab.apk
+
+      - name: Проверить пакет, версию, подпись и SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -x "$AAPT"
+          test -x "$APKSIGNER"
+
+          "$AAPT" dump badging chernogram-lab.apk | tee lab-bootstrap-badging.txt
+          grep -q "package: name='${EXPECTED_PACKAGE}'" lab-bootstrap-badging.txt
+          grep -q "versionCode='${VERSION_CODE}'" lab-bootstrap-badging.txt
+          grep -q "versionName='${VERSION_NAME}'" lab-bootstrap-badging.txt
+          grep -q "application-label:'Чернограм Лаб'" lab-bootstrap-badging.txt
+
+          "$APKSIGNER" verify --print-certs chernogram-lab.apk | tee lab-bootstrap-signature.txt
+          ACTUAL_CERT=$(grep -m1 'SHA-256 digest:' lab-bootstrap-signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL_CERT" = "$EXPECTED_CERT_SHA256"
+
+          sha256sum chernogram-lab.apk | tee lab-bootstrap-sha256.txt
+
+      - name: Создать постоянный Release для установки
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram-lab.apk \
+            lab-bootstrap-sha256.txt \
+            lab-bootstrap-signature.txt \
+            lab-bootstrap-badging.txt \
+            --title "Чернограм Лаб ${VERSION_NAME} build ${VERSION_CODE}" \
+            --notes "Установка тестового клиента с новым ядром SimpleX через встроенное обновление обычного Чернограма. Приложение устанавливается рядом и не удаляет данные основной версии."
+
+      - name: Включить предложение установки в обычном Чернограме
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 lab-bootstrap-sha256.txt)
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/chernogram-lab.apk"
+
+          cat > update-bootstrap.json <<EOF
+          {
+            "versionName": "Чернограм Лаб ${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "${APK_URL}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${EXPECTED_CERT_SHA256}",
+            "notesRu": "Установится отдельный тестовый клиент «Чернограм Лаб» с новым ядром связи SimpleX. Он появится рядом с обычным Чернограмом и не удалит текущие чаты и настройки.",
+            "notesEn": "Installs the separate Chernogram Lab test client with the new SimpleX communication core. It appears next to the regular Chernogram and does not remove existing data."
+          }
+          EOF
+          python3 -m json.tool update-bootstrap.json
+
+          git fetch origin main
+          git worktree add ../chernogram-main origin/main
+          cp update-bootstrap.json ../chernogram-main/update.json
+          cd ../chernogram-main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json
+          git commit -m 'Предложить установку Чернограм Лаб через текущий клиент'
+          git push origin HEAD:main
+
+      - name: Финально проверить опубликованный APK и канал обновлений
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o published-update.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json?t=${GITHUB_RUN_ID}"
+          python3 -m json.tool published-update.json
+          test "$(python3 -c "import json; print(json.load(open('published-update.json'))['versionCode'])")" = "$VERSION_CODE"
+          URL=$(python3 -c "import json; print(json.load(open('published-update.json'))['apkUrl'])")
+          EXPECTED=$(python3 -c "import json; print(json.load(open('published-update.json'))['sha256'])")
+          curl --fail --location --retry 5 --retry-delay 3 -o downloaded-lab.apk "$URL"
+          ACTUAL=$(sha256sum downloaded-lab.apk | cut -d' ' -f1)
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Сохранить доказательства публикации
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-lab-bootstrap-through-current-client
+          path: |
+            published-update.json
+            lab-bootstrap-sha256.txt
+            lab-bootstrap-signature.txt
+            lab-bootstrap-badging.txt
+          if-no-files-found: error
+          retention-days: 14
