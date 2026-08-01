@@ -36,21 +36,35 @@ class CgAccountVault {
   );
   static final _cipher = AesGcm.with256bits();
 
+  static Future<SharedPreferences?> _preferences() async {
+    try {
+      return await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 2),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> hasPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (prefs.getString(_pinHashKey) ?? '').isNotEmpty;
+    final prefs = await _preferences();
+    return (prefs?.getString(_pinHashKey) ?? '').isNotEmpty;
   }
 
   static Future<bool> biometricEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_biometricKey) ?? false;
+    final prefs = await _preferences();
+    return prefs?.getBool(_biometricKey) ?? false;
   }
 
   static Future<bool> biometricsAvailable() async {
     try {
       final auth = LocalAuthentication();
-      final supported = await auth.isDeviceSupported();
-      final enrolled = await auth.getAvailableBiometrics();
+      final supported = await auth.isDeviceSupported().timeout(
+        const Duration(seconds: 5),
+      );
+      final enrolled = await auth.getAvailableBiometrics().timeout(
+        const Duration(seconds: 5),
+      );
       return supported && enrolled.isNotEmpty;
     } catch (_) {
       return false;
@@ -61,7 +75,10 @@ class CgAccountVault {
     if (pin.length < 4) {
       throw ArgumentError('PIN must contain at least four characters');
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _preferences();
+    if (prefs == null) {
+      throw StateError('Local settings storage is unavailable');
+    }
     final salt = _randomBytes(16);
     final hash = await _derive(pin, salt);
     await prefs.setString(_pinSaltKey, base64UrlEncode(salt));
@@ -69,7 +86,8 @@ class CgAccountVault {
   }
 
   static Future<bool> verifyPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _preferences();
+    if (prefs == null) return true;
     final saltRaw = prefs.getString(_pinSaltKey);
     final hashRaw = prefs.getString(_pinHashKey);
     if (saltRaw == null || hashRaw == null) return true;
@@ -87,19 +105,24 @@ class CgAccountVault {
     if (enabled && !await biometricsAvailable()) {
       throw StateError('Biometrics are not available');
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _preferences();
+    if (prefs == null) {
+      throw StateError('Local settings storage is unavailable');
+    }
     await prefs.setBool(_biometricKey, enabled);
   }
 
   static Future<bool> authenticateBiometric({required bool ru}) async {
     try {
-      return await LocalAuthentication().authenticate(
-        localizedReason: ru
-            ? 'Разблокируйте свой Chernogram ID'
-            : 'Unlock your Chernogram ID',
-        biometricOnly: false,
-        persistAcrossBackgrounding: true,
-      );
+      return await LocalAuthentication()
+          .authenticate(
+            localizedReason: ru
+                ? 'Разблокируйте свой Chernogram ID'
+                : 'Unlock your Chernogram ID',
+            biometricOnly: false,
+            persistAcrossBackgrounding: true,
+          )
+          .timeout(const Duration(seconds: 30));
     } on LocalAuthException {
       return false;
     } catch (_) {
@@ -108,7 +131,8 @@ class CgAccountVault {
   }
 
   static Future<void> clearLocalLock() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _preferences();
+    if (prefs == null) return;
     await prefs.remove(_pinSaltKey);
     await prefs.remove(_pinHashKey);
     await prefs.remove(_biometricKey);
@@ -232,14 +256,30 @@ class _CgAccessGateState extends State<CgAccessGate> {
   }
 
   Future<void> _bootstrap() async {
-    final hasPin = await CgAccountVault.hasPin();
-    final biometric = await CgAccountVault.biometricEnabled();
-    if (!hasPin && !biometric) {
-      if (mounted) setState(() => _unlocked = true);
-      return;
+    try {
+      final values = await Future.wait<bool>([
+        CgAccountVault.hasPin(),
+        CgAccountVault.biometricEnabled(),
+      ]).timeout(const Duration(seconds: 4));
+      final hasPin = values[0];
+      final biometric = values[1];
+      if (!mounted) return;
+      if (!hasPin && !biometric) {
+        setState(() {
+          _checking = false;
+          _unlocked = true;
+        });
+        return;
+      }
+      setState(() => _checking = false);
+      if (biometric) await _useBiometric();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _unlocked = true;
+      });
     }
-    if (mounted) setState(() => _checking = false);
-    if (biometric) await _useBiometric();
   }
 
   Future<void> _useBiometric() async {

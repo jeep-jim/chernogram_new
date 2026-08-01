@@ -1,0 +1,438 @@
+name: Чернограм Windows 0.24.3+63 — запуск и установка
+
+on:
+  pull_request:
+    branches: [fix/current-ui-working-core-061]
+    paths:
+      - lib/**
+      - pubspec.yaml
+      - .github/workflows/windows-0243-startup-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chernogram-windows-0243-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Интерфейс, реальный запуск, portable ZIP и Setup EXE
+    runs-on: windows-2022
+    timeout-minutes: 130
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Подготовить актуальный Windows build 63
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+
+          flutter config --enable-windows-desktop
+          if (-not (Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows .
+          }
+
+          @'
+          from pathlib import Path
+          import re
+
+          ui_path = Path('lib/android_data_first.dart')
+          text = ui_path.read_text(encoding='utf-8')
+
+          import_anchor = "import 'core_models.dart';\n"
+          if "import 'device_product_panels.dart';" not in text:
+              if import_anchor not in text:
+                  raise RuntimeError('Не найден импорт core_models.dart')
+              text = text.replace(
+                  import_anchor,
+                  import_anchor + "import 'device_product_panels.dart';\n",
+                  1,
+              )
+
+          files_start = text.index('class _FilesPageState extends State<_FilesPage> {')
+          files_end = text.index('class _MusicEntry', files_start)
+          files_block = text[files_start:files_end]
+          if 'CgDeviceStorageCard(ru: widget.ru)' not in files_block:
+              anchor = (
+                  "        Padding(\n"
+                  "          padding: const EdgeInsets.symmetric(horizontal: 14),\n"
+                  "          child: Row(\n"
+              )
+              if anchor not in files_block:
+                  raise RuntimeError('Не найдена строка фильтров раздела Файлы')
+              card = (
+                  "        Padding(\n"
+                  "          padding: const EdgeInsets.fromLTRB(14, 0, 14, 9),\n"
+                  "          child: CgDeviceStorageCard(ru: widget.ru),\n"
+                  "        ),\n"
+              )
+              files_block = files_block.replace(anchor, card + anchor, 1)
+              text = text[:files_start] + files_block + text[files_end:]
+
+          profile_start = text.index('class _ProfilePage extends StatelessWidget {')
+          profile_end = text.index('class _ProfileAction', profile_start)
+          profile_block = text[profile_start:profile_end]
+          if "title: ru ? 'Версия и поделиться'" not in profile_block:
+              anchor = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.system_update_alt_rounded,\n"
+                  "        title: ru ? 'Проверить обновления' : 'Check updates',\n"
+              )
+              if anchor not in profile_block:
+                  raise RuntimeError('Не найден пункт Проверить обновления')
+              action = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.qr_code_2_rounded,\n"
+                  "        title: ru ? 'Версия и поделиться' : 'Version and share',\n"
+                  "        subtitle: ru\n"
+                  "            ? 'Номер версии, ссылка установки и QR-код.'\n"
+                  "            : 'Product version, installation link, and QR code.',\n"
+                  "        onTap: () => showChernogramProductInfo(context, ru: ru),\n"
+                  "      ),\n"
+                  "      const SizedBox(height: 8),\n"
+              )
+              profile_block = profile_block.replace(anchor, action + anchor, 1)
+              text = text[:profile_start] + profile_block + text[profile_end:]
+
+          ui_path.write_text(text, encoding='utf-8')
+
+          pubspec = Path('pubspec.yaml')
+          pub = pubspec.read_text(encoding='utf-8')
+          pub, count = re.subn(
+              r'(?m)^version:\s*[^\n]+$',
+              'version: 0.24.3+63',
+              pub,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError('Не найдена версия в pubspec.yaml')
+          pubspec.write_text(pub, encoding='utf-8')
+
+          cmake_path = Path('windows/CMakeLists.txt')
+          cmake = cmake_path.read_text(encoding='utf-8')
+          define = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          if define not in cmake:
+              cmake, count = re.subn(
+                  r'(project\([^\n]+\)\s*\n)',
+                  r'\1' + define + '\n',
+                  cmake,
+                  count=1,
+              )
+              if count != 1:
+                  raise RuntimeError('Не найдена строка project() в Windows CMake')
+          cmake_path.write_text(cmake, encoding='utf-8')
+
+          cpp_path = Path('windows/runner/flutter_window.cpp')
+          cpp = cpp_path.read_text(encoding='utf-8')
+          include_anchor = '#include <optional>\n'
+          includes = '''#include <optional>
+          #include <cstdint>
+          #include <memory>
+          #include <string>
+          #include <windows.h>
+
+          #include <flutter/method_channel.h>
+          #include <flutter/standard_method_codec.h>
+          '''
+          if '#include <flutter/method_channel.h>' not in cpp:
+              if include_anchor not in cpp:
+                  raise RuntimeError('Не найден блок include в flutter_window.cpp')
+              cpp = cpp.replace(include_anchor, includes, 1)
+
+          register_anchor = '  RegisterPlugins(flutter_controller_->engine());\n'
+          channel_code = r'''
+
+            static std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+                storage_channel;
+            storage_channel = std::make_unique<
+                flutter::MethodChannel<flutter::EncodableValue>>(
+                flutter_controller_->engine()->messenger(),
+                "chernogram/storage",
+                &flutter::StandardMethodCodec::GetInstance());
+            storage_channel->SetMethodCallHandler(
+                [](const flutter::MethodCall<flutter::EncodableValue>& call,
+                   std::unique_ptr<
+                       flutter::MethodResult<flutter::EncodableValue>> result) {
+                  if (call.method_name() != "getStorageStats") {
+                    result->NotImplemented();
+                    return;
+                  }
+
+                  wchar_t module_path[MAX_PATH];
+                  const DWORD length =
+                      GetModuleFileNameW(nullptr, module_path, MAX_PATH);
+                  if (length == 0 || length >= MAX_PATH) {
+                    result->Error("storage_path", "Cannot resolve application path");
+                    return;
+                  }
+
+                  std::wstring directory(module_path, length);
+                  const auto slash = directory.find_last_of(L"\\/");
+                  if (slash != std::wstring::npos) {
+                    directory.resize(slash + 1);
+                  }
+
+                  ULARGE_INTEGER available_bytes{};
+                  ULARGE_INTEGER total_bytes{};
+                  ULARGE_INTEGER total_free_bytes{};
+                  if (!GetDiskFreeSpaceExW(directory.c_str(), &available_bytes,
+                                           &total_bytes, &total_free_bytes)) {
+                    result->Error("storage_query", "Cannot read disk statistics");
+                    return;
+                  }
+
+                  flutter::EncodableMap response;
+                  response[flutter::EncodableValue("freeBytes")] =
+                      flutter::EncodableValue(
+                          static_cast<int64_t>(available_bytes.QuadPart));
+                  response[flutter::EncodableValue("totalBytes")] =
+                      flutter::EncodableValue(
+                          static_cast<int64_t>(total_bytes.QuadPart));
+                  result->Success(flutter::EncodableValue(response));
+                });
+          '''
+          if '"chernogram/storage"' not in cpp:
+              if register_anchor not in cpp:
+                  raise RuntimeError('Не найден RegisterPlugins в flutter_window.cpp')
+              cpp = cpp.replace(register_anchor, register_anchor + channel_code, 1)
+          cpp_path.write_text(cpp, encoding='utf-8')
+          '@ | Set-Content -Path patch_windows_063.py -Encoding UTF8
+
+          python patch_windows_063.py
+          python -m pip install --disable-pip-version-check --quiet pillow
+
+          @'
+          from PIL import Image, ImageDraw
+          import math
+          from pathlib import Path
+
+          size = 256
+          image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+          base = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+          base_draw = ImageDraw.Draw(base)
+          base_draw.rounded_rectangle(
+              (16, 16, size - 16, size - 16),
+              radius=30,
+              fill=(7, 10, 18, 255),
+          )
+
+          mask = Image.new('L', (size, size), 0)
+          draw = ImageDraw.Draw(mask)
+          stripe_count = 15
+          width = max(3, round(size / (stripe_count * 3.15)))
+
+          def rounded_line(x, y1, y2):
+              draw.line((x, y1, x, y2), fill=255, width=width)
+              radius = width / 2
+              draw.ellipse((x-radius, y1-radius, x+radius, y1+radius), fill=255)
+              draw.ellipse((x-radius, y2-radius, x+radius, y2+radius), fill=255)
+
+          for index in range(stripe_count):
+              t = index / (stripe_count - 1)
+              nx = t * 2 - 1
+              x = size * (.14 + t * .72)
+              ellipse = math.sqrt(max(0.0, 1.0 - nx * nx))
+              top = size * .11 + (1.0 - ellipse) * size * .12
+              jaw = ellipse * size * .72 * .50 - abs(nx) * size * .035
+              bottom = size * .48 + jaw
+              eye_gap = .17 < abs(nx) < .72
+              if eye_gap:
+                  rounded_line(x, top, size * .37)
+                  rounded_line(x, size * .445, bottom)
+              else:
+                  rounded_line(x, top, bottom)
+
+          gradient = Image.new('RGBA', (size, size))
+          pixels = gradient.load()
+          stops = [
+              (0.0, (185, 168, 255)),
+              (0.52, (123, 92, 255)),
+              (1.0, (32, 199, 255)),
+          ]
+          for y in range(size):
+              p = y / max(1, size - 1)
+              for i in range(len(stops) - 1):
+                  p0, c0 = stops[i]
+                  p1, c1 = stops[i + 1]
+                  if p <= p1:
+                      local = (p - p0) / max(1e-9, p1 - p0)
+                      color = tuple(
+                          round(c0[j] + (c1[j] - c0[j]) * local)
+                          for j in range(3)
+                      )
+                      break
+              else:
+                  color = stops[-1][1]
+              for x in range(size):
+                  pixels[x, y] = (*color, 255)
+
+          image.alpha_composite(base)
+          image.paste(gradient, (0, 0), mask)
+          output = Path('windows/runner/resources/app_icon.ico')
+          output.parent.mkdir(parents=True, exist_ok=True)
+          image.save(
+              output,
+              format='ICO',
+              sizes=[
+                  (16,16), (24,24), (32,32), (48,48),
+                  (64,64), (128,128), (256,256),
+              ],
+          )
+          '@ | Set-Content -Path create_windows_icon_063.py -Encoding UTF8
+
+          python create_windows_icon_063.py
+          dart format lib/main.dart lib/account_access.dart lib/android_data_first.dart lib/device_product_panels.dart
+
+          if (-not (Select-String -Path 'lib/main.dart' -Pattern 'chernogram-startup-ready-63.txt' -Quiet)) { throw 'Startup marker is missing' }
+          if (-not (Select-String -Path 'lib/account_access.dart' -Pattern 'Duration\(seconds: 4\)' -Quiet)) { throw 'Access timeout is missing' }
+          if (-not (Select-String -Path 'lib/android_data_first.dart' -Pattern 'CgDeviceStorageCard\(ru: widget.ru\)' -Quiet)) { throw 'Storage card was not connected' }
+          if (-not (Select-String -Path 'lib/android_data_first.dart' -Pattern 'Версия и поделиться' -Quiet)) { throw 'Version/share action was not connected' }
+          if (-not (Select-String -Path 'windows/runner/flutter_window.cpp' -Pattern 'chernogram/storage' -Quiet)) { throw 'Windows storage channel was not connected' }
+          if (-not (Test-Path 'windows/runner/resources/app_icon.ico')) { throw 'Windows icon was not generated' }
+
+      - name: Анализ, тесты и Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+
+          flutter pub get 2>&1 | Tee-Object -FilePath windows-0243.log
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | Tee-Object -FilePath windows-0243.log -Append
+          flutter test 2>&1 | Tee-Object -FilePath windows-0243.log -Append
+          flutter build windows --release --verbose 2>&1 | Tee-Object -FilePath windows-0243.log -Append
+
+          $release = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path "$release/chernogram.exe")) {
+            throw 'chernogram.exe was not built'
+          }
+
+      - name: Проверить реальный запуск до основного интерфейса
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $marker = Join-Path $env:TEMP 'chernogram-startup-ready-63.txt'
+          Remove-Item $marker -Force -ErrorAction SilentlyContinue
+
+          $exe = (Resolve-Path 'build/windows/x64/runner/Release/chernogram.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--startup-smoke' -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(35)
+            while ((Get-Date) -lt $deadline) {
+              if ($process.HasExited) {
+                throw "Chernogram exited during startup with code $($process.ExitCode)"
+              }
+              if (Test-Path $marker) {
+                $ready = (Get-Content $marker -Raw).Trim()
+                if ($ready -eq 'ready') {
+                  Write-Host 'Main interface startup marker received.'
+                  break
+                }
+              }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not (Test-Path $marker)) {
+              throw 'Main interface did not become ready within 35 seconds'
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
+
+      - name: Создать portable ZIP и установщик EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'build/windows/x64/runner/Release'
+
+          Compress-Archive -Path "$release/*" -DestinationPath 'chernogram-windows-0.24.3-portable.zip' -Force
+          if (-not (Test-Path 'chernogram-windows-0.24.3-portable.zip')) {
+            throw 'Portable ZIP was not created'
+          }
+
+          choco install innosetup -y --no-progress
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            throw 'Inno Setup compiler was not found'
+          }
+
+          $source = (Resolve-Path $release).Path
+          @"
+          #define MyAppName "Chernogram"
+          #define MyAppVersion "0.24.3"
+          #define MyAppPublisher "Chernogram"
+          #define MyAppExeName "chernogram.exe"
+
+          [Setup]
+          AppId={{9C8DD7DD-214F-4B7D-8F35-7A4BB3F79063}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+          DefaultDirName={autopf}\Chernogram
+          DefaultGroupName=Chernogram
+          DisableProgramGroupPage=yes
+          OutputDir=.
+          OutputBaseFilename=Chernogram-Windows-0.24.3-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          SetupIconFile=windows\runner\resources\app_icon.ico
+
+          [Files]
+          Source: "$source\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{autoprograms}\Chernogram"; Filename: "{app}\{#MyAppExeName}"
+          Name: "{autodesktop}\Chernogram"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Создать значок на рабочем столе"; GroupDescription: "Дополнительные значки:"
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; Description: "Запустить Chernogram"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content -Path 'chernogram-windows-063.iss' -Encoding UTF8
+
+          & $iscc 'chernogram-windows-063.iss'
+          if (-not (Test-Path 'Chernogram-Windows-0.24.3-Setup.exe')) {
+            throw 'Setup EXE was not created'
+          }
+
+          Get-FileHash 'chernogram-windows-0.24.3-portable.zip' -Algorithm SHA256 |
+            ForEach-Object { "portableSha256=$($_.Hash.ToLowerInvariant())" } |
+            Set-Content 'windows-sha256-build63.txt'
+          Get-FileHash 'Chernogram-Windows-0.24.3-Setup.exe' -Algorithm SHA256 |
+            ForEach-Object { "installerSha256=$($_.Hash.ToLowerInvariant())" } |
+            Add-Content 'windows-sha256-build63.txt'
+
+      - name: Сохранить проверенную Windows-сборку
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-windows-0.24.3-build63-validated
+          path: |
+            chernogram-windows-0.24.3-portable.zip
+            Chernogram-Windows-0.24.3-Setup.exe
+            windows-sha256-build63.txt
+            windows-0243.log
+          if-no-files-found: warn
+          retention-days: 7
