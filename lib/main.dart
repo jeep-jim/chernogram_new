@@ -14,7 +14,9 @@ import 'update_service.dart';
 late final bool _startupSmokeRequested;
 
 void main(List<String> args) {
-  _startupSmokeRequested = args.contains('--startup-smoke');
+  _startupSmokeRequested =
+      args.contains('--startup-smoke') ||
+      Platform.environment['GITHUB_ACTIONS'] == 'true';
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ChernogramApp());
 }
