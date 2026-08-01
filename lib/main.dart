@@ -11,7 +11,10 @@ import 'app_navigation.dart';
 import 'brand.dart';
 import 'update_service.dart';
 
-void main() {
+late final bool _startupSmokeRequested;
+
+void main(List<String> args) {
+  _startupSmokeRequested = args.contains('--startup-smoke');
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ChernogramApp());
 }
@@ -174,8 +177,7 @@ class _StartupReadyState extends State<_StartupReady> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!Platform.isWindows ||
-          !Platform.executableArguments.contains('--startup-smoke')) {
+      if (!Platform.isWindows || !_startupSmokeRequested) {
         return;
       }
       final marker = File(
