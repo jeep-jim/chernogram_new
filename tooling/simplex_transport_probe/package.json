@@ -8,7 +8,7 @@
     "probe": "node probe.mjs"
   },
   "dependencies": {
-    "@simplex-chat/types": "0.10.3",
-    "simplex-chat": "7.0.0"
+    "@simplex-chat/types": "0.10.2",
+    "simplex-chat": "6.5.4"
   }
 }
