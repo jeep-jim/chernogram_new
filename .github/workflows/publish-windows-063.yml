@@ -1,0 +1,83 @@
+name: Publish Windows 0.24.3 build 63
+
+on:
+  push:
+    branches: [fix/windows-startup-063]
+    paths: [.github/workflows/publish-windows-063.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download validated build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir artifact
+          cd artifact
+          gh run download 30691481185 --repo jeep-jim/chernogram_new --name chernogram-windows-0.24.3-build63-validated
+          test -f chernogram-windows-0.24.3-portable.zip
+          test -f Chernogram-Windows-0.24.3-Setup.exe
+
+      - name: Calculate checksums
+        id: hashes
+        run: |
+          echo "portable=$(sha256sum artifact/chernogram-windows-0.24.3-portable.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "installer=$(sha256sum artifact/Chernogram-Windows-0.24.3-Setup.exe | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create chernogram-windows-0.24.3-build63 \
+            --repo jeep-jim/chernogram_new \
+            --target fix/windows-startup-063 \
+            --title "Чернограм Windows 0.24.3 build 63" \
+            --notes "Проверенная сборка Windows 0.24.3+63. Реальный запуск до основного интерфейса подтверждён GitHub Actions run 30691481185." \
+            artifact/chernogram-windows-0.24.3-portable.zip \
+            artifact/Chernogram-Windows-0.24.3-Setup.exe
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-repo
+
+      - name: Update windows-update.json
+        env:
+          PORTABLE_SHA: ${{ steps.hashes.outputs.portable }}
+          INSTALLER_SHA: ${{ steps.hashes.outputs.installer }}
+        working-directory: main-repo
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = {
+            "versionName": "0.24.3",
+            "versionFull": "0.24.3+63",
+            "versionCode": 63,
+            "architecture": "x64",
+            "minimumWindows": "10",
+            "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.3-build63/chernogram-windows-0.24.3-portable.zip",
+            "portableSha256": os.environ["PORTABLE_SHA"],
+            "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.3-build63/Chernogram-Windows-0.24.3-Setup.exe",
+            "installerSha256": os.environ["INSTALLER_SHA"],
+            "packageType": "portable-zip-and-installer-v7-build63"
+          }
+          Path("windows-update.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add windows-update.json
+          git commit -m "release: Windows 0.24.3 build 63"
+          git push origin main
+
+      - name: Verify publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view chernogram-windows-0.24.3-build63 --repo jeep-jim/chernogram_new --json assets
+          curl -fsSL https://raw.githubusercontent.com/jeep-jim/chernogram_new/main/windows-update.json
