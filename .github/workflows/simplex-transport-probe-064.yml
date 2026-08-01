@@ -8,13 +8,20 @@ on:
       - tooling/simplex_transport_probe/**
       - docs/TRANSPORT_REBOOT_064.md
       - .github/workflows/simplex-transport-probe-064.yml
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - tooling/simplex_transport_probe/**
+      - docs/TRANSPORT_REBOOT_064.md
+      - .github/workflows/simplex-transport-probe-064.yml
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: chernogram-simplex-transport-064
+  group: chernogram-simplex-transport-064-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,8 +42,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: tooling/simplex_transport_probe/package.json
 
       - name: Установить системные зависимости нативного binding
         shell: bash
