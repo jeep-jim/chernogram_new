@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -135,24 +136,56 @@ class _ChernogramAppState extends State<ChernogramApp> {
         home: Builder(
           builder: (context) => CgAccessGate(
             ru: _ru,
-            child: ChernogramDataFirst(
-              ru: _ru,
-              darkMode: _darkMode,
-              onToggleTheme: _toggleTheme,
-              onChangeLanguage: _toggleLanguage,
-              onCheckUpdates: () {
-                unawaited(
-                  ChernogramUpdater.checkAndPrompt(
-                    context,
-                    ru: _ru,
-                    manual: true,
-                  ),
-                );
-              },
+            child: _StartupReady(
+              child: ChernogramDataFirst(
+                ru: _ru,
+                darkMode: _darkMode,
+                onToggleTheme: _toggleTheme,
+                onChangeLanguage: _toggleLanguage,
+                onCheckUpdates: () {
+                  unawaited(
+                    ChernogramUpdater.checkAndPrompt(
+                      context,
+                      ru: _ru,
+                      manual: true,
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+class _StartupReady extends StatefulWidget {
+  final Widget child;
+
+  const _StartupReady({required this.child});
+
+  @override
+  State<_StartupReady> createState() => _StartupReadyState();
+}
+
+class _StartupReadyState extends State<_StartupReady> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!Platform.isWindows ||
+          !Platform.executableArguments.contains('--startup-smoke')) {
+        return;
+      }
+      final marker = File(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'chernogram-startup-ready-63.txt',
+      );
+      unawaited(marker.writeAsString('ready'));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
