@@ -1,4 +1,4 @@
-name: Чернограм 0.24.0+59 — собрать и опубликовать без сервера
+name: Чернограм 0.24.0+59 — повторная публикация без сервера
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
       - .github/workflows/build-stable-core-0234.yml
   workflow_dispatch:
 
-concurrency:
-  group: chernogram-direct-working-apk
-  cancel-in-progress: true
-
 permissions:
   contents: write
+
+concurrency:
+  group: chernogram-publish-0240-59
+  cancel-in-progress: true
 
 env:
   WORKING_REF: 6847a3d4e6ade48ca139c6560c036540865b8bf8
@@ -21,15 +21,14 @@ env:
   VERSION_NAME: 0.24.0
   VERSION_CODE: 59
   FLUTTER_VERSION: 3.44.8
-  EXPECTED_CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
 
 jobs:
-  android:
-    name: Собрать, подписать и включить автообновление
+  publish:
     runs-on: ubuntu-22.04
     timeout-minutes: 100
     steps:
-      - name: Получить точный проверенный исходник
+      - name: Получить проверенный исходник
         uses: actions/checkout@v4
         with:
           ref: ${{ env.WORKING_REF }}
@@ -53,68 +52,54 @@ jobs:
           key: chernogram-stable-signing-v2
           fail-on-cache-miss: false
 
-      - name: Поднять код сборки выше опубликованной версии
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$SOURCE_VERSION"
-          sed -i "s/^version:.*/version: ${VERSION_FULL}/" pubspec.yaml
-          test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$VERSION_FULL"
-
-      - name: Проверить рабочее локальное ядро
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q "ntfy.sh" lib/internet_core.dart
-          grep -q "openrelay.metered.ca" lib/call_service.dart
-          ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
-          flutter pub get
-          flutter analyze --no-fatal-infos --no-fatal-warnings
-          flutter test
-
-      - name: Восстановить постоянную подпись
+      - name: Собрать проверенный APK 0.24.0+59
         shell: bash
         env:
           CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
         run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.android"
-          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
-            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
-          fi
-          test -s "$HOME/.android/debug.keystore"
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android > certificate.txt
-          ACTUAL=$(grep -m1 'SHA256:' certificate.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$ACTUAL" = "$EXPECTED"
+          set -o pipefail
+          (
+            set -euo pipefail
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$SOURCE_VERSION"
+            sed -i "s/^version:.*/version: ${VERSION_FULL}/" pubspec.yaml
+            test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$VERSION_FULL"
 
-      - name: Собрать, подписать и проверить APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter build apk --release
-          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
-          test -s "$SOURCE_APK"
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
-          "$APKSIGNER" sign \
-            --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out chernogram.apk \
-            "$SOURCE_APK"
-          "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
-          APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          EXPECTED=$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
-          test "$APK_CERT" = "$EXPECTED"
-          "$AAPT" dump badging chernogram.apk | tee apk-badging.txt
-          grep -q "versionCode='$VERSION_CODE'" apk-badging.txt
-          grep -q "versionName='$VERSION_NAME'" apk-badging.txt
-          sha256sum chernogram.apk | tee apk-sha256.txt
+            grep -q "ntfy.sh" lib/internet_core.dart
+            grep -q "openrelay.metered.ca" lib/call_service.dart
+            ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
 
-      - name: Создать манифест обновления
+            mkdir -p "$HOME/.android"
+            if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+              printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+              chmod 600 "$HOME/.android/debug.keystore"
+            fi
+            test -s "$HOME/.android/debug.keystore"
+
+            flutter pub get
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+            flutter build apk --release
+
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram.apk \
+              build/app/outputs/flutter-apk/app-release.apk
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+            APK_CERT=$(sed -n -e 's/^Signer #1 certificate SHA-256 digest: //p' -e 's/^V2 Signer: certificate SHA-256 digest: //p' -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$APK_CERT" = "$EXPECTED"
+            "$AAPT" dump badging chernogram.apk | tee apk-badging.txt
+            grep -q "versionCode='$VERSION_CODE'" apk-badging.txt
+            grep -q "versionName='$VERSION_NAME'" apk-badging.txt
+            sha256sum chernogram.apk | tee apk-sha256.txt
+          ) 2>&1 | tee publish-0240-59.log
+
+      - name: Создать update.json
         shell: bash
         run: |
           set -euo pipefail
@@ -125,54 +110,44 @@ jobs:
             "versionCode": ${VERSION_CODE},
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
             "sha256": "${APK_SHA}",
-            "certificateSha256": "${EXPECTED_CERT_SHA256}",
-            "notesRu": "Чернограм 0.24.0 возвращает проверенный сервер-независимый чат и аудио- и видеозвонки. Собственный сервер, Gateway и VPS не требуются. Сохранены текущий интерфейс, локальная история, файлы и плеер.",
-            "notesEn": "Chernogram 0.24.0 restores the verified server-independent chat and audio/video calls. No private server, Gateway or VPS is required. The current interface, local history, files and player are preserved."
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Чернограм 0.24.0 возвращает проверенный сервер-независимый чат и аудио- и видеозвонки. Собственный сервер, Gateway и VPS не требуются. Сохранены интерфейс, локальная история, файлы и плеер.",
+            "notesEn": "Chernogram 0.24.0 restores verified server-independent chat and audio/video calls. No private server, Gateway or VPS is required. The interface, local history, files and player are preserved."
           }
           EOF
           python -m json.tool update.json >/dev/null
 
-      - name: Опубликовать APK в latest-apk
+      - name: Пересоздать release latest-apk
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view latest-apk >/dev/null 2>&1; then
-            gh release upload latest-apk chernogram.apk update.json apk-sha256.txt apk-signature.txt apk-badging.txt --clobber
-            gh release edit latest-apk \
-              --title "Чернограм 0.24.0 — локальный чат и видеозвонки" \
-              --notes "Штатное обновление внутри приложения. Рабочее сервер-независимое ядро, собственный сервер не требуется." \
-              --prerelease
-          else
-            gh release create latest-apk \
-              chernogram.apk update.json apk-sha256.txt apk-signature.txt apk-badging.txt \
-              --target main \
-              --title "Чернограм 0.24.0 — локальный чат и видеозвонки" \
-              --notes "Штатное обновление внутри приложения. Рабочее сервер-независимое ядро, собственный сервер не требуется." \
-              --prerelease
-          fi
+          gh release delete latest-apk --cleanup-tag --yes || true
+          gh release create latest-apk \
+            chernogram.apk update.json apk-sha256.txt apk-signature.txt apk-badging.txt \
+            --target main \
+            --title "Чернограм 0.24.0 — локальный чат и видеозвонки" \
+            --notes "Штатное обновление внутри приложения. Сервер-независимое рабочее ядро." \
+            --prerelease
 
-      - name: Переключить манифест приложения на 0.24.0+59
+      - name: Включить обновление в приложении
         shell: bash
         run: |
           set -euo pipefail
-          cp update.json /tmp/chernogram-update-0240.json
+          cp update.json /tmp/update-0240-59.json
           APK_SHA=$(awk '{print $1}' apk-sha256.txt)
           APK_BYTES=$(stat -c '%s' chernogram.apk)
           git fetch origin main
           git checkout -B main origin/main
-          cp /tmp/chernogram-update-0240.json update.json
+          cp /tmp/update-0240-59.json update.json
           cat > WORKING_SERVERLESS_024_STATUS.md <<EOF
           Chernogram server-independent Android release published
           Version: ${VERSION_FULL}
           Source: ${WORKING_REF}
-          Chat transport: public encrypted HTTPS/WSS relay
-          Calls: WebRTC with public STUN/TURN
-          Private server or Gateway: not required
           Android APK bytes: ${APK_BYTES}
           Android APK SHA-256: ${APK_SHA}
-          Certificate: ${EXPECTED_CERT_SHA256}
+          Certificate: ${CERT_SHA256}
           Update channel: latest-apk
           Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           EOF
@@ -182,14 +157,14 @@ jobs:
           git commit -m "Включить обновление Чернограма 0.24.0+59 из приложения [skip ci]"
           git push origin HEAD:main
 
-      - name: Выдать готовый APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: chernogram-0.24.0-build-59-published
+          name: chernogram-0.24.0-build-59-publish-retry
           path: |
             chernogram.apk
             update.json
+            publish-0240-59.log
             apk-signature.txt
             apk-badging.txt
             apk-sha256.txt
