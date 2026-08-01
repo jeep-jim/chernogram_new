@@ -26,7 +26,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
-        android:label="Чернограм"
+        android:label="Чернограм Лаб"
         android:name="${applicationName}"
         android:icon="@drawable/chernogram_launcher_icon"
         android:roundIcon="@drawable/chernogram_launcher_icon"
@@ -49,16 +49,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="chernogram" android:host="join" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="githubraw.com"
-                    android:pathPrefix="/jeep-jim/chernogram_new/main/docs/index.html" />
+                <data android:scheme="chernogramlab" android:host="join" />
             </intent-filter>
         </activity>
 
