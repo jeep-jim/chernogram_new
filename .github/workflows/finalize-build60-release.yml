@@ -1,0 +1,113 @@
+name: Завершить публикацию Чернограма 0.24.0+60
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-build60-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: finalize-chernogram-build60
+  cancel-in-progress: true
+
+env:
+  RELEASE_TAG: chernogram-0.24.0-build60
+  VERSION_NAME: 0.24.0
+  VERSION_CODE: 60
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+
+jobs:
+  finalize:
+    name: Проверить Release и включить обновление
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Скачать уже опубликованный APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf release-assets
+          mkdir release-assets
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,name,isPrerelease,url > release.json
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'chernogram.apk' \
+            --dir release-assets
+          test -s release-assets/chernogram.apk
+          sha256sum release-assets/chernogram.apk | tee apk-sha256-final.txt
+
+      - name: Создать окончательный update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA=$(awk '{print $1}' apk-sha256-final.txt)
+          test -n "$APK_SHA"
+          cat > update-final.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/${RELEASE_TAG}/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Чернограм 0.24.0 возвращает проверенный сервер-независимый чат и аудио- и видеозвонки. Собственный сервер, Gateway и VPS не требуются. Сохранены текущий интерфейс, локальная история, файлы и плеер.",
+            "notesEn": "Chernogram 0.24.0 restores verified server-independent chat and audio/video calls. No private server, Gateway or VPS is required. The current interface, local history, files and player are preserved."
+          }
+          EOF
+          python -m json.tool update-final.json >/dev/null
+          grep -q '"versionCode": 60' update-final.json
+          grep -q 'chernogram-0.24.0-build60/chernogram.apk' update-final.json
+          grep -Eq '"sha256": "[0-9a-f]{64}"' update-final.json
+
+      - name: Записать манифест напрямую через GitHub API
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CURRENT_SHA=$(gh api "/repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" --jq '.sha')
+          CONTENT=$(base64 -w 0 update-final.json)
+          gh api --method PUT "/repos/${GITHUB_REPOSITORY}/contents/update.json" \
+            -f message='Окончательно включить обновление Чернограма 0.24.0+60 [skip ci]' \
+            -f content="$CONTENT" \
+            -f sha="$CURRENT_SHA" \
+            -f branch='main' > update-write-result.json
+
+      - name: Проверить опубликованный манифест и APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" --jq '.content' \
+            | tr -d '\n' | base64 --decode > published-update.json
+          python -m json.tool published-update.json >/dev/null
+          cmp -s update-final.json published-update.json
+          grep -q '"versionCode": 60' published-update.json
+          grep -q "$RELEASE_TAG/chernogram.apk" published-update.json
+          grep -Eq '"sha256": "[0-9a-f]{64}"' published-update.json
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep -qx 'chernogram.apk'
+
+      - name: Сохранить подтверждение
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-build60-final-publication-proof
+          path: |
+            release.json
+            apk-sha256-final.txt
+            update-final.json
+            published-update.json
+            update-write-result.json
+          if-no-files-found: error
+          retention-days: 14
