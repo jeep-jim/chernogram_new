@@ -1,0 +1,394 @@
+name: Чернограм 0.24.2+62 — финальная прямая сборка
+
+on:
+  push:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - .github/workflows/build62-final-direct.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-build62-final
+  cancel-in-progress: true
+
+env:
+  VERSION_FULL: 0.24.2+62
+  VERSION_NAME: 0.24.2
+  VERSION_CODE: 62
+  RELEASE_TAG: chernogram-0.24.2-build62
+  FLUTTER_VERSION: 3.44.8
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+  BRAND_BLOB: 79314075e7d8e6882842f8a1eb8393f4c5c01558
+  MAIN_BLOB: 0caf71b222b91fbe4157f55a4e2e9c866ef91a34
+  CHAT_BLOB: 8956bdf0b2af66c7e857075ad340df8aa615468c
+  ANDROID_UI_BLOB: da6bc1648421313971ca6103d8f85ead0b26d8f0
+
+jobs:
+  build_publish:
+    name: Проверить код, собрать APK и включить обновление
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить ветку build 62
+        uses: actions/checkout@v4
+        with:
+          ref: feature/storage-version-qr-062
+          fetch-depth: 0
+
+      - name: Установить Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter и Dart
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Проверить актуальный интерфейс до изменений
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object lib/brand.dart)" = "$BRAND_BLOB"
+          test "$(git hash-object lib/main.dart)" = "$MAIN_BLOB"
+          test "$(git hash-object lib/chat_screen.dart)" = "$CHAT_BLOB"
+          test "$(git hash-object lib/android_data_first.dart)" = "$ANDROID_UI_BLOB"
+          grep -q "class _ChernogramFacePainter" lib/brand.dart
+          ! grep -q "class _ChernogramMarkPainter" lib/brand.dart
+          grep -q "ntfy.sh" lib/internet_core.dart
+          grep -q "openrelay.metered.ca" lib/call_service.dart
+          ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
+          grep -q '"chernogram/storage"' android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
+
+      - name: Подключить карточку диска, версию, QR и точную иконку
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          ui_path = Path('lib/android_data_first.dart')
+          text = ui_path.read_text(encoding='utf-8')
+
+          import_anchor = "import 'core_models.dart';\n"
+          if "import 'device_product_panels.dart';" not in text:
+              if import_anchor not in text:
+                  raise RuntimeError('Не найден импорт core_models.dart')
+              text = text.replace(
+                  import_anchor,
+                  import_anchor + "import 'device_product_panels.dart';\n",
+                  1,
+              )
+
+          files_start = text.index('class _FilesPageState extends State<_FilesPage> {')
+          files_end = text.index('class _MusicEntry', files_start)
+          files_block = text[files_start:files_end]
+          if 'CgDeviceStorageCard(ru: widget.ru)' not in files_block:
+              filter_anchor = (
+                  "        Padding(\n"
+                  "          padding: const EdgeInsets.symmetric(horizontal: 14),\n"
+                  "          child: Row(\n"
+              )
+              if filter_anchor not in files_block:
+                  raise RuntimeError('Не найдена строка фильтров раздела Файлы')
+              storage_card = (
+                  "        Padding(\n"
+                  "          padding: const EdgeInsets.fromLTRB(14, 0, 14, 9),\n"
+                  "          child: CgDeviceStorageCard(ru: widget.ru),\n"
+                  "        ),\n"
+              )
+              files_block = files_block.replace(
+                  filter_anchor,
+                  storage_card + filter_anchor,
+                  1,
+              )
+              text = text[:files_start] + files_block + text[files_end:]
+
+          profile_start = text.index('class _ProfilePage extends StatelessWidget {')
+          profile_end = text.index('class _ProfileAction', profile_start)
+          profile_block = text[profile_start:profile_end]
+          if "title: ru ? 'Версия и поделиться'" not in profile_block:
+              update_anchor = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.system_update_alt_rounded,\n"
+                  "        title: ru ? 'Проверить обновления' : 'Check updates',\n"
+              )
+              if update_anchor not in profile_block:
+                  raise RuntimeError('Не найден пункт Проверить обновления')
+              product_action = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.qr_code_2_rounded,\n"
+                  "        title: ru ? 'Версия и поделиться' : 'Version and share',\n"
+                  "        subtitle: ru\n"
+                  "            ? 'Номер версии, ссылка установки и QR-код.'\n"
+                  "            : 'Product version, installation link, and QR code.',\n"
+                  "        onTap: () => showChernogramProductInfo(context, ru: ru),\n"
+                  "      ),\n"
+                  "      const SizedBox(height: 8),\n"
+              )
+              profile_block = profile_block.replace(
+                  update_anchor,
+                  product_action + update_anchor,
+                  1,
+              )
+              text = text[:profile_start] + profile_block + text[profile_end:]
+
+          ui_path.write_text(text, encoding='utf-8')
+
+          panel_path = Path('lib/device_product_panels.dart')
+          panel = panel_path.read_text(encoding='utf-8')
+          old_url = (
+              "const String chernogramProductUrl =\n"
+              "    'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';"
+          )
+          new_url = (
+              "const String chernogramProductUrl =\n"
+              "    'https://github.com/jeep-jim/chernogram_new/releases/download/"
+              "chernogram-0.24.2-build62/chernogram.apk?v=62';"
+          )
+          if old_url in panel:
+              panel = panel.replace(old_url, new_url, 1)
+          elif 'chernogram-0.24.2-build62/chernogram.apk?v=62' not in panel:
+              raise RuntimeError('Не найдена ссылка продукта')
+          panel_path.write_text(panel, encoding='utf-8')
+
+          pubspec = Path('pubspec.yaml')
+          pub = pubspec.read_text(encoding='utf-8')
+          pub, count = re.subn(
+              r'(?m)^version:\s*[^\n]+$',
+              'version: 0.24.2+62',
+              pub,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError('Не найдена версия в pubspec.yaml')
+          pubspec.write_text(pub, encoding='utf-8')
+
+          icon = '''<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:aapt="http://schemas.android.com/aapt"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="1080"
+              android:viewportHeight="1080">
+              <path
+                  android:fillColor="#070A12"
+                  android:pathData="M180,70 H900 A110,110 0,0 1,1010 180 V900 A110,110 0,0 1,900 1010 H180 A110,110 0,0 1,70 900 V180 A110,110 0,0 1,180 70 Z" />
+              <path
+                  android:fillColor="@android:color/transparent"
+                  android:strokeWidth="22.8571"
+                  android:strokeLineCap="round"
+                  android:pathData="M151.20,248.40 L151.20,480.60 M206.74,181.65 L206.74,686.26 M262.29,157.70 L262.29,399.60 M262.29,480.60 L262.29,763.50 M317.83,142.04 L317.83,399.60 M317.83,480.60 L317.83,815.87 M373.37,131.31 L373.37,399.60 M373.37,480.60 L373.37,853.48 M428.91,124.20 L428.91,399.60 M428.91,480.60 L428.91,880.19 M484.46,120.13 L484.46,897.81 M540.00,118.80 L540.00,907.20 M595.54,120.13 L595.54,897.81 M651.09,124.20 L651.09,399.60 M651.09,480.60 L651.09,880.19 M706.63,131.31 L706.63,399.60 M706.63,480.60 L706.63,853.48 M762.17,142.04 L762.17,399.60 M762.17,480.60 L762.17,815.87 M817.71,157.70 L817.71,399.60 M817.71,480.60 L817.71,763.50 M873.26,181.65 L873.26,686.26 M928.80,248.40 L928.80,480.60">
+                  <aapt:attr name="android:strokeColor">
+                      <gradient
+                          android:type="linear"
+                          android:startX="540"
+                          android:startY="118.8"
+                          android:endX="540"
+                          android:endY="907.2">
+                          <item android:offset="0" android:color="#B9A8FF" />
+                          <item android:offset="0.52" android:color="#7B5CFF" />
+                          <item android:offset="1" android:color="#20C7FF" />
+                      </gradient>
+                  </aapt:attr>
+              </path>
+          </vector>
+          '''
+          Path(
+              'android/app/src/main/res/drawable/chernogram_launcher_icon.xml'
+          ).write_text(icon, encoding='utf-8')
+          PY
+
+          dart format lib/android_data_first.dart lib/device_product_panels.dart
+
+          grep -q "import 'device_product_panels.dart';" lib/android_data_first.dart
+          grep -q "CgDeviceStorageCard(ru: widget.ru)" lib/android_data_first.dart
+          grep -q "Версия и поделиться" lib/android_data_first.dart
+          grep -q "final int? used" lib/device_product_panels.dart
+          grep -q "final double ratio" lib/device_product_panels.dart
+          grep -q "PackageInfo.fromPlatform" lib/device_product_panels.dart
+          grep -q "QrImageView" lib/device_product_panels.dart
+          grep -q "chernogram-0.24.2-build62/chernogram.apk?v=62" lib/device_product_panels.dart
+          grep -q "version: 0.24.2+62" pubspec.yaml
+          grep -q "M151.20,248.40" android/app/src/main/res/drawable/chernogram_launcher_icon.xml
+
+          test "$(git hash-object lib/brand.dart)" = "$BRAND_BLOB"
+          test "$(git hash-object lib/main.dart)" = "$MAIN_BLOB"
+          test "$(git hash-object lib/chat_screen.dart)" = "$CHAT_BLOB"
+
+      - name: Получить зависимости, выполнить анализ и тесты
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Восстановить прежнюю подпись приложения
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > certificate.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Собрать и проверить подписанный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk --release
+          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$SOURCE_APK"
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            "$SOURCE_APK"
+
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+          "$AAPT" dump badging chernogram.apk | tee apk-badging.txt
+          grep -q "versionCode='$VERSION_CODE'" apk-badging.txt
+          grep -q "versionName='$VERSION_NAME'" apk-badging.txt
+          sha256sum chernogram.apk | tee apk-sha256.txt
+
+      - name: Зафиксировать проверенные исходники build 62
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            lib/android_data_first.dart \
+            lib/device_product_panels.dart \
+            pubspec.yaml \
+            android/app/src/main/res/drawable/chernogram_launcher_icon.xml
+          git commit -m "Добавить память, версию, QR и единый логотип 0.24.2+62"
+          git push origin HEAD:feature/storage-version-qr-062
+
+      - name: Создать манифест и отдельный Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK_SHA=$(awk '{print $1}' apk-sha256.txt)
+          cat > update-build62.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/${RELEASE_TAG}/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "В разделе Файлы показаны занятое, свободное и общее место на устройстве. В профиле добавлены версия, номер сборки, ссылка и QR-код для передачи Чернограма. Иконка рабочего стола повторяет новый полосатый логотип приложения.",
+            "notesEn": "Files shows used, free and total device storage. Profile includes the version, build number, share link and QR code. The launcher icon matches the new striped in-app logo."
+          }
+          EOF
+          python -m json.tool update-build62.json >/dev/null
+          cp update-build62.json /tmp/update-build62.json
+
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build62.json \
+            apk-sha256.txt \
+            apk-signature.txt \
+            apk-badging.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target feature/storage-version-qr-062 \
+            --title "Чернограм 0.24.2+62 — память, версия, QR и единый логотип" \
+            --notes "Актуальный интерфейс сохранён. Добавлены сведения о диске, версия продукта, QR-ссылка и точная Android-иконка." \
+            --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Включить обновление из приложения
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-build62
+          git worktree add -B publish-build62 /tmp/chernogram-main-build62 origin/main
+          cd /tmp/chernogram-main-build62
+
+          SUCCESS=0
+          for ATTEMPT in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/update-build62.json update.json
+            cat > BUILD62_STATUS.md <<EOF
+          Chernogram build 62 published
+          Version: ${VERSION_FULL}
+          Release: ${RELEASE_TAG}
+          Device storage: used, free and total
+          Product version and build: enabled
+          Share link and QR: enabled
+          Launcher icon: striped in-app logo geometry
+          Private server: not required
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add update.json BUILD62_STATUS.md
+            git commit -m "Включить Чернограм 0.24.2+62 [skip ci]"
+            if git push origin HEAD:main; then
+              SUCCESS=1
+              break
+            fi
+            sleep 3
+          done
+          test "$SUCCESS" = "1"
+
+      - name: Проверить Release и опубликованный update.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" \
+            --jq '.content' | tr -d '\n' | base64 --decode > published-update.json
+          python -m json.tool published-update.json >/dev/null
+          grep -q '"versionCode": 62' published-update.json
+          grep -q "$RELEASE_TAG/chernogram.apk" published-update.json
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Выдать APK и журналы
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-0.24.2-build62-final
+          path: |
+            chernogram.apk
+            update-build62.json
+            published-update.json
+            apk-signature.txt
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: warn
+          retention-days: 14
