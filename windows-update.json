@@ -1,12 +1,12 @@
 {
-  "versionName": "0.24.2",
-  "versionFull": "0.24.2+62",
-  "versionCode": 62,
+  "versionName": "0.24.3",
+  "versionFull": "0.24.3+63",
+  "versionCode": 63,
   "architecture": "x64",
   "minimumWindows": "10",
-  "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.2-build62/chernogram-windows-0.24.2-portable.zip",
-  "portableSha256": "8437d2f88474b0a87af928d4f1672cb1a2a532aa94a2349bfa1a98920ae8ae63",
-  "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.2-build62/Chernogram-Windows-0.24.2-Setup.exe",
-  "installerSha256": "dae2e89716b77a190b1684fb8ab372e674dbf82ddf5cefb0cc3af935d32e1307",
-  "packageType": "portable-zip-and-installer-v6-build62"
+  "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.3-build63/chernogram-windows-0.24.3-portable.zip",
+  "portableSha256": "17353d3a56a4ea51db506a9c51f21effad70b036a925b85a5d627c479583e949",
+  "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.24.3-build63/Chernogram-Windows-0.24.3-Setup.exe",
+  "installerSha256": "2c93ea6f8eff5e1ca13fdc852c0e9b2185e34a7a09626d7e0dfac955e0a38248",
+  "packageType": "portable-zip-and-installer-v7-build63"
 }
