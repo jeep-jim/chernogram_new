@@ -8,12 +8,15 @@ import android.os.Environment
 import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
+import chat.simplex.common.platform.SimplexLabCore
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterFragmentActivity() {
     private val channelName = "chernogram/sound"
+    private val simplexExecutor = Executors.newSingleThreadExecutor()
     private var incomingRingtone: Ringtone? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -57,6 +60,59 @@ class MainActivity : FlutterFragmentActivity() {
                 result.notImplemented()
             }
         }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "chernogram/simplex_lab"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "initialize" -> runSimplex(result) {
+                    SimplexLabCore.initialize(applicationContext)
+                }
+                "sendCommand" -> {
+                    val command = call.argument<String>("command")?.trim().orEmpty()
+                    if (command.isEmpty()) {
+                        result.error("invalid_command", "Command is empty", null)
+                    } else {
+                        runSimplex(result) {
+                            mapOf("response" to SimplexLabCore.sendCommand(command))
+                        }
+                    }
+                }
+                "receiveEvent" -> {
+                    val waitMicros = call.argument<Int>("waitMicros") ?: 500_000
+                    runSimplex(result) {
+                        mapOf(
+                            "event" to SimplexLabCore.receiveEvent(waitMicros)
+                        )
+                    }
+                }
+                "close" -> runSimplex(result) {
+                    mapOf("response" to SimplexLabCore.close())
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun runSimplex(
+        result: MethodChannel.Result,
+        block: () -> Any?
+    ) {
+        simplexExecutor.execute {
+            try {
+                val value = block()
+                runOnUiThread { result.success(value) }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    result.error(
+                        "simplex_core_error",
+                        error.message ?: error.javaClass.simpleName,
+                        error.stackTraceToString()
+                    )
+                }
+            }
+        }
     }
 
     private fun playNotificationSound() {
@@ -96,5 +152,10 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onStop() {
         super.onStop()
         if (isFinishing) stopIncomingCallSound()
+    }
+
+    override fun onDestroy() {
+        simplexExecutor.shutdownNow()
+        super.onDestroy()
     }
 }
