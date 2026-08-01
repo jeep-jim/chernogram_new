@@ -1,0 +1,250 @@
+name: Чернограм 0.24.1+61 — вернуть актуальный интерфейс без отката связи
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-current-ui-061.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-current-ui-build61
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: fix/current-ui-working-core-061
+  SOURCE_VERSION: 0.23.3+58
+  VERSION_FULL: 0.24.1+61
+  VERSION_NAME: 0.24.1
+  VERSION_CODE: 61
+  RELEASE_TAG: chernogram-0.24.1-build61
+  FLUTTER_VERSION: 3.44.8
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+  BRAND_BLOB: 79314075e7d8e6882842f8a1eb8393f4c5c01558
+  MAIN_BLOB: 0caf71b222b91fbe4157f55a4e2e9c866ef91a34
+  ANDROID_UI_BLOB: da6bc1648421313971ca6103d8f85ead0b26d8f0
+  CHAT_UI_BLOB: 8956bdf0b2af66c7e857075ad340df8aa615468c
+
+jobs:
+  publish:
+    name: Проверить интерфейс, собрать APK и включить обновление
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+
+    steps:
+      - name: Получить актуальный интерфейс Чернограма
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: false
+
+      - name: Запретить откат интерфейса и логотипа
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object lib/brand.dart)" = "$BRAND_BLOB"
+          test "$(git hash-object lib/main.dart)" = "$MAIN_BLOB"
+          test "$(git hash-object lib/android_data_first.dart)" = "$ANDROID_UI_BLOB"
+          test "$(git hash-object lib/chat_screen.dart)" = "$CHAT_UI_BLOB"
+          grep -q "class _ChernogramFacePainter" lib/brand.dart
+          ! grep -q "class _ChernogramMarkPainter" lib/brand.dart
+          grep -q "ntfy.sh" lib/internet_core.dart
+          grep -q "openrelay.metered.ca" lib/call_service.dart
+          ! grep -q "realtime_gateway_client.dart" lib/internet_core.dart
+          test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$SOURCE_VERSION"
+          sed -i "s/^version:.*/version: ${VERSION_FULL}/" pubspec.yaml
+          test "$(awk '/^version:/ {print $2}' pubspec.yaml)" = "$VERSION_FULL"
+          CHANGED=$(git diff --name-only)
+          test "$CHANGED" = "pubspec.yaml"
+
+      - name: Восстановить прежнюю подпись приложения
+        shell: bash
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ -n "${CHERNOGRAM_KEYSTORE_B64:-}" ]; then
+            printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > certificate.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Собрать и проверить Android APK
+        shell: bash
+        run: |
+          set -o pipefail
+          (
+            set -euo pipefail
+            flutter pub get
+            flutter analyze --no-fatal-infos --no-fatal-warnings
+            flutter test
+            flutter build apk --release
+
+            SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+            test -s "$SOURCE_APK"
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+            AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out chernogram.apk \
+              "$SOURCE_APK"
+
+            "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+            APK_CERT=$(sed -n \
+              -e 's/^Signer #1 certificate SHA-256 digest: //p' \
+              -e 's/^V2 Signer: certificate SHA-256 digest: //p' \
+              -e 's/^V3.0 Signer: certificate SHA-256 digest: //p' \
+              apk-signature.txt | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+            test "$APK_CERT" = "$EXPECTED"
+
+            "$AAPT" dump badging chernogram.apk | tee apk-badging.txt
+            grep -q "versionCode='$VERSION_CODE'" apk-badging.txt
+            grep -q "versionName='$VERSION_NAME'" apk-badging.txt
+            sha256sum chernogram.apk | tee apk-sha256.txt
+          ) 2>&1 | tee build-current-ui-061.log
+
+      - name: Создать манифест исправления интерфейса
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA=$(awk '{print $1}' apk-sha256.txt)
+          cat > update-build61.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/${RELEASE_TAG}/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Чернограм 0.24.1 возвращает актуальный интерфейс 0.23.3 и новый полосатый логотип. Сервер-независимый зашифрованный чат, локальная очередь сообщений, файлы и WebRTC-аудио/видео сохранены. Собственный сервер и Gateway не требуются.",
+            "notesEn": "Chernogram 0.24.1 restores the current 0.23.3 interface and striped face logo. Server-independent encrypted chat, the local message queue, files and WebRTC audio/video are preserved. No private server or Gateway is required."
+          }
+          EOF
+          python -m json.tool update-build61.json >/dev/null
+          cp update-build61.json /tmp/chernogram-update-build61.json
+
+      - name: Опубликовать отдельный Release 0.24.1+61
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build61.json \
+            apk-sha256.txt \
+            apk-signature.txt \
+            apk-badging.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.24.1+61 — актуальный интерфейс и рабочая связь" \
+            --notes "Исправление ошибочного отката интерфейса. Новый логотип и текущий дизайн восстановлены; сервер не требуется." \
+            --prerelease
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Переключить автообновление на исправленную версию
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-publish-main
+          git worktree add -B publish-current-ui-061 /tmp/chernogram-publish-main origin/main
+          cd /tmp/chernogram-publish-main
+          SUCCESS=0
+          for ATTEMPT in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/chernogram-update-build61.json update.json
+            cat > CURRENT_UI_061_STATUS.md <<EOF
+          Chernogram current-interface corrective release published
+          Version: ${VERSION_FULL}
+          Source: ${SOURCE_REF}
+          Release tag: ${RELEASE_TAG}
+          Brand blob: ${BRAND_BLOB}
+          Main UI blob: ${MAIN_BLOB}
+          Android UI blob: ${ANDROID_UI_BLOB}
+          Chat UI blob: ${CHAT_UI_BLOB}
+          Chat: encrypted public ntfy relay with durable local queue
+          Calls: WebRTC with public STUN/TURN
+          Private server or Gateway: not required
+          Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add update.json CURRENT_UI_061_STATUS.md
+            git commit -m "Включить исправление интерфейса Чернограма 0.24.1+61 [skip ci]"
+            if git push origin HEAD:main; then
+              SUCCESS=1
+              break
+            fi
+            sleep 3
+          done
+          test "$SUCCESS" = "1"
+
+      - name: Проверить опубликованный манифест и Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" \
+            --jq '.content' | tr -d '\n' | base64 --decode > published-update.json
+          python -m json.tool published-update.json >/dev/null
+          grep -q '"versionCode": 61' published-update.json
+          grep -q "$RELEASE_TAG/chernogram.apk" published-update.json
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Выдать APK и журналы
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-0.24.1-build61-current-ui
+          path: |
+            chernogram.apk
+            update-build61.json
+            published-update.json
+            apk-signature.txt
+            apk-badging.txt
+            apk-sha256.txt
+            build-current-ui-061.log
+          if-no-files-found: warn
+          retention-days: 14
