@@ -1,9 +1,9 @@
 {
-  "versionName": "0.24.1",
-  "versionCode": 61,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-0.24.1-build61/chernogram.apk?v=61",
-  "sha256": "efa39814bd10b4e1e0ab11306ce3969243d397741fcc6f66d1b084110d9c7e9f",
+  "versionName": "0.24.2",
+  "versionCode": 62,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-0.24.2-build62/chernogram.apk?v=62",
+  "sha256": "26a74fdba1d772248126d98005d2417489d7152f1fcb98bbb78e85ef09cda81a",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "notesRu": "Чернограм 0.24.1 возвращает актуальный интерфейс 0.23.3 и новый полосатый логотип. Сервер-независимый зашифрованный чат, локальная очередь сообщений, файлы и WebRTC-аудио/видео сохранены. Собственный сервер и Gateway не требуются.",
-  "notesEn": "Chernogram 0.24.1 restores the current 0.23.3 interface and striped face logo. Server-independent encrypted chat, the local message queue, files and WebRTC audio/video are preserved. No private server or Gateway is required."
+  "notesRu": "В разделе Файлы показаны занятое, свободное и общее место. В профиле добавлены версия, номер сборки, ссылка и QR-код. Иконка рабочего стола повторяет полосатый логотип приложения.",
+  "notesEn": "Files shows used, free and total storage. Profile includes version, build, link and QR code. The launcher icon matches the striped in-app logo."
 }
