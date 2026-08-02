@@ -1,7 +1,7 @@
 name: chernogram
-description: Chernogram Optical — encrypted chat and files through screen and camera
+description: Chernogram Hybrid — encrypted remote chat with optical offline fallback
 publish_to: 'none'
-version: 0.30.0+70
+version: 0.31.0+71
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
