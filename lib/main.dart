@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,6 @@ import 'light/light_chat_app.dart';
 import 'light/light_theme.dart';
 import 'push_service.dart';
 import 'update_service.dart';
-import 'windows_desktop_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,19 +101,6 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   Widget _home(BuildContext context) {
     if (!_ready) return const Center(child: CircularProgressIndicator());
-    if (Platform.isWindows) {
-      return ChernogramWindowsDesktop(
-        ru: true,
-        darkMode: _darkMode,
-        onToggleTheme: _toggleTheme,
-        onChangeLanguage: () {},
-        onCheckUpdates: () {
-          unawaited(
-            ChernogramUpdater.checkAndPrompt(context, ru: true, manual: true),
-          );
-        },
-      );
-    }
     return ChernogramLightHome(
       darkMode: _darkMode,
       onToggleTheme: _toggleTheme,
