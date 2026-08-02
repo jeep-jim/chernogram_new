@@ -1,0 +1,55 @@
+name: Извлечь ошибку build 66
+
+on:
+  push:
+    branches:
+      - experiment/simplex-core-064
+    paths:
+      - .github/workflows/extract-build66-failure.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/simplex-core-064
+          fetch-depth: 0
+      - name: Получить лог упавшего job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run view 30730393060 --repo "$GITHUB_REPOSITORY" --job 91449611621 --log > full-build66-job.log
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('full-build66-job.log').read_text(encoding='utf-8', errors='replace').splitlines()
+          markers = ('FAILURE:', 'What went wrong:', 'Execution failed', 'error:', 'Error:', 'Exception', 'Caused by:', 'BUILD FAILED', 'Could not', 'duplicate', 'merge', 'libapp-lib', 'libsimplex', 'libsupport')
+          hits=[]
+          for i,line in enumerate(lines):
+              if any(m.lower() in line.lower() for m in markers):
+                  a=max(0,i-8); b=min(len(lines),i+18)
+                  hits.extend(lines[a:b])
+                  hits.append('---')
+          if not hits:
+              hits=lines[-250:]
+          # de-duplicate adjacent repeated extraction while preserving order
+          out=[]
+          for x in hits:
+              if not out or x != out[-1]: out.append(x)
+          Path('diagnostics/build66-failure.log').parent.mkdir(parents=True, exist_ok=True)
+          Path('diagnostics/build66-failure.log').write_text('\n'.join(out[-800:])+'\n', encoding='utf-8')
+          PY
+      - name: Сохранить диагностический лог в ветку
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/build66-failure.log
+          git commit -m 'Диагностика ошибки сборки build 66'
+          git push origin HEAD:experiment/simplex-core-064
