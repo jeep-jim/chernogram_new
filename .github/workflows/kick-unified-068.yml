@@ -1,0 +1,24 @@
+name: Запуск единой сборки 68
+
+on:
+  push:
+    branches:
+      - feature/unified-android-windows-068
+    paths:
+      - .github/workflows/kick-unified-068.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Запустить Android и Windows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run publish-unified-068.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref feature/unified-android-windows-068
