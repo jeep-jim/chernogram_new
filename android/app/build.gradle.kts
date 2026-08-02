@@ -23,6 +23,14 @@ android {
         versionName = flutter.versionName
     }
 
+    // SimpleX содержит крупную нативную библиотеку. Для прямого OTA-обновления
+    // упаковываем .so со сжатием, иначе APK получается около 280 МБ.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             // APK дополнительно подписывается постоянным ключом в GitHub Actions.
