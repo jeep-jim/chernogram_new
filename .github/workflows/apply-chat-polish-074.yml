@@ -1,0 +1,58 @@
+name: Доработать чат build 74
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-chat-polish-074.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/impulse-transport-074
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Применить UX чата и QR
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q '_jumpToBottomImmediately' lib/chat_screen.dart; then
+            python3 tool/polish_chat_074.py
+          fi
+          dart format lib/chat_screen.dart lib/light/light_invite_qr.dart
+
+      - name: Проверить обязательное поведение
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '_dismissKeyboard' lib/chat_screen.dart
+          grep -q '_jumpToBottomImmediately' lib/chat_screen.dart
+          grep -q 'ScrollViewKeyboardDismissBehavior.onDrag' lib/chat_screen.dart
+          grep -q 'BorderRadius.circular(32)' lib/chat_screen.dart
+          grep -q 'unawaited(_controller.stop())' lib/light/light_invite_qr.dart
+
+      - name: Сохранить в ветке build 74
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/chat_screen.dart lib/light/light_invite_qr.dart tool/polish_chat_074.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Сделать чат быстрым и удобным в build 74 [skip ci]"
+            git push origin HEAD:rebuild/impulse-transport-074
+          fi
