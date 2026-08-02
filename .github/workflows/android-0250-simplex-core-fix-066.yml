@@ -259,11 +259,20 @@ jobs:
           flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter test
 
-      - name: Собрать основной Android APK
+      - name: Собрать основной Android APK и сохранить точную ошибку
         shell: bash
         run: |
-          set -euo pipefail
-          flutter build apk --release --target-platform android-arm64
+          set -uo pipefail
+          set +e
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee build-full.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          tail -n 300 build-full.log > build-tail.log
+          if [ "$STATUS" -ne 0 ]; then
+            echo "Сборка APK завершилась с кодом $STATUS"
+            cat build-tail.log
+            exit "$STATUS"
+          fi
           test -s build/app/outputs/flutter-apk/app-release.apk
 
       - name: Подписать постоянным ключом и проверить APK
@@ -381,5 +390,7 @@ jobs:
             app-lib-dynamic.txt
             simplex-symbols.txt
             support-symbols.txt
+            build-full.log
+            build-tail.log
           if-no-files-found: warn
           retention-days: 14
