@@ -34,6 +34,7 @@ class CgChatScreen extends StatefulWidget {
   final ValueChanged<CgTunnel> onChanged;
   final Future<void> Function(CgMessage message)? onForward;
   final ValueChanged<CgContact>? onContactSeen;
+  final String initialAction;
 
   const CgChatScreen({
     super.key,
@@ -45,6 +46,7 @@ class CgChatScreen extends StatefulWidget {
     this.onForward,
     this.onContactSeen,
     this.autoInvite = false,
+    this.initialAction = 'chat',
   });
 
   @override
@@ -85,11 +87,23 @@ class _CgChatScreenState extends State<CgChatScreen> {
     super.initState();
     _tunnel = widget.tunnel;
     _text.addListener(_onComposerChanged);
-    unawaited(_connect());
+    unawaited(_connectAndStart());
     if (widget.autoInvite) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_showInvite());
       });
+    }
+  }
+
+  Future<void> _connectAndStart() async {
+    await _connect();
+    if (!mounted || widget.initialAction == 'chat') return;
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted || _networkState != 'connected') return;
+    if (widget.initialAction == 'audio') {
+      await _startCall(false);
+    } else if (widget.initialAction == 'video') {
+      await _startCall(true);
     }
   }
 
@@ -892,7 +906,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                widget.ru ? 'Пригласить в туннель' : 'Invite to tunnel',
+                widget.ru ? 'Пригласить в чат' : 'Invite to tunnel',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
@@ -1045,7 +1059,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.ru ? 'Настройки туннеля' : 'Tunnel settings',
+                    widget.ru ? 'Настройки чата' : 'Chat settings',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -1226,8 +1240,8 @@ class _CgChatScreenState extends State<CgChatScreen> {
       SnackBar(
         content: Text(
           widget.ru
-              ? 'Сначала дождитесь подключения туннеля.'
-              : 'Wait for the tunnel to connect first.',
+              ? 'Сначала дождитесь подключения чата.'
+              : 'Wait for the chat to connect first.',
         ),
       ),
     );
@@ -1478,139 +1492,54 @@ class _CgChatScreenState extends State<CgChatScreen> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
-            Text(
-              _statusText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                color: _networkState == 'connected'
-                    ? ChernogramColors.success
-                    : scheme.onSurface.withValues(alpha: .46),
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: _networkState == 'connected'
+                        ? ChernogramColors.success
+                        : scheme.onSurface.withValues(alpha: .28),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _networkState == 'connected' ? 'в сети' : 'подключение',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: scheme.onSurface.withValues(alpha: .48),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
-          GlassIconButton(
-            icon: Icons.call_outlined,
-            tooltip: widget.ru ? 'Позвонить' : 'Call',
+          IconButton(
+            tooltip: 'Аудиозвонок',
             onPressed: () => _startCall(false),
+            icon: const Icon(Icons.call_outlined),
           ),
-          PopupMenuButton<String>(
-            tooltip: widget.ru ? 'Действия' : 'Actions',
-            onSelected: (value) {
-              switch (value) {
-                case 'video':
-                  _startCall(true);
-                  break;
-                case 'group_video':
-                  _startGroupCall(video: true);
-                  break;
-                case 'group_audio':
-                  _startGroupCall(video: false);
-                  break;
-                case 'invite':
-                  _showInvite();
-                  break;
-                case 'avatar':
-                  _changeAvatar();
-                  break;
-                case 'settings':
-                  _showSettings();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'video',
-                child: ListTile(
-                  leading: const Icon(Icons.videocam_outlined),
-                  title: Text(widget.ru ? 'Видеозвонок' : 'Video call'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'group_video',
-                child: ListTile(
-                  leading: const Icon(Icons.groups_2_outlined),
-                  title: Text(
-                    widget.ru ? 'Групповое видео до 6' : 'Group video up to 6',
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'group_audio',
-                child: ListTile(
-                  leading: const Icon(Icons.group_outlined),
-                  title: Text(
-                    widget.ru ? 'Групповой аудиозвонок' : 'Group audio call',
-                  ),
-                ),
-              ),
-              if (canInvite)
-                PopupMenuItem(
-                  value: 'invite',
-                  child: ListTile(
-                    leading: const Icon(Icons.qr_code_2),
-                    title: Text(widget.ru ? 'Пригласить' : 'Invite'),
-                  ),
-                ),
-              if (_isOwner)
-                PopupMenuItem(
-                  value: 'avatar',
-                  child: ListTile(
-                    leading: const Icon(Icons.add_photo_alternate_outlined),
-                    title: Text(widget.ru ? 'Аватар туннеля' : 'Tunnel avatar'),
-                  ),
-                ),
-              if (_isOwner)
-                PopupMenuItem(
-                  value: 'settings',
-                  child: ListTile(
-                    leading: const Icon(Icons.tune_rounded),
-                    title: Text(widget.ru ? 'Настройки' : 'Settings'),
-                  ),
-                ),
-            ],
+          IconButton(
+            tooltip: 'Видеозвонок',
+            onPressed: () => _startCall(true),
+            icon: const Icon(Icons.videocam_outlined),
           ),
-          const SizedBox(width: 6),
+          if (canInvite)
+            IconButton(
+              tooltip: 'Пригласить',
+              onPressed: _showInvite,
+              icon: const Icon(Icons.ios_share_rounded),
+            ),
+          const SizedBox(width: 4),
         ],
       ),
       body: CgChatPatternBackground(
         child: Column(
           children: [
-            if (_networkState != 'connected')
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-                child: Material(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: .62),
-                  borderRadius: BorderRadius.circular(14),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: Text(
-                            _statusText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             if (_selectedMessageIds.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),

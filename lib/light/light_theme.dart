@@ -15,20 +15,21 @@ abstract final class LightChatColors {
 
 ThemeData lightChatTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final scheme = ColorScheme.fromSeed(
-    seedColor: LightChatColors.violet,
-    brightness: brightness,
-    surface: dark ? const Color(0xFF20283A) : Colors.white,
-  ).copyWith(
-    primary: LightChatColors.violet,
-    secondary: LightChatColors.cyan,
-    tertiary: LightChatColors.mint,
-    surface: dark ? const Color(0xFF20283A) : Colors.white,
-    surfaceContainerHighest: dark
-        ? const Color(0xFF2A3348)
-        : const Color(0xFFE9EDF7),
-    onSurface: dark ? const Color(0xFFF4F5FF) : const Color(0xFF172033),
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: LightChatColors.violet,
+        brightness: brightness,
+        surface: dark ? const Color(0xFF20283A) : Colors.white,
+      ).copyWith(
+        primary: LightChatColors.violet,
+        secondary: LightChatColors.cyan,
+        tertiary: LightChatColors.mint,
+        surface: dark ? const Color(0xFF20283A) : Colors.white,
+        surfaceContainerHighest: dark
+            ? const Color(0xFF2A3348)
+            : const Color(0xFFE9EDF7),
+        onSurface: dark ? const Color(0xFFF4F5FF) : const Color(0xFF172033),
+      );
 
   OutlineInputBorder inputBorder() => OutlineInputBorder(
     borderRadius: BorderRadius.circular(28),
@@ -97,9 +98,7 @@ ThemeData lightChatTheme(Brightness brightness) {
     ),
     bottomSheetTheme: BottomSheetThemeData(
       showDragHandle: true,
-      backgroundColor: dark
-          ? const Color(0xF5232B3D)
-          : const Color(0xF7FFFFFF),
+      backgroundColor: dark ? const Color(0xF5232B3D) : const Color(0xF7FFFFFF),
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(34)),
@@ -107,17 +106,13 @@ ThemeData lightChatTheme(Brightness brightness) {
     ),
     dialogTheme: DialogThemeData(
       elevation: 0,
-      backgroundColor: dark
-          ? const Color(0xF5262E42)
-          : const Color(0xF8FFFFFF),
+      backgroundColor: dark ? const Color(0xF5262E42) : const Color(0xF8FFFFFF),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: dark
-          ? const Color(0xEE30394E)
-          : const Color(0xEE1E2738),
+      backgroundColor: dark ? const Color(0xEE30394E) : const Color(0xEE1E2738),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       contentTextStyle: const TextStyle(color: Colors.white),
     ),

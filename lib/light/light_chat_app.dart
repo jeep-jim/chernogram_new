@@ -232,7 +232,8 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
     await prefs.setString(_phoneLinksKey, jsonEncode(_phoneLinks));
   }
 
-  String _normalizePhone(String value) => value.replaceAll(RegExp(r'[^0-9+]'), '');
+  String _normalizePhone(String value) =>
+      value.replaceAll(RegExp(r'[^0-9+]'), '');
 
   CgTunnel? _chatForPhone(String phone) {
     final id = _phoneLinks[_normalizePhone(phone)];
@@ -305,7 +306,9 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
       );
       await _shareInvite(chat, contactName: contact?.displayName);
       if (!mounted) return;
-      _toast('Первое подключение создано. После принятия ссылки звонки станут доступны.');
+      _toast(
+        'Первое подключение создано. После принятия ссылки звонки станут доступны.',
+      );
       await _openChat(chat);
       return;
     }
@@ -318,7 +321,9 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
     try {
       final allowed = await FlutterContacts.requestPermission(readonly: true);
       if (!allowed) {
-        _toast('Разрешение на контакты не выдано. Можно отправить ссылку вручную.');
+        _toast(
+          'Разрешение на контакты не выдано. Можно отправить ссылку вручную.',
+        );
         return;
       }
       final contacts = await FlutterContacts.getContacts(withProperties: true);
@@ -446,7 +451,9 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить чат?'),
-        content: Text('История «${chat.displayName}» удалится только с этого телефона.'),
+        content: Text(
+          'История «${chat.displayName}» удалится только с этого телефона.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -492,7 +499,9 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
         onDigit: (value) => setState(() => _dialValue += value),
         onBackspace: () {
           if (_dialValue.isNotEmpty) {
-            setState(() => _dialValue = _dialValue.substring(0, _dialValue.length - 1));
+            setState(
+              () => _dialValue = _dialValue.substring(0, _dialValue.length - 1),
+            );
           }
         },
         onClear: () => setState(() => _dialValue = ''),
@@ -573,7 +582,11 @@ class _PageHeader extends StatelessWidget {
   final String subtitle;
   final Widget? trailing;
 
-  const _PageHeader({required this.title, required this.subtitle, this.trailing});
+  const _PageHeader({
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -602,7 +615,9 @@ class _PageHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: .55),
                 ),
               ),
             ],
@@ -679,9 +694,7 @@ class _DialerPage extends StatelessWidget {
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: value.isEmpty ? 0 : 1.2,
                                 color: value.isEmpty
-                                    ? Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
+                                    ? Theme.of(context).colorScheme.onSurface
                                           .withValues(alpha: .38)
                                     : null,
                               ),
@@ -781,7 +794,9 @@ class _DialerPage extends StatelessWidget {
                             IconButton(
                               tooltip: 'Написать',
                               onPressed: () => onKnownContact(contact, 'chat'),
-                              icon: const Icon(Icons.chat_bubble_outline_rounded),
+                              icon: const Icon(
+                                Icons.chat_bubble_outline_rounded,
+                              ),
                             ),
                             IconButton(
                               tooltip: 'Позвонить',
@@ -848,7 +863,10 @@ class _DialPad extends StatelessWidget {
               children: [
                 Text(
                   key.$1,
-                  style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 if (key.$2.isNotEmpty)
                   Text(
@@ -856,7 +874,9 @@ class _DialPad extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 8,
                       letterSpacing: 1.4,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .46),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: .46),
                     ),
                   ),
               ],
@@ -900,7 +920,10 @@ class _RoundAction extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 6),
-      Text(label, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+      Text(
+        label,
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+      ),
     ],
   );
 }
@@ -954,7 +977,9 @@ class _ChatsPageState extends State<_ChatsPage> {
     final chats = widget.chats.where((chat) {
       if (query.isEmpty) return true;
       return chat.displayName.toLowerCase().contains(query) ||
-          chat.messages.any((message) => message.text.toLowerCase().contains(query));
+          chat.messages.any(
+            (message) => message.text.toLowerCase().contains(query),
+          );
     }).toList();
 
     return SafeArea(
@@ -998,14 +1023,21 @@ class _ChatsPageState extends State<_ChatsPage> {
                     itemCount: chats.length,
                     itemBuilder: (context, index) {
                       final chat = chats[index];
-                      final last = chat.messages.isEmpty ? null : chat.messages.last;
+                      final last = chat.messages.isEmpty
+                          ? null
+                          : chat.messages.last;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 7),
                         child: LightGlass(
                           padding: EdgeInsets.zero,
                           borderRadius: BorderRadius.circular(26),
                           child: ListTile(
-                            contentPadding: const EdgeInsets.fromLTRB(11, 7, 4, 7),
+                            contentPadding: const EdgeInsets.fromLTRB(
+                              11,
+                              7,
+                              4,
+                              7,
+                            ),
                             leading: ChernogramAvatar(
                               size: 52,
                               seed: chat.id,
@@ -1015,7 +1047,9 @@ class _ChatsPageState extends State<_ChatsPage> {
                               chat.displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w900),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 4),
@@ -1041,20 +1075,24 @@ class _ChatsPageState extends State<_ChatsPage> {
                                   ),
                                 PopupMenuButton<String>(
                                   onSelected: (value) {
-                                    if (value == 'delete') widget.onDelete(chat);
+                                    if (value == 'delete')
+                                      widget.onDelete(chat);
                                   },
-                                  itemBuilder: (_) => const <PopupMenuEntry<String>>[
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete_outline_rounded),
-                                          SizedBox(width: 10),
-                                          Text('Удалить чат'),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                  itemBuilder: (_) =>
+                                      const <PopupMenuEntry<String>>[
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.delete_outline_rounded,
+                                              ),
+                                              SizedBox(width: 10),
+                                              Text('Удалить чат'),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                 ),
                               ],
                             ),
@@ -1108,7 +1146,10 @@ class _ProfilePage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 110),
         children: [
-          const _PageHeader(title: 'Профиль', subtitle: 'Только основные настройки'),
+          const _PageHeader(
+            title: 'Профиль',
+            subtitle: 'Только основные настройки',
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
             child: LightGlass(
@@ -1133,7 +1174,11 @@ class _ProfilePage extends StatelessWidget {
                             shape: const CircleBorder(),
                             child: const SizedBox.square(
                               dimension: 36,
-                              child: Icon(Icons.photo_camera_rounded, color: Colors.white, size: 18),
+                              child: Icon(
+                                Icons.photo_camera_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ),
@@ -1143,7 +1188,10 @@ class _ProfilePage extends StatelessWidget {
                   const SizedBox(height: 16),
                   Text(
                     profile.nickname,
-                    style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
@@ -1152,7 +1200,9 @@ class _ProfilePage extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .45),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: .45),
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -1172,24 +1222,53 @@ class _ProfilePage extends StatelessWidget {
               child: Column(
                 children: [
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-                    leading: Icon(darkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded),
-                    title: const Text('Оформление', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text(darkMode ? 'Мягкая тёмная тема' : 'Светлая тема'),
-                    trailing: Switch(value: darkMode, onChanged: (_) => onTheme()),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 4,
+                    ),
+                    leading: Icon(
+                      darkMode
+                          ? Icons.dark_mode_rounded
+                          : Icons.light_mode_rounded,
+                    ),
+                    title: const Text(
+                      'Оформление',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(
+                      darkMode ? 'Мягкая тёмная тема' : 'Светлая тема',
+                    ),
+                    trailing: Switch(
+                      value: darkMode,
+                      onChanged: (_) => onTheme(),
+                    ),
                   ),
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 4,
+                    ),
                     leading: const Icon(Icons.install_mobile_rounded),
-                    title: const Text('Ссылка на установку', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Отправить приложение другому человеку'),
+                    title: const Text(
+                      'Ссылка на установку',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: const Text(
+                      'Отправить приложение другому человеку',
+                    ),
                     trailing: const Icon(Icons.ios_share_rounded),
                     onTap: onShareInstall,
                   ),
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 4,
+                    ),
                     leading: const Icon(Icons.system_update_alt_rounded),
-                    title: const Text('Обновление', style: TextStyle(fontWeight: FontWeight.w800)),
+                    title: const Text(
+                      'Обновление',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                     subtitle: const Text('Проверить новую версию онлайн'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: onUpdate,
@@ -1209,7 +1288,9 @@ class _ProfilePage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .48),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: .48),
                   ),
                 ),
               ],
@@ -1251,7 +1332,10 @@ class _PhoneContactsSheetState extends State<_PhoneContactsSheet> {
         height: MediaQuery.sizeOf(context).height * .82,
         child: Column(
           children: [
-            const Text('Контакты', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            const Text(
+              'Контакты',
+              style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
               child: TextField(
@@ -1268,10 +1352,17 @@ class _PhoneContactsSheetState extends State<_PhoneContactsSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: ListTile(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                  tileColor: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  tileColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: .10),
                   leading: const CircleAvatar(child: Icon(Icons.link_rounded)),
-                  title: const Text('Отправить ссылку вручную', style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text(
+                    'Отправить ссылку вручную',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   onTap: () => Navigator.pop(context),
                 ),
               ),
@@ -1289,11 +1380,17 @@ class _PhoneContactsSheetState extends State<_PhoneContactsSheet> {
                             child: Text(
                               contact.displayName.trim().isEmpty
                                   ? '?'
-                                  : contact.displayName.trim().characters.first.toUpperCase(),
+                                  : contact.displayName
+                                        .trim()
+                                        .characters
+                                        .first
+                                        .toUpperCase(),
                             ),
                           ),
                           title: Text(
-                            contact.displayName.trim().isEmpty ? 'Без имени' : contact.displayName,
+                            contact.displayName.trim().isEmpty
+                                ? 'Без имени'
+                                : contact.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.w800),
@@ -1328,12 +1425,19 @@ class _EmptyRecent extends StatelessWidget {
         children: [
           const Icon(Icons.contacts_outlined, size: 48),
           const SizedBox(height: 10),
-          const Text('Здесь появятся люди', style: TextStyle(fontWeight: FontWeight.w900)),
+          const Text(
+            'Здесь появятся люди',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 4),
           Text(
             'Выбери контакт телефона или отправь человеку ссылку на первый чат.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .56)),
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: .56),
+            ),
           ),
         ],
       ),
@@ -1355,12 +1459,20 @@ class _EmptyChats extends StatelessWidget {
         children: [
           const ChernogramLogo(size: 86),
           const SizedBox(height: 14),
-          const Text('Чатов пока нет', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          const Text(
+            'Чатов пока нет',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 7),
           Text(
             'Выбери человека из контактов или отправь ссылку. Диалог сохранится здесь для следующих сообщений и звонков.',
             textAlign: TextAlign.center,
-            style: TextStyle(height: 1.4, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .56)),
+            style: TextStyle(
+              height: 1.4,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: .56),
+            ),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
