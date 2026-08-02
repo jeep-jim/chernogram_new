@@ -1,0 +1,242 @@
+name: Чернограм Windows 0.25.0+66 — комнаты на четырёх устройствах
+
+on:
+  push:
+    branches:
+      - experiment/windows-room-desktop-066
+    paths:
+      - .github/workflows/windows-0250-room-desktop-build66.yml
+      - lib/main.dart
+      - lib/windows_desktop_app.dart
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-windows-0250-build66
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.25.0
+  VERSION_CODE: 66
+  VERSION_FULL: 0.25.0+66
+  RELEASE_TAG: chernogram-windows-0.25.0-build66
+  PORTABLE_NAME: chernogram-windows-0.25.0-portable.zip
+  INSTALLER_NAME: Chernogram-Windows-0.25.0-Setup.exe
+
+jobs:
+  build_publish:
+    name: Проверить, собрать и опубликовать Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    steps:
+      - name: Получить Windows-ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/windows-room-desktop-066
+          fetch-depth: 0
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Подготовить Windows и версию
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter config --enable-windows-desktop
+          if (-not (Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows --project-name chernogram --no-pub .
+          }
+
+          $pubspec = Get-Content pubspec.yaml -Raw
+          $pubspec = [regex]::Replace(
+            $pubspec,
+            '(?m)^version:\s*[^\r\n]+$',
+            'version: 0.25.0+66',
+            1
+          )
+          Set-Content pubspec.yaml $pubspec -Encoding UTF8
+
+          $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          $cmakePath = 'windows/CMakeLists.txt'
+          $cmake = Get-Content $cmakePath
+          if (-not ($cmake -contains $definition)) {
+            $patched = @($cmake[0], '', $definition) + $cmake[1..($cmake.Length - 1)]
+            Set-Content $cmakePath $patched -Encoding UTF8
+          }
+          $env:CL = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS $env:CL"
+
+      - name: Анализ и тесты
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          dart format lib/main.dart lib/windows_desktop_app.dart
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Собрать Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          flutter build windows --release 2>&1 | Tee-Object windows-build.log
+          $release = 'build/windows/x64/runner/Release'
+          if (-not (Test-Path "$release/chernogram.exe")) {
+            throw 'Файл chernogram.exe не был собран'
+          }
+          Compress-Archive -Path "$release/*" -DestinationPath $env:PORTABLE_NAME -Force
+          if (-not (Test-Path $env:PORTABLE_NAME)) {
+            throw 'Portable ZIP не создан'
+          }
+
+      - name: Создать установщик EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup -y --no-progress
+          $release = (Resolve-Path 'build/windows/x64/runner/Release').Path
+          $output = (Resolve-Path '.').Path
+          $iss = @"
+          [Setup]
+          AppId={{B5DE9B30-0D54-4B89-87D0-66E025006600}
+          AppName=Чернограм
+          AppVersion=0.25.0
+          AppPublisher=Чернограм
+          DefaultDirName={autopf}\Чернограм
+          DefaultGroupName=Чернограм
+          DisableProgramGroupPage=yes
+          OutputDir=$output
+          OutputBaseFilename=Chernogram-Windows-0.25.0-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          SetupLogging=yes
+          UninstallDisplayIcon={app}\chernogram.exe
+
+          [Files]
+          Source: "$release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{autoprograms}\Чернограм"; Filename: "{app}\chernogram.exe"
+          Name: "{autodesktop}\Чернограм"; Filename: "{app}\chernogram.exe"; Tasks: desktopicon
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные значки:"; Flags: unchecked
+
+          [Run]
+          Filename: "{app}\chernogram.exe"; Description: "Запустить Чернограм"; Flags: nowait postinstall skipifsilent
+          "@
+          Set-Content installer.iss $iss -Encoding UTF8
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            $iscc = (Get-Command iscc.exe -ErrorAction Stop).Source
+          }
+          & $iscc installer.iss 2>&1 | Tee-Object installer-build.log
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup завершился с кодом $LASTEXITCODE" }
+          if (-not (Test-Path $env:INSTALLER_NAME)) {
+            throw 'Установщик EXE не создан'
+          }
+
+      - name: Посчитать SHA-256 и создать манифест
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $portableSha = (Get-FileHash $env:PORTABLE_NAME -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerSha = (Get-FileHash $env:INSTALLER_NAME -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            "$portableSha  $env:PORTABLE_NAME",
+            "$installerSha  $env:INSTALLER_NAME"
+          ) | Set-Content windows-sha256-build66.txt -Encoding UTF8
+
+          $manifest = [ordered]@{
+            versionName = $env:VERSION_NAME
+            versionFull = $env:VERSION_FULL
+            versionCode = [int]$env:VERSION_CODE
+            architecture = 'x64'
+            minimumWindows = '10'
+            portableUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/$env:PORTABLE_NAME"
+            portableSha256 = $portableSha
+            installerUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/$env:INSTALLER_NAME"
+            installerSha256 = $installerSha
+            packageType = 'three-column-room-desktop-build66'
+            notesRu = 'Трёхколоночный интерфейс: комнаты слева, чат по центру, файлы комнаты справа. Совместим с комнатами Android build 66.'
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content windows-update.json -Encoding UTF8
+          Get-Content windows-update.json
+
+      - name: Опубликовать Windows Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release delete $env:RELEASE_TAG --cleanup-tag -y 2>$null
+          gh release create $env:RELEASE_TAG `
+            $env:PORTABLE_NAME `
+            $env:INSTALLER_NAME `
+            windows-update.json `
+            windows-sha256-build66.txt `
+            --target experiment/windows-room-desktop-066 `
+            --title "Чернограм Windows 0.25.0 build 66" `
+            --notes "Windows x64 для теста одной комнаты на трёх телефонах и одном компьютере. Слева список комнат, по центру чат, справа файлы выбранной комнаты."
+
+      - name: Включить Windows-обновление
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git fetch origin main
+          git worktree add ../chernogram-main origin/main
+          Copy-Item windows-update.json ../chernogram-main/windows-update.json -Force
+          Push-Location ../chernogram-main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add windows-update.json
+          git commit -m 'Опубликовать Windows 0.25.0+66 с интерфейсом комнаты [skip ci]' 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            git push origin HEAD:main
+          }
+          Pop-Location
+
+      - name: Финально проверить опубликованные файлы
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Start-Sleep -Seconds 8
+          $manifest = Get-Content windows-update.json -Raw | ConvertFrom-Json
+          Invoke-WebRequest -Uri $manifest.portableUrl -OutFile published-portable.zip
+          Invoke-WebRequest -Uri $manifest.installerUrl -OutFile published-installer.exe
+          $portableSha = (Get-FileHash published-portable.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerSha = (Get-FileHash published-installer.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($portableSha -ne $manifest.portableSha256) {
+            throw 'SHA-256 опубликованного portable ZIP не совпадает'
+          }
+          if ($installerSha -ne $manifest.installerSha256) {
+            throw 'SHA-256 опубликованного установщика не совпадает'
+          }
+
+      - name: Сохранить доказательства сборки
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-windows-0.25.0-build66-verified
+          path: |
+            chernogram-windows-0.25.0-portable.zip
+            Chernogram-Windows-0.25.0-Setup.exe
+            windows-update.json
+            windows-sha256-build66.txt
+            windows-build.log
+            installer-build.log
+            installer.iss
+          if-no-files-found: warn
+          retention-days: 14
