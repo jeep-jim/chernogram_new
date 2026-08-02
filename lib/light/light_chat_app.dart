@@ -493,22 +493,11 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
     }
 
     final pages = <Widget>[
-      _DialerPage(
-        value: _dialValue,
+      _ContactsHomePage(
         contacts: _knownContacts,
-        onDigit: (value) => setState(() => _dialValue += value),
-        onBackspace: () {
-          if (_dialValue.isNotEmpty) {
-            setState(
-              () => _dialValue = _dialValue.substring(0, _dialValue.length - 1),
-            );
-          }
-        },
-        onClear: () => setState(() => _dialValue = ''),
-        onContacts: _showPhoneContacts,
-        onChat: () => _dialAction('chat'),
-        onAudio: () => _dialAction('audio'),
-        onVideo: () => _dialAction('video'),
+        chats: _chats,
+        onInvite: _newChat,
+        onOpenChat: _openChat,
         onKnownContact: _openKnownContact,
       ),
       _ChatsPage(
@@ -548,9 +537,9 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
             onDestinationSelected: (value) => setState(() => _tab = value),
             destinations: const <NavigationDestination>[
               NavigationDestination(
-                icon: Icon(Icons.dialpad_outlined),
-                selectedIcon: Icon(Icons.dialpad_rounded),
-                label: 'Звонки',
+                icon: Icon(Icons.people_outline_rounded),
+                selectedIcon: Icon(Icons.people_rounded),
+                label: 'Контакты',
               ),
               NavigationDestination(
                 icon: Icon(Icons.chat_bubble_outline_rounded),
@@ -629,155 +618,176 @@ class _PageHeader extends StatelessWidget {
   );
 }
 
-class _DialerPage extends StatelessWidget {
-  final String value;
+class _ContactsHomePage extends StatefulWidget {
   final List<CgContact> contacts;
-  final ValueChanged<String> onDigit;
-  final VoidCallback onBackspace;
-  final VoidCallback onClear;
-  final Future<void> Function() onContacts;
-  final Future<void> Function() onChat;
-  final Future<void> Function() onAudio;
-  final Future<void> Function() onVideo;
+  final List<CgTunnel> chats;
+  final Future<void> Function() onInvite;
+  final Future<void> Function(CgTunnel chat, {String initialAction}) onOpenChat;
   final Future<void> Function(CgContact contact, String action) onKnownContact;
 
-  const _DialerPage({
-    required this.value,
+  const _ContactsHomePage({
     required this.contacts,
-    required this.onDigit,
-    required this.onBackspace,
-    required this.onClear,
-    required this.onContacts,
-    required this.onChat,
-    required this.onAudio,
-    required this.onVideo,
+    required this.chats,
+    required this.onInvite,
+    required this.onOpenChat,
     required this.onKnownContact,
   });
 
   @override
+  State<_ContactsHomePage> createState() => _ContactsHomePageState();
+}
+
+class _ContactsHomePageState extends State<_ContactsHomePage> {
+  final TextEditingController _search = TextEditingController();
+
+  @override
   Widget build(BuildContext context) {
-    final recent = contacts.take(6).toList();
+    final query = _search.text.trim().toLowerCase();
+    final contacts = widget.contacts.where((contact) {
+      if (query.isEmpty) return true;
+      return contact.nickname.toLowerCase().contains(query);
+    }).toList();
+    final recentChats = widget.chats.take(5).toList();
+
     return SafeArea(
       bottom: false,
       child: CustomScrollView(
         slivers: [
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: _PageHeader(
-              title: 'Чернограм',
-              subtitle: 'Выбери контакт или набери номер',
+              title: 'Контакты',
+              subtitle: 'Только реальные контакты Чернограма',
+              trailing: IconButton.filled(
+                tooltip: 'Пригласить человека',
+                onPressed: widget.onInvite,
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+              ),
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+            sliver: SliverToBoxAdapter(
+              child: TextField(
+                controller: _search,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'Найти контакт',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: () {
+                            _search.clear();
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
             sliver: SliverToBoxAdapter(
               child: LightGlass(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-                child: Column(
+                padding: const EdgeInsets.all(16),
+                borderRadius: BorderRadius.circular(26),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Контакты телефона',
-                          onPressed: onContacts,
-                          icon: const Icon(Icons.contacts_rounded),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onLongPress: onClear,
-                            child: Text(
-                              value.isEmpty ? 'Номер телефона' : value,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              style: TextStyle(
-                                fontSize: value.isEmpty ? 19 : 30,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: value.isEmpty ? 0 : 1.2,
-                                color: value.isEmpty
-                                    ? Theme.of(context).colorScheme.onSurface
-                                          .withValues(alpha: .38)
-                                    : null,
-                              ),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Удалить цифру',
-                          onPressed: value.isEmpty ? null : onBackspace,
-                          onLongPress: onClear,
-                          icon: const Icon(Icons.backspace_outlined),
-                        ),
-                      ],
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: LightChatColors.violet.withValues(alpha: .18),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(Icons.link_rounded),
                     ),
-                    const SizedBox(height: 12),
-                    _DialPad(onDigit: onDigit),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _RoundAction(
-                          icon: Icons.chat_bubble_rounded,
-                          label: 'Написать',
-                          color: LightChatColors.violet,
-                          onTap: onChat,
-                        ),
-                        _RoundAction(
-                          icon: Icons.call_rounded,
-                          label: 'Позвонить',
-                          color: LightChatColors.mint,
-                          large: true,
-                          onTap: onAudio,
-                        ),
-                        _RoundAction(
-                          icon: Icons.videocam_rounded,
-                          label: 'Видео',
-                          color: LightChatColors.cyan,
-                          onTap: onVideo,
-                        ),
-                      ],
+                    const SizedBox(width: 13),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Добавить человека',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Выбери контакт телефона и отправь ему защищённую ссылку. После принятия появятся чат и звонки.',
+                            style: TextStyle(fontSize: 11.5, height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton.filled(
+                      onPressed: widget.onInvite,
+                      icon: const Icon(Icons.arrow_forward_rounded),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
             sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  const Text(
-                    'Последние',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: onContacts,
-                    icon: const Icon(Icons.contacts_outlined, size: 18),
-                    label: const Text('Контакты'),
-                  ),
-                ],
+              child: Text(
+                'Люди в Чернограме',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
               ),
             ),
           ),
-          if (recent.isEmpty)
-            const SliverToBoxAdapter(child: _EmptyRecent())
+          if (contacts.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+                child: LightGlass(
+                  padding: const EdgeInsets.all(20),
+                  borderRadius: BorderRadius.circular(26),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.people_outline_rounded, size: 46),
+                      const SizedBox(height: 10),
+                      Text(
+                        query.isEmpty
+                            ? 'Контактов Чернограма пока нет'
+                            : 'Контакт не найден',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        query.isEmpty
+                            ? 'Пригласи человека один раз — контакт и диалог сохранятся.'
+                            : 'Измени запрос или очисти поиск.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: .58),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 110),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
               sliver: SliverList.builder(
-                itemCount: recent.length,
+                itemCount: contacts.length,
                 itemBuilder: (context, index) {
-                  final contact = recent[index];
+                  final contact = contacts[index];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 7),
                     child: LightGlass(
                       padding: EdgeInsets.zero,
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(26),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.fromLTRB(12, 5, 6, 5),
+                        contentPadding: const EdgeInsets.fromLTRB(12, 6, 5, 6),
                         leading: ChernogramAvatar(
-                          size: 48,
+                          size: 50,
                           seed: contact.id,
                           avatarBase64: contact.avatarBase64,
                         ),
@@ -785,147 +795,107 @@ class _DialerPage extends StatelessWidget {
                           contact.nickname,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
-                        subtitle: const Text('Чернограм'),
+                        subtitle: const Text('Контакт Чернограма'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               tooltip: 'Написать',
-                              onPressed: () => onKnownContact(contact, 'chat'),
+                              onPressed: () =>
+                                  widget.onKnownContact(contact, 'chat'),
                               icon: const Icon(
                                 Icons.chat_bubble_outline_rounded,
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Позвонить',
-                              onPressed: () => onKnownContact(contact, 'audio'),
+                              tooltip: 'Аудиозвонок',
+                              onPressed: () =>
+                                  widget.onKnownContact(contact, 'audio'),
                               icon: const Icon(Icons.call_outlined),
+                            ),
+                            IconButton(
+                              tooltip: 'Видеозвонок',
+                              onPressed: () =>
+                                  widget.onKnownContact(contact, 'video'),
+                              icon: const Icon(Icons.videocam_outlined),
                             ),
                           ],
                         ),
+                        onTap: () => widget.onKnownContact(contact, 'chat'),
                       ),
                     ),
                   );
                 },
               ),
             ),
+          if (recentChats.isNotEmpty) ...[
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  'Последние диалоги',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 110),
+              sliver: SliverList.builder(
+                itemCount: recentChats.length,
+                itemBuilder: (context, index) {
+                  final chat = recentChats[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 7),
+                    child: LightGlass(
+                      padding: EdgeInsets.zero,
+                      borderRadius: BorderRadius.circular(26),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+                        leading: ChernogramAvatar(
+                          size: 48,
+                          seed: chat.id,
+                          avatarBase64: chat.avatarBase64,
+                        ),
+                        title: Text(
+                          chat.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        subtitle: Text(
+                          chat.messages.isEmpty
+                              ? 'Открыть диалог'
+                              : chat.messages.last.text.trim().isEmpty
+                              ? 'Вложение или звонок'
+                              : chat.messages.last.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 15,
+                        ),
+                        onTap: () => widget.onOpenChat(chat),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ] else
+            const SliverToBoxAdapter(child: SizedBox(height: 110)),
         ],
       ),
     );
   }
-}
-
-class _DialPad extends StatelessWidget {
-  final ValueChanged<String> onDigit;
-
-  const _DialPad({required this.onDigit});
-
-  static const List<(String, String)> _keys = <(String, String)>[
-    ('1', ''),
-    ('2', 'ABC'),
-    ('3', 'DEF'),
-    ('4', 'GHI'),
-    ('5', 'JKL'),
-    ('6', 'MNO'),
-    ('7', 'PQRS'),
-    ('8', 'TUV'),
-    ('9', 'WXYZ'),
-    ('*', ''),
-    ('0', '+'),
-    ('#', ''),
-  ];
 
   @override
-  Widget build(BuildContext context) => GridView.builder(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 3,
-      mainAxisExtent: 64,
-      mainAxisSpacing: 5,
-      crossAxisSpacing: 16,
-    ),
-    itemCount: _keys.length,
-    itemBuilder: (context, index) {
-      final key = _keys[index];
-      return Material(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: .36),
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => onDigit(key.$1),
-          onLongPress: key.$1 == '0' ? () => onDigit('+') : null,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  key.$1,
-                  style: const TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (key.$2.isNotEmpty)
-                  Text(
-                    key.$2,
-                    style: TextStyle(
-                      fontSize: 8,
-                      letterSpacing: 1.4,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: .46),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-class _RoundAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final Future<void> Function() onTap;
-  final bool large;
-
-  const _RoundAction({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.large = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Material(
-        color: color,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox.square(
-            dimension: large ? 66 : 57,
-            child: Icon(icon, color: Colors.white, size: large ? 31 : 27),
-          ),
-        ),
-      ),
-      const SizedBox(height: 6),
-      Text(
-        label,
-        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
-      ),
-    ],
-  );
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 }
 
 class _ChatsPage extends StatefulWidget {
