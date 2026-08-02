@@ -8,53 +8,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'account_access.dart';
 import 'android_data_first.dart';
 import 'app_navigation.dart';
+import 'background_runtime.dart';
 import 'brand.dart';
 import 'update_service.dart';
 import 'windows_desktop_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows) {
-    await _prepareWindowsBuild67Storage();
+  if (Platform.isAndroid) {
+    await CgBackgroundRuntime.initialize();
   }
   runApp(const ChernogramApp());
-}
-
-Future<void> _prepareWindowsBuild67Storage() async {
-  final appData = Platform.environment['APPDATA'];
-  if (appData == null || appData.trim().isEmpty) return;
-  final directory = Directory('$appData\\com.example\\chernogram');
-  final preferences = File('${directory.path}\\shared_preferences.json');
-  final marker = File('${directory.path}\\windows-build67-storage-migrated.flag');
-  try {
-    await directory.create(recursive: true);
-    if (!await marker.exists() && await preferences.exists()) {
-      final stamp = DateTime.now()
-          .toUtc()
-          .toIso8601String()
-          .replaceAll(RegExp(r'[:.]'), '-');
-      final backup = File(
-        '${directory.path}\\shared_preferences.before-build67-$stamp.json',
-      );
-      try {
-        await preferences.rename(backup.path);
-      } catch (_) {
-        await preferences.copy(backup.path);
-        await preferences.delete();
-      }
-      await marker.writeAsString(backup.path, flush: true);
-    }
-  } catch (error, stackTrace) {
-    try {
-      final log = File('${Directory.systemTemp.path}\\chernogram-startup.log');
-      await log.writeAsString(
-        '${DateTime.now().toIso8601String()} storage migration failed: '
-        '$error\n$stackTrace\n',
-        mode: FileMode.append,
-        flush: true,
-      );
-    } catch (_) {}
-  }
 }
 
 class ChernogramApp extends StatefulWidget {
@@ -64,7 +28,8 @@ class ChernogramApp extends StatefulWidget {
   State<ChernogramApp> createState() => _ChernogramAppState();
 }
 
-class _ChernogramAppState extends State<ChernogramApp> {
+class _ChernogramAppState extends State<ChernogramApp>
+    with WidgetsBindingObserver {
   bool? _ru;
   bool _darkMode = true;
   bool _updateScheduled = false;
@@ -72,7 +37,16 @@ class _ChernogramAppState extends State<ChernogramApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    CgBackgroundRuntime.setAppVisible(true);
     unawaited(_loadSettings());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    CgBackgroundRuntime.setAppVisible(
+      state == AppLifecycleState.resumed,
+    );
   }
 
   SystemUiOverlayStyle _overlay(bool dark) => SystemUiOverlayStyle(
@@ -94,19 +68,9 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   Future<void> _loadSettings() async {
-    if (Platform.isWindows) {
-      _applySystemUi(true);
-      if (!mounted) return;
-      setState(() {
-        _ru = true;
-        _darkMode = true;
-      });
-      _scheduleUpdateCheck();
-      return;
-    }
     try {
       final prefs = await SharedPreferences.getInstance().timeout(
-        const Duration(seconds: 6),
+        const Duration(seconds: 8),
       );
       final dark = prefs.getBool('dark_mode') ?? true;
       _applySystemUi(dark);
@@ -129,7 +93,6 @@ class _ChernogramAppState extends State<ChernogramApp> {
   Future<void> _toggleLanguage() async {
     final next = !(_ru ?? true);
     if (mounted) setState(() => _ru = next);
-    if (Platform.isWindows) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lang', next ? 'ru' : 'en');
@@ -140,7 +103,6 @@ class _ChernogramAppState extends State<ChernogramApp> {
     final next = !_darkMode;
     _applySystemUi(next);
     if (mounted) setState(() => _darkMode = next);
-    if (Platform.isWindows) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('dark_mode', next);
@@ -165,41 +127,38 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   Widget _applicationHome(BuildContext context) {
-    if (Platform.isWindows) {
-      return ChernogramWindowsDesktop(
-        ru: _ru!,
-        darkMode: _darkMode,
-        onToggleTheme: _toggleTheme,
-        onChangeLanguage: _toggleLanguage,
-        onCheckUpdates: () {
-          unawaited(
-            ChernogramUpdater.checkAndPrompt(
-              context,
-              ru: _ru!,
-              manual: true,
-            ),
+    final child = Platform.isWindows
+        ? ChernogramWindowsDesktop(
+            ru: _ru!,
+            darkMode: _darkMode,
+            onToggleTheme: _toggleTheme,
+            onChangeLanguage: _toggleLanguage,
+            onCheckUpdates: () {
+              unawaited(
+                ChernogramUpdater.checkAndPrompt(
+                  context,
+                  ru: _ru!,
+                  manual: true,
+                ),
+              );
+            },
+          )
+        : ChernogramDataFirst(
+            ru: _ru!,
+            darkMode: _darkMode,
+            onToggleTheme: _toggleTheme,
+            onChangeLanguage: _toggleLanguage,
+            onCheckUpdates: () {
+              unawaited(
+                ChernogramUpdater.checkAndPrompt(
+                  context,
+                  ru: _ru!,
+                  manual: true,
+                ),
+              );
+            },
           );
-        },
-      );
-    }
-    return CgAccessGate(
-      ru: _ru!,
-      child: ChernogramDataFirst(
-        ru: _ru!,
-        darkMode: _darkMode,
-        onToggleTheme: _toggleTheme,
-        onChangeLanguage: _toggleLanguage,
-        onCheckUpdates: () {
-          unawaited(
-            ChernogramUpdater.checkAndPrompt(
-              context,
-              ru: _ru!,
-              manual: true,
-            ),
-          );
-        },
-      ),
-    );
+    return CgAccessGate(ru: _ru!, child: child);
   }
 
   @override
@@ -225,5 +184,12 @@ class _ChernogramAppState extends State<ChernogramApp> {
             : Builder(builder: _applicationHome),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    CgBackgroundRuntime.setAppVisible(false);
+    super.dispose();
   }
 }
