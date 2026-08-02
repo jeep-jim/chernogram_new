@@ -16,20 +16,16 @@ android {
     }
 
     defaultConfig {
-        // Lab устанавливается рядом с основной версией и не затрагивает её данные.
-        applicationId = "com.example.chernogram.lab"
+        applicationId = "com.example.chernogram"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
     buildTypes {
         release {
-            // Изолированная тестовая сборка. Публичная подпись здесь не используется.
+            // APK дополнительно подписывается постоянным ключом в GitHub Actions.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
