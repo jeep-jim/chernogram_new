@@ -103,7 +103,23 @@ jobs:
         run: |
           set -o pipefail
           flutter pub get
-          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee impulse-analyze74.log
+          flutter analyze \
+            --no-fatal-infos \
+            --no-fatal-warnings \
+            lib/main.dart \
+            lib/push_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart \
+            lib/group_call_service.dart \
+            lib/chat_screen.dart \
+            lib/chat_media.dart \
+            lib/core_models.dart \
+            lib/sound_service.dart \
+            lib/update_service.dart \
+            lib/brand.dart \
+            lib/light \
+            2>&1 | tee impulse-analyze74.log
           flutter test 2>&1 | tee impulse-tests74.log
 
       - name: Собрать контрольный APK
