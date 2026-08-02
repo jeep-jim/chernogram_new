@@ -1,0 +1,392 @@
+name: Исполнение Чернограм 0.26.0+68 Android и Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/execute-unified-068.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: execute-unified-068
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: feature/unified-android-windows-068
+  FLUTTER_VERSION: 3.44.8
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  android:
+    name: Android build 68
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Применить изменения интерфейса build 68
+        id: patch
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          if ! grep -q "case 'read_receipt'" lib/chat_screen.dart; then
+            python3 tool/apply_unified_068.py 2>&1 | tee android-patch.log
+            STATUS=${PIPESTATUS[0]}
+          else
+            echo "Патч уже применён" | tee android-patch.log
+            STATUS=0
+          fi
+          if [ "$STATUS" -eq 0 ]; then
+            dart format \
+              lib/main.dart \
+              lib/core_models.dart \
+              lib/android_data_first.dart \
+              lib/chat_screen.dart \
+              lib/chat_media.dart \
+              lib/app_monitor.dart \
+              lib/windows_desktop_app.dart \
+              lib/device_identity.dart \
+              lib/device_pairing.dart \
+              lib/client_settings.dart \
+              lib/background_runtime.dart 2>&1 | tee -a android-patch.log
+            STATUS=${PIPESTATUS[0]}
+          fi
+          echo "$STATUS" > android-patch-status.txt
+          exit "$STATUS"
+
+      - name: Скачать и извлечь SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Анализ, тесты и сборка Android
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          (
+            flutter pub get &&
+            flutter analyze --no-fatal-infos --no-fatal-warnings &&
+            flutter test &&
+            flutter build apk --release --target-platform android-arm64
+          ) 2>&1 | tee android-build.log
+          STATUS=${PIPESTATUS[0]}
+          echo "$STATUS" > android-build-status.txt
+          exit "$STATUS"
+
+      - name: Подписать и проверить Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram-0.26.0-build68.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram-0.26.0-build68.apk | tee android-signature.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' android-signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram-0.26.0-build68.apk | tee android-badging.txt
+          grep -q "versionCode='68'" android-badging.txt
+          grep -q "versionName='0.26.0'" android-badging.txt
+          sha256sum chernogram-0.26.0-build68.apk > android-sha256.txt
+
+      - name: Сохранить хвост Android
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "=== PATCH ==="
+            tail -n 160 android-patch.log 2>/dev/null || true
+            echo "=== BUILD ==="
+            tail -n 300 android-build.log 2>/dev/null || true
+            echo "=== BADGING ==="
+            cat android-badging.txt 2>/dev/null || true
+          } > android-tail.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-068-android
+          path: |
+            chernogram-0.26.0-build68.apk
+            android-tail.log
+            android-patch.log
+            android-build.log
+            android-signature.txt
+            android-badging.txt
+            android-sha256.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    name: Windows build 68
+    runs-on: windows-2022
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Применить изменения интерфейса build 68
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          if (-not (Select-String -Path lib/chat_screen.dart -Pattern "case 'read_receipt'" -Quiet)) {
+            python tool/apply_unified_068.py 2>&1 | Tee-Object -FilePath windows-patch.log
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            'Патч уже применён' | Tee-Object -FilePath windows-patch.log
+          }
+          dart format lib/main.dart lib/core_models.dart lib/android_data_first.dart lib/chat_screen.dart lib/chat_media.dart lib/app_monitor.dart lib/windows_desktop_app.dart lib/device_identity.dart lib/device_pairing.dart lib/client_settings.dart lib/background_runtime.dart 2>&1 | Tee-Object -FilePath windows-format.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Создать утверждённую маску Windows
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          @'
+          from PIL import Image, ImageDraw
+          from pathlib import Path
+          import math
+          s=256; im=Image.new('RGBA',(s,s),(7,10,18,255)); d=ImageDraw.Draw(im)
+          colors=['#B9A8FF','#AE98FF','#A087FF','#9277FF','#8668FF','#7B5CFF','#715FFB','#666AF8','#5B78F4','#5088F1','#4599EE','#3BA9EC','#31B7EC','#27C1F3','#20C7FF']
+          for i,c in enumerate(colors):
+              t=i/(len(colors)-1); nx=t*2-1; x=48+t*160; e=math.sqrt(max(0,1-nx*nx)); top=38+(1-e)*25; bottom=124+e*92-abs(nx)*8; w=8
+              if .17<abs(nx)<.72:
+                  d.line((x,top,x,96),fill=c,width=w); d.line((x,116,x,bottom),fill=c,width=w)
+              else: d.line((x,top,x,bottom),fill=c,width=w)
+          p=Path('windows/runner/resources/app_icon.ico'); p.parent.mkdir(parents=True,exist_ok=True); im.save(p,format='ICO',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 make_icon.py
+          python make_icon.py
+
+      - name: Анализ, тесты и сборка Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          flutter config --enable-windows-desktop
+          flutter pub get 2>&1 | Tee-Object -FilePath windows-build.log
+          if ($LASTEXITCODE -eq 0) { flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | Tee-Object -FilePath windows-build.log -Append }
+          if ($LASTEXITCODE -eq 0) { flutter test 2>&1 | Tee-Object -FilePath windows-build.log -Append }
+          if ($LASTEXITCODE -eq 0) { flutter build windows --release 2>&1 | Tee-Object -FilePath windows-build.log -Append }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'chernogram-windows-0.26.0-build68-portable.zip' -Force
+
+      - name: Собрать установщик Windows
+        shell: pwsh
+        run: |
+          $release=(Resolve-Path 'build/windows/x64/runner/Release').Path
+          $icon=(Resolve-Path 'windows/runner/resources/app_icon.ico').Path
+          @"
+          [Setup]
+          AppId={{7D440E55-6347-4EF8-8B49-2868B0D4A068}
+          AppName=Чернограм
+          AppVersion=0.26.0
+          DefaultDirName={autopf}\Чернограм
+          OutputDir=$env:GITHUB_WORKSPACE
+          OutputBaseFilename=Chernogram-Windows-0.26.0-build68-Setup
+          SetupIconFile=$icon
+          UninstallDisplayIcon={app}\chernogram.exe
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          WizardStyle=modern
+          PrivilegesRequired=lowest
+          [Files]
+          Source: "$release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          [Icons]
+          Name: "{autoprograms}\Чернограм"; Filename: "{app}\chernogram.exe"
+          Name: "{autodesktop}\Чернограм"; Filename: "{app}\chernogram.exe"
+          [Run]
+          Filename: "{app}\chernogram.exe"; Description: "Запустить Чернограм"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content installer.iss -Encoding UTF8
+          $iscc='C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-FileHash Chernogram-Windows-0.26.0-build68-Setup.exe -Algorithm SHA256 | Format-List | Out-File windows-sha256.txt
+          Get-FileHash chernogram-windows-0.26.0-build68-portable.zip -Algorithm SHA256 | Format-List | Out-File windows-portable-sha256.txt
+
+      - name: Сохранить хвост Windows
+        if: always()
+        shell: pwsh
+        run: |
+          '=== PATCH ===' | Out-File windows-tail.log
+          if (Test-Path windows-patch.log) { Get-Content windows-patch.log -Tail 160 | Out-File windows-tail.log -Append }
+          '=== FORMAT ===' | Out-File windows-tail.log -Append
+          if (Test-Path windows-format.log) { Get-Content windows-format.log -Tail 120 | Out-File windows-tail.log -Append }
+          '=== BUILD ===' | Out-File windows-tail.log -Append
+          if (Test-Path windows-build.log) { Get-Content windows-build.log -Tail 300 | Out-File windows-tail.log -Append }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-068-windows
+          path: |
+            Chernogram-Windows-0.26.0-build68-Setup.exe
+            chernogram-windows-0.26.0-build68-portable.zip
+            windows-tail.log
+            windows-patch.log
+            windows-format.log
+            windows-build.log
+            windows-sha256.txt
+            windows-portable-sha256.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  report:
+    name: Записать результат build 68
+    if: always()
+    needs: [android, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unified-068-*
+          path: results
+          merge-multiple: false
+
+      - name: Создать короткий отчёт
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANDROID_RESULT='${{ needs.android.result }}'
+          WINDOWS_RESULT='${{ needs.windows.result }}'
+          mkdir -p build-068-report
+          cp results/unified-068-android/android-tail.log build-068-report/android-tail.log 2>/dev/null || true
+          cp results/unified-068-windows/windows-tail.log build-068-report/windows-tail.log 2>/dev/null || true
+          cat > BUILD_068_STATUS.md <<EOF
+          # Чернограм 0.26.0+68 — результат сборки
+
+          Android: ${ANDROID_RESULT}
+          Windows: ${WINDOWS_RESULT}
+          Workflow run: ${GITHUB_RUN_ID}
+          Source: feature/unified-android-windows-068
+          Commit: ${GITHUB_SHA}
+          Checked at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+          Диагностические хвосты:
+          - build-068-report/android-tail.log
+          - build-068-report/windows-tail.log
+          EOF
+
+      - name: Сохранить отчёт в main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add BUILD_068_STATUS.md build-068-report
+          git commit -m "Записать результат Android и Windows build 68 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Опубликовать зелёные сборки
+        if: needs.android.result == 'success' && needs.windows.result == 'success'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK=results/unified-068-android/chernogram-0.26.0-build68.apk
+          EXE=results/unified-068-windows/Chernogram-Windows-0.26.0-build68-Setup.exe
+          ZIP=results/unified-068-windows/chernogram-windows-0.26.0-build68-portable.zip
+          test -s "$APK"
+          test -s "$EXE"
+          test -s "$ZIP"
+          gh release delete chernogram-0.26.0-build68 --cleanup-tag -y || true
+          gh release create chernogram-0.26.0-build68 \
+            "$APK" "$EXE" "$ZIP" \
+            results/unified-068-android/android-sha256.txt \
+            results/unified-068-windows/windows-sha256.txt \
+            results/unified-068-windows/windows-portable-sha256.txt \
+            --target feature/unified-android-windows-068 \
+            --title "Чернограм 0.26.0+68 — Android и Windows" \
+            --notes "Единая тестовая версия: профиль устройства, QR установки и связи с Windows, реакции, удаление, прочтение, онлайн, круглые видео, фоновые сообщения и звонки, комнаты и файлы в десктопной компоновке."
+          gh release delete latest-apk --cleanup-tag -y || true
+          gh release create latest-apk "$APK" \
+            --target feature/unified-android-windows-068 \
+            --title "Чернограм — Android 0.26.0+68" \
+            --notes "Актуальная Android-сборка build 68."
