@@ -5,19 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'account_access.dart';
-import 'android_data_first.dart';
 import 'app_navigation.dart';
-import 'background_runtime.dart';
-import 'brand.dart';
+import 'light/light_chat_app.dart';
+import 'light/light_theme.dart';
 import 'update_service.dart';
 import 'windows_desktop_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isAndroid) {
-    await CgBackgroundRuntime.initialize();
-  }
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const ChernogramApp());
 }
 
@@ -28,37 +24,27 @@ class ChernogramApp extends StatefulWidget {
   State<ChernogramApp> createState() => _ChernogramAppState();
 }
 
-class _ChernogramAppState extends State<ChernogramApp>
-    with WidgetsBindingObserver {
-  bool? _ru;
+class _ChernogramAppState extends State<ChernogramApp> {
   bool _darkMode = true;
+  bool _ready = false;
   bool _updateScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    CgBackgroundRuntime.setAppVisible(true);
+    _applySystemUi(true);
     unawaited(_loadSettings());
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    CgBackgroundRuntime.setAppVisible(
-      state == AppLifecycleState.resumed,
-    );
   }
 
   SystemUiOverlayStyle _overlay(bool dark) => SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
     statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-    systemNavigationBarColor: dark
-        ? ChernogramColors.background
-        : const Color(0xFFF2F5FC),
+    systemNavigationBarColor: Colors.transparent,
     systemNavigationBarIconBrightness: dark
         ? Brightness.light
         : Brightness.dark,
+    systemNavigationBarDividerColor: Colors.transparent,
     systemNavigationBarContrastEnforced: false,
     systemStatusBarContrastEnforced: false,
   );
@@ -68,35 +54,20 @@ class _ChernogramAppState extends State<ChernogramApp>
   }
 
   Future<void> _loadSettings() async {
+    var dark = true;
     try {
       final prefs = await SharedPreferences.getInstance().timeout(
-        const Duration(seconds: 8),
+        const Duration(seconds: 4),
       );
-      final dark = prefs.getBool('dark_mode') ?? true;
-      _applySystemUi(dark);
-      if (!mounted) return;
-      setState(() {
-        _ru = prefs.getString('lang') != 'en';
-        _darkMode = dark;
-      });
-    } catch (_) {
-      _applySystemUi(true);
-      if (!mounted) return;
-      setState(() {
-        _ru = true;
-        _darkMode = true;
-      });
-    }
-    _scheduleUpdateCheck();
-  }
-
-  Future<void> _toggleLanguage() async {
-    final next = !(_ru ?? true);
-    if (mounted) setState(() => _ru = next);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('lang', next ? 'ru' : 'en');
+      dark = prefs.getBool('dark_mode') ?? true;
     } catch (_) {}
+    _applySystemUi(dark);
+    if (!mounted) return;
+    setState(() {
+      _darkMode = dark;
+      _ready = true;
+    });
+    _scheduleUpdateCheck();
   }
 
   Future<void> _toggleTheme() async {
@@ -110,9 +81,9 @@ class _ChernogramAppState extends State<ChernogramApp>
   }
 
   void _scheduleUpdateCheck() {
-    if (_updateScheduled || _ru == null) return;
+    if (_updateScheduled) return;
     _updateScheduled = true;
-    Future<void>.delayed(const Duration(seconds: 3), () {
+    Future<void>.delayed(const Duration(seconds: 4), () {
       if (!mounted) return;
       final context = chernogramNavigatorKey.currentContext;
       if (context == null) {
@@ -121,75 +92,56 @@ class _ChernogramAppState extends State<ChernogramApp>
         return;
       }
       unawaited(
-        ChernogramUpdater.checkAndPrompt(context, ru: _ru!, manual: false),
+        ChernogramUpdater.checkAndPrompt(context, ru: true, manual: false),
       );
     });
   }
 
-  Widget _applicationHome(BuildContext context) {
-    final child = Platform.isWindows
-        ? ChernogramWindowsDesktop(
-            ru: _ru!,
-            darkMode: _darkMode,
-            onToggleTheme: _toggleTheme,
-            onChangeLanguage: _toggleLanguage,
-            onCheckUpdates: () {
-              unawaited(
-                ChernogramUpdater.checkAndPrompt(
-                  context,
-                  ru: _ru!,
-                  manual: true,
-                ),
-              );
-            },
-          )
-        : ChernogramDataFirst(
-            ru: _ru!,
-            darkMode: _darkMode,
-            onToggleTheme: _toggleTheme,
-            onChangeLanguage: _toggleLanguage,
-            onCheckUpdates: () {
-              unawaited(
-                ChernogramUpdater.checkAndPrompt(
-                  context,
-                  ru: _ru!,
-                  manual: true,
-                ),
-              );
-            },
+  Widget _home(BuildContext context) {
+    if (!_ready) return const Center(child: CircularProgressIndicator());
+    if (Platform.isWindows) {
+      return ChernogramWindowsDesktop(
+        ru: true,
+        darkMode: _darkMode,
+        onToggleTheme: _toggleTheme,
+        onChangeLanguage: () {},
+        onCheckUpdates: () {
+          unawaited(
+            ChernogramUpdater.checkAndPrompt(context, ru: true, manual: true),
           );
-    return CgAccessGate(ru: _ru!, child: child);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ready = _ru != null;
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _overlay(_darkMode),
-      child: MaterialApp(
-        navigatorKey: chernogramNavigatorKey,
-        debugShowCheckedModeBanner: false,
-        title: 'Chernogram',
-        theme: chernogramLightTheme(),
-        darkTheme: chernogramTheme(),
-        themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-        themeAnimationDuration: Duration.zero,
-        home: !ready
-            ? Scaffold(
-                backgroundColor: _darkMode
-                    ? ChernogramColors.background
-                    : const Color(0xFFF2F5FC),
-                body: const Center(child: ChernogramLogo(size: 148)),
-              )
-            : Builder(builder: _applicationHome),
-      ),
+        },
+      );
+    }
+    return ChernogramLightHome(
+      darkMode: _darkMode,
+      onToggleTheme: _toggleTheme,
+      onCheckUpdates: () {
+        unawaited(
+          ChernogramUpdater.checkAndPrompt(context, ru: true, manual: true),
+        );
+      },
     );
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    CgBackgroundRuntime.setAppVisible(false);
-    super.dispose();
-  }
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: _overlay(_darkMode),
+    child: MaterialApp(
+      navigatorKey: chernogramNavigatorKey,
+      debugShowCheckedModeBanner: false,
+      title: 'Чернограм',
+      theme: lightChatTheme(Brightness.light),
+      darkTheme: lightChatTheme(Brightness.dark),
+      themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: const Duration(milliseconds: 180),
+      home: LightBackdrop(
+        dark: _darkMode,
+        child: Builder(builder: _home),
+      ),
+      builder: (context, child) => LightBackdrop(
+        dark: _darkMode,
+        child: child ?? const SizedBox.shrink(),
+      ),
+    ),
+  );
 }
