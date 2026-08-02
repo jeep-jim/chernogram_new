@@ -17,14 +17,14 @@ class OpticalProfile {
       OpticalProfile(id: id, nickname: nickname ?? this.nickname);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id,
-    'nickname': nickname,
-  };
+        'id': id,
+        'nickname': nickname,
+      };
 
   factory OpticalProfile.fromJson(Map<String, dynamic> json) => OpticalProfile(
-    id: json['id']?.toString() ?? opticalRandomId(),
-    nickname: json['nickname']?.toString() ?? 'Устройство',
-  );
+        id: json['id']?.toString() ?? opticalRandomId(),
+        nickname: json['nickname']?.toString() ?? 'Устройство',
+      );
 }
 
 class OpticalMessage {
@@ -38,6 +38,9 @@ class OpticalMessage {
   final String? filePath;
   final int fileSize;
   final String state;
+  final bool deleted;
+  final Map<String, List<String>> reactions;
+  final List<String> readBy;
 
   const OpticalMessage({
     required this.id,
@@ -50,50 +53,82 @@ class OpticalMessage {
     this.filePath,
     this.fileSize = 0,
     this.state = 'local',
+    this.deleted = false,
+    this.reactions = const <String, List<String>>{},
+    this.readBy = const <String>[],
   });
 
   bool get isFile => kind == 'file';
+  bool get isRead => readBy.isNotEmpty;
 
-  OpticalMessage copyWith({String? filePath, String? state}) => OpticalMessage(
-    id: id,
-    senderId: senderId,
-    senderName: senderName,
-    sentAt: sentAt,
-    kind: kind,
-    text: text,
-    fileName: fileName,
-    filePath: filePath ?? this.filePath,
-    fileSize: fileSize,
-    state: state ?? this.state,
-  );
+  OpticalMessage copyWith({
+    String? filePath,
+    String? state,
+    bool? deleted,
+    Map<String, List<String>>? reactions,
+    List<String>? readBy,
+  }) =>
+      OpticalMessage(
+        id: id,
+        senderId: senderId,
+        senderName: senderName,
+        sentAt: sentAt,
+        kind: kind,
+        text: text,
+        fileName: fileName,
+        filePath: filePath ?? this.filePath,
+        fileSize: fileSize,
+        state: state ?? this.state,
+        deleted: deleted ?? this.deleted,
+        reactions: reactions ?? this.reactions,
+        readBy: readBy ?? this.readBy,
+      );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id,
-    'senderId': senderId,
-    'senderName': senderName,
-    'sentAt': sentAt.toUtc().toIso8601String(),
-    'kind': kind,
-    'text': text,
-    'fileName': fileName,
-    'filePath': filePath,
-    'fileSize': fileSize,
-    'state': state,
-  };
+        'id': id,
+        'senderId': senderId,
+        'senderName': senderName,
+        'sentAt': sentAt.toUtc().toIso8601String(),
+        'kind': kind,
+        'text': text,
+        'fileName': fileName,
+        'filePath': filePath,
+        'fileSize': fileSize,
+        'state': state,
+        'deleted': deleted,
+        'reactions': reactions,
+        'readBy': readBy,
+      };
 
-  factory OpticalMessage.fromJson(Map<String, dynamic> json) => OpticalMessage(
-    id: json['id']?.toString() ?? opticalRandomId(),
-    senderId: json['senderId']?.toString() ?? '',
-    senderName: json['senderName']?.toString() ?? 'Устройство',
-    sentAt:
-        DateTime.tryParse(json['sentAt']?.toString() ?? '')?.toLocal() ??
-        DateTime.now(),
-    kind: json['kind']?.toString() ?? 'text',
-    text: json['text']?.toString() ?? '',
-    fileName: json['fileName']?.toString(),
-    filePath: json['filePath']?.toString(),
-    fileSize: int.tryParse(json['fileSize']?.toString() ?? '') ?? 0,
-    state: json['state']?.toString() ?? 'local',
-  );
+  factory OpticalMessage.fromJson(Map<String, dynamic> json) {
+    final reactionMap = <String, List<String>>{};
+    final rawReactions = json['reactions'];
+    if (rawReactions is Map) {
+      for (final entry in rawReactions.entries) {
+        reactionMap[entry.key.toString()] = ((entry.value as List?) ?? const [])
+            .map((item) => item.toString())
+            .toList();
+      }
+    }
+    return OpticalMessage(
+      id: json['id']?.toString() ?? opticalRandomId(),
+      senderId: json['senderId']?.toString() ?? '',
+      senderName: json['senderName']?.toString() ?? 'Устройство',
+      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')?.toLocal() ??
+          DateTime.now(),
+      kind: json['kind']?.toString() ?? 'text',
+      text: json['text']?.toString() ?? '',
+      fileName: json['fileName']?.toString(),
+      filePath: json['filePath']?.toString(),
+      fileSize: int.tryParse(json['fileSize']?.toString() ?? '') ?? 0,
+      state: json['state']?.toString() ?? 'local',
+      deleted: json['deleted'] == true,
+      reactions: reactionMap,
+      readBy: ((json['readBy'] as List?) ?? const <dynamic>[])
+          .map((item) => item.toString())
+          .toList(),
+    );
+  }
 }
 
 class OpticalRoom {
@@ -124,27 +159,28 @@ class OpticalRoom {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'id': id,
-    'name': name,
-    'secretBase64': secretBase64,
-    'createdAt': createdAt.toUtc().toIso8601String(),
-    'messages': messages.map((message) => message.toJson()).toList(),
-  };
+        'id': id,
+        'name': name,
+        'secretBase64': secretBase64,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'messages': messages.map((message) => message.toJson()).toList(),
+      };
 
   factory OpticalRoom.fromJson(Map<String, dynamic> json) => OpticalRoom(
-    id: json['id']?.toString() ?? opticalRandomId(),
-    name: json['name']?.toString() ?? 'Оптическая комната',
-    secretBase64: json['secretBase64']?.toString() ?? '',
-    createdAt:
-        DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toLocal() ??
-        DateTime.now(),
-    messages: ((json['messages'] as List?) ?? const <dynamic>[])
-        .whereType<Map>()
-        .map(
-          (value) => OpticalMessage.fromJson(Map<String, dynamic>.from(value)),
-        )
-        .toList(),
-  );
+        id: json['id']?.toString() ?? opticalRandomId(),
+        name: json['name']?.toString() ?? 'Оптическая комната',
+        secretBase64: json['secretBase64']?.toString() ?? '',
+        createdAt:
+            DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toLocal() ??
+                DateTime.now(),
+        messages: ((json['messages'] as List?) ?? const <dynamic>[])
+            .whereType<Map>()
+            .map(
+              (value) =>
+                  OpticalMessage.fromJson(Map<String, dynamic>.from(value)),
+            )
+            .toList(),
+      );
 }
 
 class OpticalReceivedPayload {
