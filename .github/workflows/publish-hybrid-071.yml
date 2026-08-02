@@ -1,0 +1,279 @@
+name: Чернограм Hybrid 0.31.0+71 — удалённый чат
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-hybrid-071.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-hybrid-071
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: experiment/hybrid-chat-071
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.31.0
+  VERSION_CODE: 71
+  RELEASE_TAG: chernogram-hybrid-0.31.0-build71
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  build_publish:
+    name: Собрать и опубликовать Hybrid APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить ветку Hybrid
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Отформатировать и сохранить Hybrid-код
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart format \
+            lib/main.dart \
+            lib/hybrid \
+            lib/optical/optical_models.dart
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart lib/hybrid lib/optical/optical_models.dart
+          if ! git diff --cached --quiet; then
+            git commit -m "Отформатировать Hybrid build 71 [skip ci]"
+            git push origin HEAD:${SOURCE_REF}
+          fi
+
+      - name: Проверить обязательные функции build 71
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'version: 0.31.0+71' pubspec.yaml
+          grep -q 'ChernogramHybridHome' lib/main.dart
+          grep -q 'InternetRelay.open' lib/hybrid/hybrid_app.dart
+          grep -q 'sendMessage' lib/hybrid/hybrid_app.dart
+          grep -q 'OpticalTransmitScreen' lib/hybrid/hybrid_app.dart
+          grep -q 'Проверить обновления' lib/hybrid/hybrid_app.dart
+          grep -q 'HybridTheme.dark' lib/main.dart
+          grep -q 'android:icon="@drawable/chernogram_launcher_icon"' android/app/src/main/AndroidManifest.xml
+          grep -q 'useLegacyPackaging = true' android/app/build.gradle.kts
+          grep -q 'abiFilters += "arm64-v8a"' android/app/build.gradle.kts
+
+      - name: Скачать и извлечь официальные библиотеки SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Анализ, тесты и сборка
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee hybrid-build71.log
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram-hybrid.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram-hybrid.apk | tee hybrid-signature71.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' hybrid-signature71.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram-hybrid.apk | tee hybrid-badging71.txt
+          grep -q "package: name='com.example.chernogram'" hybrid-badging71.txt
+          grep -q "versionCode='71'" hybrid-badging71.txt
+          grep -q "versionName='0.31.0'" hybrid-badging71.txt
+          grep -q "application-label:'Чернограм'" hybrid-badging71.txt
+          unzip -l chernogram-hybrid.apk | tee hybrid-files71.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' hybrid-files71.txt
+          ! grep -q 'lib/x86_64/' hybrid-files71.txt
+          ! grep -q 'lib/armeabi-v7a/' hybrid-files71.txt
+          SIZE=$(stat -c%s chernogram-hybrid.apk)
+          echo "$SIZE" | tee hybrid-size71.txt
+          test "$SIZE" -lt 120000000
+          sha256sum chernogram-hybrid.apk | tee hybrid-sha256-71.txt
+
+      - name: Создать манифест онлайн-обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 hybrid-sha256-71.txt)
+          SIZE=$(cat hybrid-size71.txt)
+          cat > update-hybrid71.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Чернограм Hybrid: удалённые сообщения и файлы через зашифрованный интернет-канал, очередь без сети, оптическая передача как резерв рядом, реакции, удаление, прочтение, онлайн-статусы, две темы, мягкий градиент и прозрачная маска без подложки.",
+            "notesEn": "Chernogram Hybrid: encrypted remote messages and files, offline queue, optical nearby fallback, reactions, deletion, read receipts, presence, two themes, soft gradients and the transparent mask launcher icon."
+          }
+          EOF
+          python3 -m json.tool update-hybrid71.json >/dev/null
+
+      - name: Опубликовать Hybrid 0.31.0+71
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram-hybrid.apk \
+            update-hybrid71.json \
+            hybrid-sha256-71.txt \
+            hybrid-signature71.txt \
+            hybrid-badging71.txt \
+            hybrid-size71.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Hybrid 0.31.0+71 — удалённый чат" \
+            --notes "Android build 71: интернет — основной канал для любого расстояния, оптика — резерв рядом без сети. Новый Hybrid-интерфейс, файлы, очередь, реакции, прочтение, две темы и прозрачная маска."
+          gh release delete latest-apk --cleanup-tag -y || true
+          cp chernogram-hybrid.apk chernogram.apk
+          cp update-hybrid71.json update.json
+          gh release create latest-apk \
+            chernogram.apk \
+            update.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Hybrid — Android 0.31.0+71" \
+            --notes "Актуальная Android-сборка Hybrid build 71."
+
+      - name: Включить онлайн-обновление build 71
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-hybrid71
+          git worktree add -B publish-hybrid71 /tmp/chernogram-main-hybrid71 origin/main
+          cd /tmp/chernogram-main-hybrid71
+          cp "$GITHUB_WORKSPACE/update-hybrid71.json" update.json
+          cat > BUILD_071_STATUS.md <<EOF
+          # Чернограм Hybrid 0.31.0+71 — сборка готова
+
+          Android: success
+          Release: ${RELEASE_TAG}
+          Source: ${SOURCE_REF}
+          Workflow run: ${GITHUB_RUN_ID}
+          APK size bytes: $(cat "$GITHUB_WORKSPACE/hybrid-size71.txt")
+          Published at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json BUILD_071_STATUS.md
+          git commit -m "Опубликовать Чернограм Hybrid 0.31.0+71 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Контрольно скачать онлайн-обновление
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 \
+            -o published-hybrid71.apk \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=71"
+          test "$(sha256sum published-hybrid71.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 hybrid-sha256-71.txt)"
+          test "$(stat -c%s published-hybrid71.apk)" = "$(cat hybrid-size71.txt)"
+
+      - name: Сохранить хвост диагностики
+        if: always()
+        shell: bash
+        run: |
+          tail -n 400 hybrid-build71.log 2>/dev/null > hybrid-build71-tail.log || true
+
+      - name: Выдать APK и диагностику
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-hybrid-0.31.0-build71
+          path: |
+            chernogram-hybrid.apk
+            update-hybrid71.json
+            hybrid-sha256-71.txt
+            hybrid-signature71.txt
+            hybrid-badging71.txt
+            hybrid-size71.txt
+            hybrid-build71.log
+            hybrid-build71-tail.log
+          if-no-files-found: warn
+          retention-days: 14
