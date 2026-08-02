@@ -1,0 +1,45 @@
+name: Контроль публикации Impulse build 74
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - TRIGGER_PUBLISH_IMPULSE_074.md
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Запустить развёртывание и online update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BEFORE=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow publish-impulse-074.yml \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // 0')
+          gh workflow run publish-impulse-074.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          for attempt in $(seq 1 25); do
+            sleep 2
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow publish-impulse-074.yml \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ] && [ "$RUN_ID" != "$BEFORE" ]; then
+              echo "Impulse build 74 publish: $RUN_ID"
+              exit 0
+            fi
+          done
+          exit 1
