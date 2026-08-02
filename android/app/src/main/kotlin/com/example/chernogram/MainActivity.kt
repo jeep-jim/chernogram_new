@@ -8,6 +8,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.provider.Settings
 import chat.simplex.common.platform.SimplexLabCore
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -41,6 +42,21 @@ class MainActivity : AudioServiceActivity() {
                     result.success(null)
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "chernogram/device"
+        ).setMethodCallHandler { call, result ->
+            if (call.method == "getBindingId") {
+                val androidId = Settings.Secure.getString(
+                    contentResolver,
+                    Settings.Secure.ANDROID_ID
+                ) ?: "unknown-android"
+                result.success("android|$androidId")
+            } else {
+                result.notImplemented()
             }
         }
 
