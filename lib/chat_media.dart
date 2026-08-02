@@ -509,6 +509,9 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
         ),
       );
     }
+    if (attachment.kind == 'circle') {
+      return _CgInlineCircle(fileFuture: _ensure());
+    }
     if (CgMediaStore.isAudio(attachment)) {
       return Container(
         width: 278,
@@ -630,6 +633,103 @@ class _CgInlineAttachmentState extends State<CgInlineAttachment> {
         ),
       ),
     );
+  }
+}
+
+class _CgInlineCircle extends StatefulWidget {
+  final Future<File?> fileFuture;
+
+  const _CgInlineCircle({required this.fileFuture});
+
+  @override
+  State<_CgInlineCircle> createState() => _CgInlineCircleState();
+}
+
+class _CgInlineCircleState extends State<_CgInlineCircle> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    final file = await widget.fileFuture;
+    if (file == null || !await file.exists()) return;
+    final controller = VideoPlayerController.file(file);
+    await controller.initialize();
+    await controller.setLooping(true);
+    await controller.setVolume(0);
+    await controller.play();
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+    setState(() {
+      _controller = controller;
+      _ready = true;
+    });
+  }
+
+  Future<void> _toggle() async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      await controller.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return GestureDetector(
+      onTap: _toggle,
+      child: SizedBox.square(
+        dimension: 176,
+        child: ClipOval(
+          child: ColoredBox(
+            color: Colors.black,
+            child: !_ready || controller == null
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: controller.value.size.width,
+                          height: controller.value.size.height,
+                          child: VideoPlayer(controller),
+                        ),
+                      ),
+                      if (!controller.value.isPlaying)
+                        const Center(
+                          child: CircleAvatar(
+                            radius: 25,
+                            backgroundColor: Colors.black54,
+                            child: Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller?.dispose());
+    super.dispose();
   }
 }
 

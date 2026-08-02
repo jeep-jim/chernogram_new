@@ -16,12 +16,13 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_access.dart';
-import 'agent_screen.dart';
 import 'app_monitor.dart';
 import 'brand.dart';
 import 'chat_media.dart';
 import 'chat_screen.dart';
+import 'client_settings.dart';
 import 'core_models.dart';
+import 'device_pairing.dart';
 import 'legacy_v16_features.dart';
 import 'permission_center.dart';
 
@@ -123,6 +124,14 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
   }
 
   Future<void> _handleUri(Uri uri) async {
+    if (await sendRoomToDesktopPairing(
+      context: context,
+      ru: widget.ru,
+      uri: uri,
+      tunnels: _tunnels,
+    )) {
+      return;
+    }
     final token = _tokenFromUri(uri);
     if (token != null) await _joinToken(token);
   }
@@ -477,8 +486,17 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
       MaterialPageRoute(builder: (_) => CgInviteQrScanner(ru: widget.ru)),
     );
     if (raw == null || raw.trim().isEmpty) return;
+    final uri = Uri.tryParse(raw.trim());
+    if (uri != null &&
+        await sendRoomToDesktopPairing(
+          context: context,
+          ru: widget.ru,
+          uri: uri,
+          tunnels: _tunnels,
+        )) {
+      return;
+    }
     var token = raw.trim();
-    final uri = Uri.tryParse(token);
     if (uri != null) token = _tokenFromUri(uri) ?? token;
     await _joinToken(token);
   }
@@ -538,6 +556,7 @@ class _ChernogramDataFirstState extends State<ChernogramDataFirst> {
         ru: widget.ru,
         profile: _profile!,
         tunnels: _tunnels,
+        contacts: _contacts,
         onOpen: _openTunnel,
         onCreate: _createAndOpen,
         onContacts: _openContacts,
@@ -634,6 +653,7 @@ class _ChatsPage extends StatefulWidget {
   final bool ru;
   final CgProfile profile;
   final List<CgTunnel> tunnels;
+  final List<CgContact> contacts;
   final Future<void> Function(CgTunnel tunnel) onOpen;
   final VoidCallback onCreate;
   final VoidCallback onContacts;
@@ -642,6 +662,7 @@ class _ChatsPage extends StatefulWidget {
     required this.ru,
     required this.profile,
     required this.tunnels,
+    required this.contacts,
     required this.onOpen,
     required this.onCreate,
     required this.onContacts,
@@ -662,6 +683,15 @@ class _ChatsPageState extends State<_ChatsPage> {
     authors.add(tunnel.ownerId);
     return authors.length > 2 ||
         tunnel.messages.any((m) => m.meta['group'] == true);
+  }
+
+  bool _online(CgTunnel tunnel) {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 55));
+    return widget.contacts.any(
+      (contact) =>
+          contact.tunnelIds.contains(tunnel.id) &&
+          contact.lastSeenAt.isAfter(cutoff),
+    );
   }
 
   String _preview(CgTunnel tunnel) {
@@ -743,6 +773,7 @@ class _ChatsPageState extends State<_ChatsPage> {
                   itemBuilder: (context, index) {
                     final tunnel = tunnels[index];
                     final group = _isGroup(tunnel);
+                    final online = _online(tunnel);
                     return Material(
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(22),
@@ -753,14 +784,36 @@ class _ChatsPageState extends State<_ChatsPage> {
                           padding: const EdgeInsets.all(14),
                           child: Row(
                             children: [
-                              if (group) ...[
-                                ChernogramAvatar(
-                                  size: 48,
-                                  seed: tunnel.id,
-                                  avatarBase64: tunnel.avatarBase64,
-                                ),
-                                const SizedBox(width: 12),
-                              ],
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ChernogramAvatar(
+                                    size: 48,
+                                    seed: tunnel.id,
+                                    avatarBase64: tunnel.avatarBase64,
+                                  ),
+                                  if (online)
+                                    Positioned(
+                                      right: -1,
+                                      bottom: -1,
+                                      child: Container(
+                                        width: 14,
+                                        height: 14,
+                                        decoration: BoxDecoration(
+                                          color: ChernogramColors.success,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.surface,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1497,7 +1550,9 @@ class _FilesPageState extends State<_FilesPage> {
                     icon: const Icon(Icons.ios_share_rounded),
                   ),
                   IconButton(
-                    tooltip: widget.ru ? 'Удалить локальные копии' : 'Remove local copies',
+                    tooltip: widget.ru
+                        ? 'Удалить локальные копии'
+                        : 'Remove local copies',
                     onPressed: () => _clearSelectedLocalFiles(entries),
                     icon: const Icon(Icons.delete_outline_rounded),
                   ),
@@ -1542,10 +1597,14 @@ class _FilesPageState extends State<_FilesPage> {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    final selected = _selectedFileIds.contains(entry.message.id);
+                    final selected = _selectedFileIds.contains(
+                      entry.message.id,
+                    );
                     return Material(
                       color: selected
-                          ? Theme.of(context).colorScheme.primary.withValues(alpha: .14)
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: .14)
                           : Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(22),
                       child: InkWell(
@@ -2209,19 +2268,16 @@ class _ProfilePage extends StatelessWidget {
       const SizedBox(height: 8),
       _ProfileAction(
         icon: Icons.devices_rounded,
-        title: ru ? 'Два устройства' : 'Two devices',
+        title: ru ? 'Связанные устройства' : 'Linked devices',
         subtitle: ru
-            ? 'Один аккаунт — телефон и компьютер.'
-            : 'One account on phone and computer.',
+            ? 'Один профиль на телефонах и Windows.'
+            : 'One profile across phones and Windows.',
         onTap: () {
           unawaited(
             Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                builder: (_) => CgV16TwoDevicesScreen(
-                  ru: ru,
-                  profile: profile,
-                ),
+                builder: (_) => CgV16TwoDevicesScreen(ru: ru, profile: profile),
               ),
             ),
           );
@@ -2239,10 +2295,7 @@ class _ProfilePage extends StatelessWidget {
             Navigator.push<void>(
               context,
               MaterialPageRoute<void>(
-                builder: (_) => CgV16SessionsScreen(
-                  ru: ru,
-                  profile: profile,
-                ),
+                builder: (_) => CgV16SessionsScreen(ru: ru, profile: profile),
               ),
             ),
           );
@@ -2268,43 +2321,34 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       _ProfileAction(
-        icon: Icons.auto_awesome_rounded,
-        title: ru ? 'Агент и автоматизация' : 'Agent and automation',
+        icon: Icons.install_mobile_rounded,
+        title: ru ? 'Поделиться приложением' : 'Share the app',
         subtitle: ru
-            ? 'Помощник, голосовые команды и локальные задачи.'
-            : 'Assistant, voice commands and local tasks.',
-        onTap: () {
-          unawaited(
-            Navigator.push<void>(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => CgAgentScreen(
-                  ru: ru,
-                  profile: profile,
-                  tunnels: tunnels,
-                  privacyLens: privacyLens,
-                  onCreateTunnel: () {},
-                  onTogglePrivacy: () {},
-                ),
-              ),
-            ),
-          );
-        },
+            ? 'QR-код и прямая ссылка на актуальную Android-версию.'
+            : 'QR code and direct link to the current Android version.',
+        onTap: () => showChernogramInstallShare(context, ru: ru),
       ),
       const SizedBox(height: 8),
       _ProfileAction(
-        icon: Icons.install_mobile_rounded,
-        title: ru ? 'Отправить приложение' : 'Share the app',
+        icon: Icons.account_circle_outlined,
+        title: ru ? 'Аккаунт и устройство' : 'Account and device',
         subtitle: ru
-            ? 'Прямая ссылка на установку актуальной Android-версии.'
-            : 'Direct link to install the current Android version.',
-        onTap: () => Share.share(
-          ru
-              ? 'Установить Чернограм: $_androidInstallUrl'
-              : 'Install Chernogram: $_androidInstallUrl',
-        ),
+            ? 'Устойчивый ID устройства и восстановление после переустановки.'
+            : 'Stable device ID and reinstall recovery.',
+        onTap: () => showDeviceAccountSheet(context, ru: ru, profile: profile),
       ),
       const SizedBox(height: 8),
+      if (Platform.isAndroid) ...[
+        _ProfileAction(
+          icon: Icons.notifications_active_outlined,
+          title: ru ? 'Всегда на связи' : 'Always connected',
+          subtitle: ru
+              ? 'Сообщения и звонки при свёрнутом или закрытом окне.'
+              : 'Messages and calls while the window is minimized or closed.',
+          onTap: () => showBackgroundConnectionSettings(context, ru: ru),
+        ),
+        const SizedBox(height: 8),
+      ],
       _ProfileAction(
         icon: Icons.fingerprint_rounded,
         title: ru ? 'Доступ и перенос аккаунта' : 'Access and account transfer',
@@ -2333,14 +2377,14 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 18),
       Text(
-        ru ? 'Приоритет' : 'Priority',
+        ru ? 'О приложении' : 'About',
         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
       ),
       const SizedBox(height: 8),
       Text(
         ru
-            ? 'Быстрые чаты, звонки, видео и передача данных. Агент и функции ИИ удалены из навигации и больше не участвуют в продукте.'
-            : 'Fast chats, calls, video, and data transfer. Agent and AI features are removed from the product flow.',
+            ? 'Чаты, звонки и передача файлов без рекламы и лишних разделов.'
+            : 'Chats, calls, and file exchange without ads or unnecessary sections.',
         style: TextStyle(
           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .62),
           height: 1.45,
@@ -2678,8 +2722,8 @@ class CgPrelandingPlaceholder extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     ru
-                        ? 'Прелендинг подготовлен. Здесь будет короткое объяснение сервиса: быстрые чаты, звонки и свободная передача данных между устройствами без рекламной ленты и ИИ-агента.'
-                        : 'The prelanding entry is prepared. It will explain fast chats, calls, and direct data transfer without an advertising feed or AI agent.',
+                        ? 'Чернограм объединяет быстрые чаты, звонки и передачу данных между устройствами.'
+                        : 'Chernogram combines fast chats, calls, and direct data transfer between devices.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(height: 1.5),
                   ),

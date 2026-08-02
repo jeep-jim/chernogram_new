@@ -219,6 +219,29 @@ class ChernogramAppMonitor {
       final updated = tunnel.copyWith(messages: messages);
       _tunnels[tunnelId] = updated;
       _onTunnelChanged?.call(updated);
+    } else if (action == 'read_receipt') {
+      final id = data['messageId']?.toString() ?? '';
+      final target = tunnel.messages.indexWhere((message) => message.id == id);
+      if (target < 0 || sender.isEmpty) return;
+      final messages = <CgMessage>[...tunnel.messages];
+      var changed = false;
+      for (var index = 0; index <= target; index++) {
+        final message = messages[index];
+        if (message.authorId != profile.id) continue;
+        final readBy = ((message.meta['readBy'] as List?) ?? const <dynamic>[])
+            .map((item) => item.toString())
+            .toSet();
+        if (!readBy.add(sender)) continue;
+        messages[index] = message.copyWith(
+          meta: <String, dynamic>{...message.meta, 'readBy': readBy.toList()},
+        );
+        changed = true;
+      }
+      if (changed) {
+        final updated = tunnel.copyWith(messages: messages);
+        _tunnels[tunnelId] = updated;
+        _onTunnelChanged?.call(updated);
+      }
     } else if (action == 'tunnel_update' && sender == tunnel.ownerId) {
       final revision = int.tryParse(data['revision']?.toString() ?? '') ?? 0;
       if (revision < tunnel.revision) return;
