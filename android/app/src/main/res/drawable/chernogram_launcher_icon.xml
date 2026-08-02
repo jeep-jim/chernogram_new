@@ -3,9 +3,6 @@
     android:height="108dp"
     android:viewportWidth="1080"
     android:viewportHeight="1080">
-    <path
-        android:fillColor="#070A12"
-        android:pathData="M180,70 H900 A110,110 0,0 1,1010 180 V900 A110,110 0,0 1,900 1010 H180 A110,110 0,0 1,70 900 V180 A110,110 0,0 1,180 70 Z" />
     <path android:fillColor="@android:color/transparent" android:strokeColor="#B9A8FF" android:strokeWidth="28" android:strokeLineCap="round" android:pathData="M300,430 L300,630" />
     <path android:fillColor="@android:color/transparent" android:strokeColor="#AE98FF" android:strokeWidth="28" android:strokeLineCap="round" android:pathData="M335,350 L335,704" />
     <path android:fillColor="@android:color/transparent" android:strokeColor="#A087FF" android:strokeWidth="28" android:strokeLineCap="round" android:pathData="M370,300 L370,410 M370,495 L370,760" />

@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'brand.dart';
+import 'simplex_lab.dart';
 
 const String chernogramProductUrl =
     'https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html';
@@ -178,6 +179,7 @@ Future<void> showChernogramProductInfo(
 }) async {
   final info = await PackageInfo.fromPlatform();
   if (!context.mounted) return;
+  final isLab = info.packageName.endsWith('.lab');
 
   await showModalBottomSheet<void>(
     context: context,
@@ -191,9 +193,9 @@ Future<void> showChernogramProductInfo(
           children: [
             const ChernogramLogo(size: 86),
             const SizedBox(height: 12),
-            const Text(
-              'Чернограм',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+            Text(
+              isLab ? 'Чернограм Лаб' : 'Чернограм',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
             Text(
@@ -207,6 +209,10 @@ Future<void> showChernogramProductInfo(
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (isLab) ...[
+              const SizedBox(height: 16),
+              CgSimplexLabCard(ru: ru),
+            ],
             const SizedBox(height: 17),
             Container(
               padding: const EdgeInsets.all(12),
@@ -230,10 +236,10 @@ Future<void> showChernogramProductInfo(
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
-            const SelectableText(
+            SelectableText(
               chernogramProductUrl,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11),
+              style: const TextStyle(fontSize: 11),
             ),
             const SizedBox(height: 14),
             Row(

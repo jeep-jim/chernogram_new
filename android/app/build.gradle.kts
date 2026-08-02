@@ -25,7 +25,7 @@ android {
 
     buildTypes {
         release {
-            // Prototype signing. A permanent release key will be configured before public distribution.
+            // APK дополнительно подписывается постоянным ключом в GitHub Actions.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
