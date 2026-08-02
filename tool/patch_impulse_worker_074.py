@@ -9,6 +9,8 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 worker = Path('worker/impulse/src/index.ts')
 text = worker.read_text(encoding='utf-8')
+if not text.startswith('import { DurableObject }'):
+    text = 'import { DurableObject } from "cloudflare:workers";\n\n' + text
 
 text = replace_once(
     text,
@@ -108,6 +110,14 @@ core = Path('lib/internet_core.dart')
 text = core.read_text(encoding='utf-8')
 text = replace_once(
     text,
+    """    if (_closed || _connecting || connected) return;
+""",
+    """    if (_closed || _connecting || (_httpReady && _socket != null)) return;
+""",
+    'websocket reconnect condition',
+)
+text = replace_once(
+    text,
     """              'wake': _wakeFor(envelope),
               'ciphertext': encrypted,
 """,
@@ -120,4 +130,18 @@ text = replace_once(
 )
 core.write_text(text, encoding='utf-8')
 
-print('Impulse Worker push patch applied.')
+monitor = Path('lib/app_monitor.dart')
+text = monitor.read_text(encoding='utf-8')
+text = replace_once(
+    text,
+    """    final monitored = recent.take(8).toList(growable: false);
+""",
+    """    // Every saved direct contact must be registered with Impulse/FCM,
+    // otherwise a quiet old dialog could not wake the phone.
+    final monitored = recent.toList(growable: false);
+""",
+    'monitor every saved contact',
+)
+monitor.write_text(text, encoding='utf-8')
+
+print('Impulse Worker, reconnect and registration patches applied.')
