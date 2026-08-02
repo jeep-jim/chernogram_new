@@ -2,10 +2,10 @@
 
 Android: failure
 Windows: cancelled
-Workflow run: 30735372064
+Workflow run: 30735423821
 Source: feature/unified-android-windows-068
-Commit: 1d06446991450bab71c603702f07ae3c4e797729
-Checked at: 2026-08-02T06:10:42Z
+Commit: c684ab3b37521e6c7c9f2469b5463a315131edb1
+Checked at: 2026-08-02T06:13:33Z
 
 Диагностические хвосты:
 - build-068-report/android-tail.log
