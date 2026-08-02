@@ -166,84 +166,81 @@ class _LightInviteScannerScreenState extends State<LightInviteScannerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          title: const Text('Сканировать QR'),
-          actions: [
-            IconButton(
-              tooltip: 'Вспышка',
-              onPressed: _controller.toggleTorch,
-              icon: const Icon(Icons.flashlight_on_rounded),
-            ),
-            IconButton(
-              tooltip: 'Сменить камеру',
-              onPressed: _controller.switchCamera,
-              icon: const Icon(Icons.cameraswitch_rounded),
-            ),
-          ],
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      title: const Text('Сканировать QR'),
+      actions: [
+        IconButton(
+          tooltip: 'Вспышка',
+          onPressed: _controller.toggleTorch,
+          icon: const Icon(Icons.flashlight_on_rounded),
         ),
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            MobileScanner(controller: _controller, onDetect: _onDetect),
-            IgnorePointer(
-              child: Center(
-                child: Container(
-                  width: 294,
-                  height: 294,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(34),
-                    border: Border.all(
-                      color: const Color(0xFFA997FF),
-                      width: 3,
-                    ),
-                    boxShadow: const <BoxShadow>[
-                      BoxShadow(
-                        color: Color(0x668C7BFF),
-                        blurRadius: 30,
-                        spreadRadius: 2,
-                      ),
-                    ],
+        IconButton(
+          tooltip: 'Сменить камеру',
+          onPressed: _controller.switchCamera,
+          icon: const Icon(Icons.cameraswitch_rounded),
+        ),
+      ],
+    ),
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        MobileScanner(controller: _controller, onDetect: _onDetect),
+        IgnorePointer(
+          child: Center(
+            child: Container(
+              width: 294,
+              height: 294,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(34),
+                border: Border.all(color: const Color(0xFFA997FF), width: 3),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x668C7BFF),
+                    blurRadius: 30,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 18,
+          right: 18,
+          bottom: 28,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xE6191D2A),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _error ?? 'Наведите камеру на QR другого телефона',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              left: 18,
-              right: 18,
-              bottom: 28,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xE6191D2A),
-                  borderRadius: BorderRadius.circular(24),
+                const SizedBox(height: 5),
+                const Text(
+                  'После распознавания контакт и диалог сохранятся автоматически.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 11.5),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _error ?? 'Наведите камеру на QR другого телефона',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    const Text(
-                      'После распознавания контакт и диалог сохранятся автоматически.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, fontSize: 11.5),
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   @override
   void dispose() {

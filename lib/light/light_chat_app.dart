@@ -13,6 +13,7 @@ import '../app_monitor.dart';
 import '../brand.dart';
 import '../chat_screen.dart';
 import '../core_models.dart';
+import 'light_invite_qr.dart';
 import 'light_theme.dart';
 
 const String _landingBase =
@@ -137,18 +138,7 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
       _toast('Ссылка не содержит приглашение Чернограма.');
       return;
     }
-    final existing = _chats.indexWhere((chat) => chat.id == incoming.id);
-    if (existing >= 0) {
-      await _openChat(_chats[existing]);
-      return;
-    }
-    setState(() {
-      _chats.insert(0, incoming);
-      _tab = 1;
-    });
-    await CgStore.saveTunnels(_chats);
-    unawaited(_syncMonitor());
-    if (mounted) await _openChat(incoming);
+    await _acceptIncomingChat(incoming);
   }
 
   void _sortChats() {
@@ -289,6 +279,46 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
     );
   }
 
+  Future<void> _showInviteQr(CgTunnel chat, {String? contactName}) async {
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LightInviteQrScreen(
+          chat: chat,
+          inviteUrl: _inviteUrl(chat),
+          onShare: () => _shareInvite(chat, contactName: contactName),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _acceptIncomingChat(CgTunnel incoming) async {
+    final existing = _chats.indexWhere((chat) => chat.id == incoming.id);
+    if (existing >= 0) {
+      await _openChat(_chats[existing]);
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _chats.insert(0, incoming);
+      _tab = 1;
+    });
+    await CgStore.saveTunnels(_chats);
+    unawaited(_syncMonitor());
+    if (mounted) await _openChat(incoming);
+  }
+
+  Future<void> _scanInviteQr() async {
+    if (!mounted) return;
+    final incoming = await Navigator.push<CgTunnel>(
+      context,
+      MaterialPageRoute(builder: (_) => const LightInviteScannerScreen()),
+    );
+    if (incoming == null || !mounted) return;
+    await _acceptIncomingChat(incoming);
+  }
+
   Future<void> _dialAction(String action) async {
     final number = _normalizePhone(_dialValue);
     if (number.isEmpty) {
@@ -380,14 +410,14 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
       final chat = _newDirectChat('Новый контакт');
       setState(() => _chats.insert(0, chat));
       await CgStore.saveTunnels(_chats);
-      await _shareInvite(chat);
+      await _showInviteQr(chat);
       if (mounted) await _openChat(chat);
       return;
     }
     if (selected.phones.isEmpty) return;
     final phone = _normalizePhone(selected.phones.first.number);
     final chat = await _createPhoneChat(phone, name: selected.displayName);
-    await _shareInvite(chat, contactName: selected.displayName);
+    await _showInviteQr(chat, contactName: selected.displayName);
     if (mounted) await _openChat(chat);
   }
 
@@ -497,6 +527,7 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
         contacts: _knownContacts,
         chats: _chats,
         onInvite: _newChat,
+        onScan: _scanInviteQr,
         onOpenChat: _openChat,
         onKnownContact: _openKnownContact,
       ),
@@ -506,6 +537,7 @@ class _ChernogramLightHomeState extends State<ChernogramLightHome> {
         contacts: _knownContacts,
         onOpen: _openChat,
         onCreate: _newChat,
+        onScan: _scanInviteQr,
         onDelete: _deleteChat,
       ),
       _ProfilePage(
@@ -622,6 +654,7 @@ class _ContactsHomePage extends StatefulWidget {
   final List<CgContact> contacts;
   final List<CgTunnel> chats;
   final Future<void> Function() onInvite;
+  final Future<void> Function() onScan;
   final Future<void> Function(CgTunnel chat, {String initialAction}) onOpenChat;
   final Future<void> Function(CgContact contact, String action) onKnownContact;
 
@@ -629,6 +662,7 @@ class _ContactsHomePage extends StatefulWidget {
     required this.contacts,
     required this.chats,
     required this.onInvite,
+    required this.onScan,
     required this.onOpenChat,
     required this.onKnownContact,
   });
@@ -657,10 +691,21 @@ class _ContactsHomePageState extends State<_ContactsHomePage> {
             child: _PageHeader(
               title: 'Контакты',
               subtitle: 'Только реальные контакты Чернограма',
-              trailing: IconButton.filled(
-                tooltip: 'Пригласить человека',
-                onPressed: widget.onInvite,
-                icon: const Icon(Icons.person_add_alt_1_rounded),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filledTonal(
+                    tooltip: 'Сканировать QR',
+                    onPressed: widget.onScan,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton.filled(
+                    tooltip: 'Пригласить человека',
+                    onPressed: widget.onInvite,
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                  ),
+                ],
               ),
             ),
           ),
@@ -714,15 +759,22 @@ class _ContactsHomePageState extends State<_ContactsHomePage> {
                           ),
                           SizedBox(height: 4),
                           Text(
-                            'Выбери контакт телефона и отправь ему защищённую ссылку. После принятия появятся чат и звонки.',
+                            'Покажи QR или отправь защищённую ссылку. На втором телефоне можно сразу считать QR камерой Чернограма.',
                             style: TextStyle(fontSize: 11.5, height: 1.3),
                           ),
                         ],
                       ),
                     ),
+                    IconButton.filledTonal(
+                      tooltip: 'Сканировать QR',
+                      onPressed: widget.onScan,
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                    ),
+                    const SizedBox(width: 6),
                     IconButton.filled(
+                      tooltip: 'Создать приглашение',
                       onPressed: widget.onInvite,
-                      icon: const Icon(Icons.arrow_forward_rounded),
+                      icon: const Icon(Icons.qr_code_2_rounded),
                     ),
                   ],
                 ),
@@ -904,6 +956,7 @@ class _ChatsPage extends StatefulWidget {
   final List<CgContact> contacts;
   final Future<void> Function(CgTunnel chat, {String initialAction}) onOpen;
   final Future<void> Function() onCreate;
+  final Future<void> Function() onScan;
   final Future<void> Function(CgTunnel chat) onDelete;
 
   const _ChatsPage({
@@ -912,6 +965,7 @@ class _ChatsPage extends StatefulWidget {
     required this.contacts,
     required this.onOpen,
     required this.onCreate,
+    required this.onScan,
     required this.onDelete,
   });
 
@@ -959,10 +1013,21 @@ class _ChatsPageState extends State<_ChatsPage> {
           _PageHeader(
             title: 'Чаты',
             subtitle: '${widget.chats.length} сохранённых диалогов',
-            trailing: IconButton.filled(
-              tooltip: 'Новый чат',
-              onPressed: widget.onCreate,
-              icon: const Icon(Icons.add_rounded),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  tooltip: 'Сканировать QR',
+                  onPressed: widget.onScan,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                ),
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  tooltip: 'Новый чат',
+                  onPressed: widget.onCreate,
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
             ),
           ),
           Padding(
