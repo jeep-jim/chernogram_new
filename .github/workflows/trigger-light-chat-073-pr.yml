@@ -1,0 +1,46 @@
+name: Контроль Light build 73
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - TRIGGER_LIGHT_CHAT_073.md
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    name: Запустить лёгкий Android build 73
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Запустить основной workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BEFORE=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow build-light-chat-073.yml \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // 0')
+          gh workflow run build-light-chat-073.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          for attempt in $(seq 1 20); do
+            sleep 2
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow build-light-chat-073.yml \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ] && [ "$RUN_ID" != "$BEFORE" ]; then
+              echo "Light build 73: $RUN_ID"
+              exit 0
+            fi
+          done
+          echo "Событие принято, но ID сборки ещё не появился."
