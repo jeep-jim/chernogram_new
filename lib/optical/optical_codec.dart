@@ -20,12 +20,12 @@ class OpticalInviteCodec {
   }
 
   static String encodeRoom(OpticalRoom room) => jsonEncode(<String, dynamic>{
-        'v': 1,
-        'k': 'room',
-        'r': room.id,
-        'n': room.name,
-        's': room.secretBase64,
-      });
+    'v': 1,
+    'k': 'room',
+    'r': room.id,
+    'n': room.name,
+    's': room.secretBase64,
+  });
 
   static OpticalRoom? decodeRoom(String raw) {
     try {
@@ -138,12 +138,7 @@ class OpticalTransferCodec {
       'fileName': message.fileName ?? 'file.bin',
       'fileSize': fileBytes.length,
     };
-    return _encode(
-      room: room,
-      kind: 'file',
-      header: header,
-      body: fileBytes,
-    );
+    return _encode(room: room, kind: 'file', header: header, body: fileBytes);
   }
 
   static Future<OpticalEncodedTransfer> _encode({
@@ -242,7 +237,8 @@ class OpticalTransferCodec {
     );
     final kind = header['kind']?.toString() ?? 'text';
     final body = clear.sublist(4 + headerLength);
-    final declaredSize = int.tryParse(header['fileSize']?.toString() ?? '') ?? 0;
+    final declaredSize =
+        int.tryParse(header['fileSize']?.toString() ?? '') ?? 0;
     if (kind == 'file' && declaredSize != body.length) {
       throw FormatException(
         'Размер файла не совпал: ожидалось $declaredSize, получено ${body.length}',
@@ -252,7 +248,8 @@ class OpticalTransferCodec {
       id: header['messageId']?.toString() ?? opticalRandomId(),
       senderId: header['senderId']?.toString() ?? '',
       senderName: header['senderName']?.toString() ?? 'Устройство',
-      sentAt: DateTime.tryParse(header['sentAt']?.toString() ?? '')?.toLocal() ??
+      sentAt:
+          DateTime.tryParse(header['sentAt']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
       kind: kind,
       text: header['text']?.toString() ?? '',
@@ -266,9 +263,8 @@ class OpticalTransferCodec {
   static Future<String> sha256Hex(List<int> bytes) async =>
       _hex((await _hash.hash(bytes)).bytes);
 
-  static String _hex(List<int> bytes) => bytes
-      .map((value) => value.toRadixString(16).padLeft(2, '0'))
-      .join();
+  static String _hex(List<int> bytes) =>
+      bytes.map((value) => value.toRadixString(16).padLeft(2, '0')).join();
 }
 
 class OpticalFrameAccumulator {
@@ -328,7 +324,10 @@ class OpticalFrameAccumulator {
           error: 'Уже принимается другой пакет',
         );
       }
-      _chunks.putIfAbsent(index, () => Uint8List.fromList(base64Url.decode(data)));
+      _chunks.putIfAbsent(
+        index,
+        () => Uint8List.fromList(base64Url.decode(data)),
+      );
       return OpticalFrameProgress(
         accepted: true,
         complete: _chunks.length == _total,
@@ -342,12 +341,12 @@ class OpticalFrameAccumulator {
   }
 
   OpticalFrameProgress _ignored() => OpticalFrameProgress(
-        accepted: false,
-        complete: false,
-        received: _chunks.length,
-        total: _total,
-        transferId: _transferId,
-      );
+    accepted: false,
+    complete: false,
+    received: _chunks.length,
+    total: _total,
+    transferId: _transferId,
+  );
 
   Future<List<int>> assembleAndVerify() async {
     if (_total <= 0 || _chunks.length != _total || _expectedHash == null) {

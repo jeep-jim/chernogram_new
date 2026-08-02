@@ -56,10 +56,7 @@ class OpticalRoomInviteScreen extends StatelessWidget {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: const <BoxShadow>[
-                        BoxShadow(
-                          blurRadius: 30,
-                          color: Color(0x443B82F6),
-                        ),
+                        BoxShadow(blurRadius: 30, color: Color(0x443B82F6)),
                       ],
                     ),
                     child: QrImageView(
@@ -130,40 +127,40 @@ class _OpticalRoomScannerScreenState extends State<OpticalRoomScannerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          title: const Text('Сканировать комнату'),
-          actions: [
-            IconButton(
-              tooltip: 'Вспышка',
-              onPressed: _controller.toggleTorch,
-              icon: const Icon(Icons.flashlight_on_rounded),
-            ),
-            IconButton(
-              tooltip: 'Сменить камеру',
-              onPressed: _controller.switchCamera,
-              icon: const Icon(Icons.cameraswitch_rounded),
-            ),
-          ],
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      title: const Text('Сканировать комнату'),
+      actions: [
+        IconButton(
+          tooltip: 'Вспышка',
+          onPressed: _controller.toggleTorch,
+          icon: const Icon(Icons.flashlight_on_rounded),
         ),
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            MobileScanner(controller: _controller, onDetect: _onDetect),
-            const _ScannerFrame(),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 28,
-              child: _ScannerCaption(
-                title: _error ?? 'Наведите камеру на QR комнаты',
-                subtitle: 'Телефоны могут быть полностью без сети.',
-              ),
-            ),
-          ],
+        IconButton(
+          tooltip: 'Сменить камеру',
+          onPressed: _controller.switchCamera,
+          icon: const Icon(Icons.cameraswitch_rounded),
         ),
-      );
+      ],
+    ),
+    body: Stack(
+      fit: StackFit.expand,
+      children: [
+        MobileScanner(controller: _controller, onDetect: _onDetect),
+        const _ScannerFrame(),
+        Positioned(
+          left: 20,
+          right: 20,
+          bottom: 28,
+          child: _ScannerCaption(
+            title: _error ?? 'Наведите камеру на QR комнаты',
+            subtitle: 'Телефоны могут быть полностью без сети.',
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   void dispose() {
@@ -377,8 +374,9 @@ class OpticalReceiveScreen extends StatefulWidget {
 }
 
 class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
-  late final OpticalFrameAccumulator _accumulator =
-      OpticalFrameAccumulator(expectedRoomId: widget.room.id);
+  late final OpticalFrameAccumulator _accumulator = OpticalFrameAccumulator(
+    expectedRoomId: widget.room.id,
+  );
   final MobileScannerController _controller = MobileScannerController(
     formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.unrestricted,
@@ -551,8 +549,8 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                     _decoding
                         ? 'Проверяем шифрование и собираем данные…'
                         : _progress.total == 0
-                            ? 'Наведите камеру на движущийся QR-поток'
-                            : 'Получено ${_progress.received} из ${_progress.total} уникальных кадров',
+                        ? 'Наведите камеру на движущийся QR-поток'
+                        : 'Получено ${_progress.received} из ${_progress.total} уникальных кадров',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white, height: 1.35),
                   ),
@@ -587,24 +585,24 @@ class _ScannerFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: Center(
-          child: Container(
-            width: min(MediaQuery.sizeOf(context).width - 42, 390),
-            height: min(MediaQuery.sizeOf(context).width - 42, 390),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: const Color(0xFF8A7BFF), width: 3),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(
-                  color: Color(0x668A7BFF),
-                  blurRadius: 28,
-                  spreadRadius: 2,
-                ),
-              ],
+    child: Center(
+      child: Container(
+        width: min(MediaQuery.sizeOf(context).width - 42, 390),
+        height: min(MediaQuery.sizeOf(context).width - 42, 390),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: const Color(0xFF8A7BFF), width: 3),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x668A7BFF),
+              blurRadius: 28,
+              spreadRadius: 2,
             ),
-          ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _ScannerCaption extends StatelessWidget {
@@ -615,31 +613,31 @@ class _ScannerCaption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xE6111420),
-          borderRadius: BorderRadius.circular(22),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xE6111420),
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
+        const SizedBox(height: 5),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white70),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _SecureBadge extends StatelessWidget {
@@ -655,31 +653,31 @@ class _SecureBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: const Color(0xFF8A7BFF)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: const Color(0xFF8A7BFF)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }

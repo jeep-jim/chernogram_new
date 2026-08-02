@@ -81,9 +81,7 @@ class _ChernogramOpticalHomeState extends State<ChernogramOpticalHome> {
     if (!mounted) return;
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(
-        builder: (_) => OpticalRoomInviteScreen(room: room),
-      ),
+      MaterialPageRoute(builder: (_) => OpticalRoomInviteScreen(room: room)),
     );
     if (!mounted) return;
     await _openRoom(room);
@@ -199,9 +197,7 @@ class _ChernogramOpticalHomeState extends State<ChernogramOpticalHome> {
   @override
   Widget build(BuildContext context) {
     if (_loading || _profile == null) {
-      return const Scaffold(
-        body: Center(child: ChernogramLogo(size: 148)),
-      );
+      return const Scaffold(body: Center(child: ChernogramLogo(size: 148)));
     }
     final pages = <Widget>[
       _RoomsPage(
@@ -418,7 +414,10 @@ class _RoomsPage extends StatelessWidget {
                     const SizedBox(height: 14),
                     const Text(
                       'Создайте первую комнату',
-                      style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: 7),
                     Text(
@@ -502,7 +501,10 @@ class _FilesPage extends StatelessWidget {
                     subtitle: Text(
                       '${entry.room.name} • ${_formatBytes(entry.message.fileSize)}',
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 16,
+                    ),
                     onTap: () async {
                       final path = entry.message.filePath;
                       if (path != null && File(path).existsSync()) {
@@ -523,10 +525,7 @@ class _LaboratoryPage extends StatelessWidget {
   final OpticalProfile profile;
   final Future<void> Function() onEditProfile;
 
-  const _LaboratoryPage({
-    required this.profile,
-    required this.onEditProfile,
-  });
+  const _LaboratoryPage({required this.profile, required this.onEditProfile});
 
   @override
   Widget build(BuildContext context) {
@@ -715,9 +714,9 @@ class _OpticalRoomChatScreenState extends State<OpticalRoomChatScreen> {
   }
 
   Future<void> _showInvite() => Navigator.push<void>(
-        context,
-        MaterialPageRoute(builder: (_) => OpticalRoomInviteScreen(room: _room)),
-      );
+    context,
+    MaterialPageRoute(builder: (_) => OpticalRoomInviteScreen(room: _room)),
+  );
 
   Future<void> _receive() async {
     final message = await Navigator.push<OpticalMessage>(
@@ -769,10 +768,8 @@ class _OpticalRoomChatScreenState extends State<OpticalRoomChatScreen> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) => OpticalTransmitScreen(
-            transfer: transfer,
-            roomName: _room.name,
-          ),
+          builder: (_) =>
+              OpticalTransmitScreen(transfer: transfer, roomName: _room.name),
         ),
       );
     } finally {
@@ -833,10 +830,8 @@ class _OpticalRoomChatScreenState extends State<OpticalRoomChatScreen> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) => OpticalTransmitScreen(
-            transfer: transfer,
-            roomName: _room.name,
-          ),
+          builder: (_) =>
+              OpticalTransmitScreen(transfer: transfer, roomName: _room.name),
         ),
       );
     } finally {
@@ -1081,7 +1076,9 @@ class _OpticalMessageBubble extends StatelessWidget {
                               message.fileName ?? 'Файл',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w900),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                             const SizedBox(height: 3),
                             Text(
@@ -1101,7 +1098,10 @@ class _OpticalMessageBubble extends StatelessWidget {
                 ),
               )
             else
-              Text(message.text, style: const TextStyle(fontSize: 15.5, height: 1.3)),
+              Text(
+                message.text,
+                style: const TextStyle(fontSize: 15.5, height: 1.3),
+              ),
             const SizedBox(height: 5),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -1115,7 +1115,9 @@ class _OpticalMessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  message.state == 'received' ? 'получено камерой' : 'показано на экране',
+                  message.state == 'received'
+                      ? 'получено камерой'
+                      : 'показано на экране',
                   style: TextStyle(
                     fontSize: 9.5,
                     color: mine ? Colors.white60 : scheme.onSurfaceVariant,
@@ -1155,44 +1157,44 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Colors.transparent,
-        child: InkWell(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: Ink(
+        height: 128,
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: gradient),
           borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          child: Ink(
-            height: 128,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 30, color: Colors.white),
-                const Spacer(),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10.5,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
-      );
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 30, color: Colors.white),
+            const Spacer(),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              maxLines: 2,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10.5,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _RoomCard extends StatelessWidget {
@@ -1245,8 +1247,8 @@ class _RoomCard extends StatelessWidget {
             last == null
                 ? 'Ключ создан • ждёт первого сеанса'
                 : last.isFile
-                    ? 'Файл: ${last.fileName}'
-                    : last.text,
+                ? 'Файл: ${last.fileName}'
+                : last.text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1282,27 +1284,27 @@ class _LabSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(24),
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      borderRadius: BorderRadius.circular(24),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.35,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.35,
-              ),
-            ),
-            const SizedBox(height: 9),
-            ...children,
-          ],
-        ),
-      );
+        const SizedBox(height: 9),
+        ...children,
+      ],
+    ),
+  );
 }
 
 class _LabRow extends StatelessWidget {
@@ -1310,26 +1312,22 @@ class _LabRow extends StatelessWidget {
   final String title;
   final String value;
 
-  const _LabRow({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
+  const _LabRow({required this.icon, required this.title, required this.value});
 
   @override
   Widget build(BuildContext context) => ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(icon, color: const Color(0xFF8A7BFF)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        trailing: Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-        ),
-      );
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(icon, color: const Color(0xFF8A7BFF)),
+    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+    trailing: Flexible(
+      child: Text(
+        value,
+        textAlign: TextAlign.right,
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+    ),
+  );
 }
 
 class _NumberedStep extends StatelessWidget {
@@ -1340,24 +1338,24 @@ class _NumberedStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: const Color(0xFF6656D9),
-              foregroundColor: Colors.white,
-              child: Text(
-                number,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-              ),
-            ),
-            const SizedBox(width: 11),
-            Expanded(child: Text(text, style: const TextStyle(height: 1.35))),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 14,
+          backgroundColor: const Color(0xFF6656D9),
+          foregroundColor: Colors.white,
+          child: Text(
+            number,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+          ),
         ),
-      );
+        const SizedBox(width: 11),
+        Expanded(child: Text(text, style: const TextStyle(height: 1.35))),
+      ],
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {
@@ -1373,35 +1371,35 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 66,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: .6),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  height: 1.4,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 66,
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: .6),
           ),
-        ),
-      );
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _OpticalFileEntry {

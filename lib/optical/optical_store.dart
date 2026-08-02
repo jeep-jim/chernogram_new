@@ -48,9 +48,7 @@ class OpticalStore {
       final rooms = decoded
           .whereType<Map>()
           .map(
-            (value) => OpticalRoom.fromJson(
-              Map<String, dynamic>.from(value),
-            ),
+            (value) => OpticalRoom.fromJson(Map<String, dynamic>.from(value)),
           )
           .toList();
       rooms.sort((a, b) => b.lastActivity.compareTo(a.lastActivity));

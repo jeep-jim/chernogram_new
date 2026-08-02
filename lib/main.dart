@@ -37,16 +37,18 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   SystemUiOverlayStyle _overlay(bool dark) => SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor:
-            dark ? ChernogramColors.background : const Color(0xFFF2F5FC),
-        systemNavigationBarIconBrightness:
-            dark ? Brightness.light : Brightness.dark,
-        systemNavigationBarContrastEnforced: false,
-        systemStatusBarContrastEnforced: false,
-      );
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+    statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+    systemNavigationBarColor: dark
+        ? ChernogramColors.background
+        : const Color(0xFFF2F5FC),
+    systemNavigationBarIconBrightness: dark
+        ? Brightness.light
+        : Brightness.dark,
+    systemNavigationBarContrastEnforced: false,
+    systemStatusBarContrastEnforced: false,
+  );
 
   void _applySystemUi(bool dark) {
     SystemChrome.setSystemUIOverlayStyle(_overlay(dark));
@@ -57,7 +59,9 @@ class _ChernogramAppState extends State<ChernogramApp> {
       final prefs = await SharedPreferences.getInstance().timeout(
         const Duration(seconds: 4),
       );
-      final dark = Platform.isAndroid ? true : (prefs.getBool('dark_mode') ?? true);
+      final dark = Platform.isAndroid
+          ? true
+          : (prefs.getBool('dark_mode') ?? true);
       if (!mounted) return;
       setState(() {
         _ru = prefs.getString('lang') != 'en';
@@ -117,11 +121,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
       onChangeLanguage: _toggleLanguage,
       onCheckUpdates: () {
         unawaited(
-          ChernogramUpdater.checkAndPrompt(
-            context,
-            ru: _ru,
-            manual: true,
-          ),
+          ChernogramUpdater.checkAndPrompt(context, ru: _ru, manual: true),
         );
       },
     );
@@ -130,16 +130,16 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: _overlay(_darkMode),
-        child: MaterialApp(
-          navigatorKey: chernogramNavigatorKey,
-          debugShowCheckedModeBanner: false,
-          title: 'Чернограм Optical',
-          theme: chernogramLightTheme(),
-          darkTheme: chernogramTheme(),
-          themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-          themeAnimationDuration: Duration.zero,
-          home: Builder(builder: _applicationHome),
-        ),
-      );
+    value: _overlay(_darkMode),
+    child: MaterialApp(
+      navigatorKey: chernogramNavigatorKey,
+      debugShowCheckedModeBanner: false,
+      title: 'Чернограм Optical',
+      theme: chernogramLightTheme(),
+      darkTheme: chernogramTheme(),
+      themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: Duration.zero,
+      home: Builder(builder: _applicationHome),
+    ),
+  );
 }
