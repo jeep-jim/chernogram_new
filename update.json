@@ -1,9 +1,10 @@
 {
-  "versionName": "0.26.0",
-  "versionCode": 68,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=68",
-  "sha256": "39627dbcfe4df79df087cc230ffa0694a4a124c19fde9823a7895bf53f25ac19",
+  "versionName": "0.26.1",
+  "versionCode": 69,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=69",
+  "sha256": "f30025b61ff51b8d95382d2c29a35b82f377d3ead153e3736c156a7bcd052079",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "notesRu": "Убраны агент и внутренние тексты. Возвращена утверждённая маска. Добавлены QR установки и подключения Windows, устойчивый ID устройства, профиль и настройки, реакции, удаление по удерживанию, статусы прочтения, онлайн-точки, круглые видео и фоновая доставка сообщений и звонков.",
-  "notesEn": "Removed agent and internal roadmap text. Restored the approved mask icon. Added install and Windows pairing QR, stable device identity, profile settings, reactions, long-press deletion, read receipts, online dots, circular video and background message/call delivery."
+  "sizeBytes": 72799903,
+  "notesRu": "Исправлена загрузка обновления Android: APK уменьшен более чем в несколько раз за счёт сжатия нативных библиотек и удаления лишних архитектур. Функции build 68 сохранены.",
+  "notesEn": "Fixed Android update download: the APK is several times smaller by compressing native libraries and removing unused architectures. Build 68 features are preserved."
 }
