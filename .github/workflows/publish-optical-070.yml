@@ -1,0 +1,270 @@
+name: Чернограм Optical 0.30.0+70 — два Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-optical-070.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-optical-070
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: experiment/optical-chat-070
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.30.0
+  VERSION_CODE: 70
+  RELEASE_TAG: chernogram-optical-0.30.0-build70
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  build_publish:
+    name: Собрать и опубликовать Optical APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить ветку Optical
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Отформатировать и сохранить Optical-код
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart format lib/main.dart lib/optical test/optical_codec_test.dart
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart lib/optical test/optical_codec_test.dart
+          if ! git diff --cached --quiet; then
+            git commit -m "Отформатировать Optical MVP build 70 [skip ci]"
+            git push origin HEAD:${SOURCE_REF}
+          fi
+
+      - name: Проверить версию и компактную упаковку
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'version: 0.30.0+70' pubspec.yaml
+          grep -q 'useLegacyPackaging = true' android/app/build.gradle.kts
+          grep -q 'abiFilters += "arm64-v8a"' android/app/build.gradle.kts
+          grep -q 'ChernogramOpticalHome' lib/main.dart
+          grep -q 'OpticalTransferCodec' lib/optical/optical_codec.dart
+
+      - name: Скачать и извлечь официальные библиотеки SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Анализ, тесты и сборка
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee optical-build70.log
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram-optical.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram-optical.apk | tee optical-signature70.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' optical-signature70.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram-optical.apk | tee optical-badging70.txt
+          grep -q "package: name='com.example.chernogram'" optical-badging70.txt
+          grep -q "versionCode='70'" optical-badging70.txt
+          grep -q "versionName='0.30.0'" optical-badging70.txt
+          grep -q "application-label:'Чернограм'" optical-badging70.txt
+          unzip -l chernogram-optical.apk | tee optical-files70.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' optical-files70.txt
+          ! grep -q 'lib/x86_64/' optical-files70.txt
+          ! grep -q 'lib/armeabi-v7a/' optical-files70.txt
+          SIZE=$(stat -c%s chernogram-optical.apk)
+          echo "$SIZE" | tee optical-size70.txt
+          test "$SIZE" -lt 120000000
+          sha256sum chernogram-optical.apk | tee optical-sha256-70.txt
+
+      - name: Создать манифест обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 optical-sha256-70.txt)
+          SIZE=$(cat optical-size70.txt)
+          cat > update-optical70.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Первый Чернограм Optical: новый интерфейс, комнаты по QR, зашифрованный текстовый чат и передача файлов через экран и камеру без Wi-Fi, Bluetooth и интернета. Исправлен чёрный экран запуска Android.",
+            "notesEn": "First Chernogram Optical MVP: redesigned UI, QR room pairing, encrypted text chat and file transfer through screen and camera without Wi-Fi, Bluetooth or internet. Android black startup screen fixed."
+          }
+          EOF
+          python3 -m json.tool update-optical70.json >/dev/null
+
+      - name: Опубликовать Чернограм Optical 0.30.0+70
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram-optical.apk \
+            update-optical70.json \
+            optical-sha256-70.txt \
+            optical-signature70.txt \
+            optical-badging70.txt \
+            optical-size70.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Optical 0.30.0+70 — экран и камера" \
+            --notes "Исследовательский Android MVP для двух телефонов: создание комнаты визуальным QR, зашифрованные сообщения и файлы через поток QR-кадров. Интернет, Wi-Fi и Bluetooth не участвуют в оптическом сеансе."
+          gh release delete latest-apk --cleanup-tag -y || true
+          cp chernogram-optical.apk chernogram.apk
+          gh release create latest-apk \
+            chernogram.apk \
+            update-optical70.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Optical — Android 0.30.0+70" \
+            --notes "Первая тестовая оптическая версия для двух Android."
+
+      - name: Включить обновление build 70
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-optical70
+          git worktree add -B publish-optical70 /tmp/chernogram-main-optical70 origin/main
+          cd /tmp/chernogram-main-optical70
+          cp "$GITHUB_WORKSPACE/update-optical70.json" update.json
+          cat > BUILD_070_STATUS.md <<EOF
+          # Чернограм Optical 0.30.0+70 — сборка готова
+
+          Android: success
+          Release: ${RELEASE_TAG}
+          Source: ${SOURCE_REF}
+          Workflow run: ${GITHUB_RUN_ID}
+          APK size bytes: $(cat "$GITHUB_WORKSPACE/optical-size70.txt")
+          Published at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json BUILD_070_STATUS.md
+          git commit -m "Опубликовать Чернограм Optical 0.30.0+70 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Контрольно скачать опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 \
+            -o published-optical70.apk \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=70"
+          test "$(sha256sum published-optical70.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 optical-sha256-70.txt)"
+          test "$(stat -c%s published-optical70.apk)" = "$(cat optical-size70.txt)"
+
+      - name: Сохранить хвост диагностики
+        if: always()
+        shell: bash
+        run: |
+          tail -n 350 optical-build70.log 2>/dev/null > optical-build70-tail.log || true
+
+      - name: Выдать APK и диагностику
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-optical-0.30.0-build70
+          path: |
+            chernogram-optical.apk
+            update-optical70.json
+            optical-sha256-70.txt
+            optical-signature70.txt
+            optical-badging70.txt
+            optical-size70.txt
+            optical-build70.log
+            optical-build70-tail.log
+          if-no-files-found: warn
+          retention-days: 14
