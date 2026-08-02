@@ -44,10 +44,8 @@ class CgBackgroundRuntime {
   static Future<void> _ensureChannels() async {
     final notifications = FlutterLocalNotificationsPlugin();
     await notifications.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings(
-          '@drawable/chernogram_launcher_icon',
-        ),
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('chernogram_launcher_icon'),
       ),
     );
     final android = notifications
@@ -113,10 +111,8 @@ Future<void> chernogramBackgroundEntry(ServiceInstance service) async {
 
   final notifications = FlutterLocalNotificationsPlugin();
   await notifications.initialize(
-    const InitializationSettings(
-      android: AndroidInitializationSettings(
-        '@drawable/chernogram_launcher_icon',
-      ),
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('chernogram_launcher_icon'),
     ),
   );
 
@@ -181,10 +177,10 @@ Future<void> chernogramBackgroundEntry(ServiceInstance service) async {
         ? message.text.trim()
         : message.attachment?.name ?? 'Новое событие';
     await notifications.show(
-      message.id.hashCode & 0x7fffffff,
-      tunnel.displayName,
-      body,
-      const NotificationDetails(
+      id: message.id.hashCode & 0x7fffffff,
+      title: tunnel.displayName,
+      body: body,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _messageChannelId,
           'Сообщения',
@@ -193,7 +189,7 @@ Future<void> chernogramBackgroundEntry(ServiceInstance service) async {
           priority: Priority.high,
           category: AndroidNotificationCategory.message,
           visibility: NotificationVisibility.private,
-          icon: '@drawable/chernogram_launcher_icon',
+          icon: 'chernogram_launcher_icon',
         ),
       ),
       payload: jsonEncode(<String, dynamic>{
@@ -217,10 +213,10 @@ Future<void> chernogramBackgroundEntry(ServiceInstance service) async {
         'Собеседник';
     final video = signal['video'] == true;
     await notifications.show(
-      callId.hashCode & 0x7fffffff,
-      video ? 'Видеозвонок' : 'Входящий звонок',
-      '$caller • ${tunnel.displayName}',
-      const NotificationDetails(
+      id: callId.hashCode & 0x7fffffff,
+      title: video ? 'Видеозвонок' : 'Входящий звонок',
+      body: '$caller • ${tunnel.displayName}',
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _callChannelId,
           'Звонки',
@@ -232,7 +228,7 @@ Future<void> chernogramBackgroundEntry(ServiceInstance service) async {
           ongoing: true,
           autoCancel: true,
           visibility: NotificationVisibility.public,
-          icon: '@drawable/chernogram_launcher_icon',
+          icon: 'chernogram_launcher_icon',
           playSound: true,
           enableVibration: true,
         ),
