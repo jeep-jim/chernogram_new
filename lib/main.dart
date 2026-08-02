@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'android_data_first.dart';
 import 'app_navigation.dart';
 import 'brand.dart';
 import 'update_service.dart';
+import 'windows_desktop_app.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -118,21 +120,37 @@ class _ChernogramAppState extends State<ChernogramApp> {
             : Builder(
                 builder: (context) => CgAccessGate(
                   ru: _ru!,
-                  child: ChernogramDataFirst(
-                    ru: _ru!,
-                    darkMode: _darkMode,
-                    onToggleTheme: _toggleTheme,
-                    onChangeLanguage: _toggleLanguage,
-                    onCheckUpdates: () {
-                      unawaited(
-                        ChernogramUpdater.checkAndPrompt(
-                          context,
+                  child: Platform.isWindows
+                      ? ChernogramWindowsDesktop(
                           ru: _ru!,
-                          manual: true,
+                          darkMode: _darkMode,
+                          onToggleTheme: _toggleTheme,
+                          onChangeLanguage: _toggleLanguage,
+                          onCheckUpdates: () {
+                            unawaited(
+                              ChernogramUpdater.checkAndPrompt(
+                                context,
+                                ru: _ru!,
+                                manual: true,
+                              ),
+                            );
+                          },
+                        )
+                      : ChernogramDataFirst(
+                          ru: _ru!,
+                          darkMode: _darkMode,
+                          onToggleTheme: _toggleTheme,
+                          onChangeLanguage: _toggleLanguage,
+                          onCheckUpdates: () {
+                            unawaited(
+                              ChernogramUpdater.checkAndPrompt(
+                                context,
+                                ru: _ru!,
+                                manual: true,
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ),
       ),
