@@ -1,0 +1,59 @@
+name: Добавить QR-подключение build 74
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-light-074-qr-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/impulse-transport-074
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Добавить показ и сканирование QR
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q "import 'light_invite_qr.dart';" lib/light/light_chat_app.dart; then
+            python3 tool/add_qr_pairing_074.py
+          fi
+          dart format lib/light/light_chat_app.dart lib/light/light_invite_qr.dart
+
+      - name: Проверить QR-подключение
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'LightInviteScannerScreen' lib/light/light_chat_app.dart
+          grep -q 'LightInviteQrScreen' lib/light/light_chat_app.dart
+          grep -q "tooltip: 'Сканировать QR'" lib/light/light_chat_app.dart
+          grep -q 'MobileScanner' lib/light/light_invite_qr.dart
+          grep -q 'QrImageView' lib/light/light_invite_qr.dart
+          ! grep -q 'class _DialerPage' lib/light/light_chat_app.dart
+
+      - name: Сохранить исправление в ветке build 74
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/light/light_chat_app.dart lib/light/light_invite_qr.dart tool/add_qr_pairing_074.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Добавить показ и сканирование QR-приглашений [skip ci]"
+            git push origin HEAD:rebuild/impulse-transport-074
+          fi
