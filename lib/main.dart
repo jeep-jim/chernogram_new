@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_access.dart';
 import 'app_navigation.dart';
-import 'hybrid/hybrid_app.dart';
 import 'hybrid/hybrid_theme.dart';
+import 'network/library_network_app.dart';
 import 'update_service.dart';
 import 'windows_desktop_app.dart';
 
@@ -110,7 +110,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   Widget _applicationHome(BuildContext context) {
     if (Platform.isAndroid) {
-      return ChernogramHybridHome(
+      return ChernogramLibraryNetworkHome(
         darkMode: _darkMode,
         onToggleTheme: _toggleTheme,
         onCheckUpdates: () {
@@ -140,7 +140,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
     child: MaterialApp(
       navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Чернограм Hybrid',
+      title: 'Чернограм Library Network',
       theme: HybridTheme.light(),
       darkTheme: HybridTheme.dark(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
