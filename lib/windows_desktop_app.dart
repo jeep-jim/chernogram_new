@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'app_monitor.dart';
 import 'brand.dart';
+import 'chat_media.dart';
 import 'chat_screen.dart';
+import 'client_settings.dart';
 import 'core_models.dart';
+import 'device_pairing.dart';
 
 class ChernogramWindowsDesktop extends StatefulWidget {
   final bool ru;
@@ -39,9 +41,12 @@ class _ChernogramWindowsDesktopState
   CgProfile? _profile;
   List<CgTunnel> _tunnels = <CgTunnel>[];
   List<CgContact> _contacts = <CgContact>[];
+  String? _selectedTunnelId;
   bool _privacyLens = false;
   bool _loading = true;
-  String? _selectedTunnelId;
+  bool _rightPanel = true;
+  String? _loadError;
+  int _rightTab = 0;
 
   @override
   void initState() {
@@ -50,24 +55,50 @@ class _ChernogramWindowsDesktopState
   }
 
   Future<void> _bootstrap() async {
-    final values = await Future.wait<Object>(<Future<Object>>[
-      CgStore.loadOrCreateProfile(),
-      CgStore.loadTunnels(),
-      CgStore.loadContacts(),
-      CgStore.loadPrivacyLens(),
-    ]);
-    if (!mounted) return;
-    final tunnels = values[1] as List<CgTunnel>;
-    tunnels.sort((a, b) => _lastActivity(b).compareTo(_lastActivity(a)));
-    setState(() {
-      _profile = values[0] as CgProfile;
-      _tunnels = tunnels;
-      _contacts = values[2] as List<CgContact>;
-      _privacyLens = values[3] as bool;
-      _selectedTunnelId = tunnels.isEmpty ? null : tunnels.first.id;
-      _loading = false;
-    });
-    unawaited(_syncMonitor());
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    try {
+      final values = await Future.wait<Object>(<Future<Object>>[
+        CgStore.loadOrCreateProfile(),
+        CgStore.loadTunnels(),
+        CgStore.loadContacts(),
+        CgStore.loadPrivacyLens(),
+      ]).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      final tunnels = values[1] as List<CgTunnel>;
+      tunnels.sort((a, b) => _activity(b).compareTo(_activity(a)));
+      setState(() {
+        _profile = values[0] as CgProfile;
+        _tunnels = tunnels;
+        _contacts = values[2] as List<CgContact>;
+        _privacyLens = values[3] as bool;
+        _selectedTunnelId = tunnels.isEmpty ? null : tunnels.first.id;
+        _loading = false;
+      });
+      unawaited(_syncMonitor());
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = error.toString();
+      });
+    }
+  }
+
+  DateTime _activity(CgTunnel tunnel) =>
+      tunnel.messages.isEmpty ? tunnel.createdAt : tunnel.messages.last.sentAt;
+
+  CgTunnel? get _selected {
+    final id = _selectedTunnelId;
+    if (id == null) return null;
+    for (final tunnel in _tunnels) {
+      if (tunnel.id == id) return tunnel;
+    }
+    return null;
   }
 
   Future<void> _syncMonitor() async {
@@ -82,23 +113,6 @@ class _ChernogramWindowsDesktopState
     );
   }
 
-  DateTime _lastActivity(CgTunnel tunnel) =>
-      tunnel.messages.isEmpty ? tunnel.createdAt : tunnel.messages.last.sentAt;
-
-  CgTunnel? get _selectedTunnel {
-    final id = _selectedTunnelId;
-    if (id == null) return null;
-    for (final tunnel in _tunnels) {
-      if (tunnel.id == id) return tunnel;
-    }
-    return null;
-  }
-
-  void _selectTunnel(CgTunnel tunnel) {
-    if (_selectedTunnelId == tunnel.id) return;
-    setState(() => _selectedTunnelId = tunnel.id);
-  }
-
   void _updateTunnel(CgTunnel updated) {
     final copy = <CgTunnel>[..._tunnels];
     final index = copy.indexWhere((item) => item.id == updated.id);
@@ -107,7 +121,7 @@ class _ChernogramWindowsDesktopState
     } else {
       copy[index] = updated;
     }
-    copy.sort((a, b) => _lastActivity(b).compareTo(_lastActivity(a)));
+    copy.sort((a, b) => _activity(b).compareTo(_activity(a)));
     if (mounted) {
       setState(() {
         _tunnels = copy;
@@ -125,17 +139,14 @@ class _ChernogramWindowsDesktopState
     if (index < 0) {
       copy.insert(0, incoming);
     } else {
-      final existing = copy[index];
-      copy[index] = existing.copyWith(
+      final old = copy[index];
+      copy[index] = old.copyWith(
         nickname: incoming.nickname.trim().isEmpty
-            ? existing.nickname
+            ? old.nickname
             : incoming.nickname,
         lastSeenAt: incoming.lastSeenAt,
-        tunnelIds: <String>{
-          ...existing.tunnelIds,
-          ...incoming.tunnelIds,
-        }.toList(),
-        avatarBase64: incoming.avatarBase64 ?? existing.avatarBase64,
+        tunnelIds: <String>{...old.tunnelIds, ...incoming.tunnelIds}.toList(),
+        avatarBase64: incoming.avatarBase64 ?? old.avatarBase64,
       );
     }
     copy.sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
@@ -143,12 +154,36 @@ class _ChernogramWindowsDesktopState
     unawaited(CgStore.saveContacts(copy));
   }
 
+  bool _roomOnline(CgTunnel tunnel) {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 55));
+    return _contacts.any(
+      (contact) =>
+          contact.tunnelIds.contains(tunnel.id) &&
+          contact.lastSeenAt.isAfter(cutoff),
+    );
+  }
+
+  String _preview(CgTunnel tunnel) {
+    if (tunnel.messages.isEmpty) {
+      return widget.ru ? 'Комната готова' : 'Room is ready';
+    }
+    final message = tunnel.messages.last;
+    if (message.deleted) {
+      return widget.ru ? 'Сообщение удалено' : 'Message deleted';
+    }
+    if (message.attachment != null) return message.attachment!.name;
+    if (message.type == 'call') return widget.ru ? 'Звонок' : 'Call';
+    return message.text.trim().isEmpty
+        ? (widget.ru ? 'Новое событие' : 'New event')
+        : message.text.trim();
+  }
+
   Future<void> _createRoom() async {
     final profile = _profile;
-    if (profile == null || !mounted) return;
+    if (profile == null) return;
     final name = TextEditingController();
-    var isPrivate = true;
-    final result = await showDialog<({String name, bool isPrivate})>(
+    var private = true;
+    final result = await showDialog<({String name, bool private})>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -163,27 +198,26 @@ class _ChernogramWindowsDesktopState
                   autofocus: true,
                   decoration: InputDecoration(
                     labelText: widget.ru ? 'Название' : 'Name',
-                    prefixIcon: const Icon(Icons.forum_outlined),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 SegmentedButton<bool>(
                   showSelectedIcon: false,
                   segments: [
-                    ButtonSegment<bool>(
+                    ButtonSegment(
                       value: true,
                       icon: const Icon(Icons.lock_outline_rounded),
                       label: Text(widget.ru ? 'Закрытая' : 'Private'),
                     ),
-                    ButtonSegment<bool>(
+                    ButtonSegment(
                       value: false,
                       icon: const Icon(Icons.public_rounded),
                       label: Text(widget.ru ? 'Открытая' : 'Public'),
                     ),
                   ],
-                  selected: <bool>{isPrivate},
+                  selected: <bool>{private},
                   onSelectionChanged: (value) {
-                    setDialogState(() => isPrivate = value.first);
+                    setDialogState(() => private = value.first);
                   },
                 ),
               ],
@@ -194,13 +228,12 @@ class _ChernogramWindowsDesktopState
               onPressed: () => Navigator.pop(context),
               child: Text(widget.ru ? 'Отмена' : 'Cancel'),
             ),
-            FilledButton.icon(
+            FilledButton(
               onPressed: () => Navigator.pop(
                 context,
-                (name: name.text.trim(), isPrivate: isPrivate),
+                (name: name.text.trim(), private: private),
               ),
-              icon: const Icon(Icons.add_rounded),
-              label: Text(widget.ru ? 'Создать' : 'Create'),
+              child: Text(widget.ru ? 'Создать' : 'Create'),
             ),
           ],
         ),
@@ -211,17 +244,17 @@ class _ChernogramWindowsDesktopState
     final tunnel = CgTunnel(
       id: CgIds.random(18),
       name: result.name,
-      isPrivate: result.isPrivate,
+      isPrivate: result.private,
       ownerId: profile.id,
       secret: CgIds.random(42),
       createdAt: DateTime.now(),
       messages: const <CgMessage>[],
     );
     _updateTunnel(tunnel);
-    if (mounted) setState(() => _selectedTunnelId = tunnel.id);
+    setState(() => _selectedTunnelId = tunnel.id);
   }
 
-  String? _inviteToken(String raw) {
+  String? _token(String raw) {
     final value = raw.trim();
     if (value.isEmpty) return null;
     final uri = Uri.tryParse(value);
@@ -232,14 +265,31 @@ class _ChernogramWindowsDesktopState
         return uri.pathSegments.first;
       }
       final invite = uri.queryParameters['invite'];
-      if (invite != null && invite.isNotEmpty) return invite;
+      if (invite?.isNotEmpty == true) return invite;
     }
     return value;
   }
 
-  Future<void> _joinRoom() async {
+  Future<void> _joinToken(String raw) async {
+    final token = _token(raw);
+    if (token == null) return;
+    final tunnel = CgTunnel.fromInviteToken(token);
+    if (tunnel == null) {
+      _toast(widget.ru ? 'Приглашение не распознано.' : 'Invite not recognized.');
+      return;
+    }
+    final index = _tunnels.indexWhere((item) => item.id == tunnel.id);
+    if (index >= 0) {
+      setState(() => _selectedTunnelId = _tunnels[index].id);
+      return;
+    }
+    _updateTunnel(tunnel);
+    setState(() => _selectedTunnelId = tunnel.id);
+  }
+
+  Future<void> _joinByLink() async {
     final controller = TextEditingController();
-    final raw = await showDialog<String>(
+    final value = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(widget.ru ? 'Подключиться к комнате' : 'Join room'),
@@ -249,12 +299,11 @@ class _ChernogramWindowsDesktopState
             controller: controller,
             autofocus: true,
             minLines: 2,
-            maxLines: 4,
+            maxLines: 5,
             decoration: InputDecoration(
               hintText: widget.ru
-                  ? 'Вставьте ссылку приглашения или токен'
-                  : 'Paste an invite link or token',
-              prefixIcon: const Icon(Icons.link_rounded),
+                  ? 'Вставьте ссылку приглашения'
+                  : 'Paste an invite link',
             ),
           ),
         ),
@@ -271,45 +320,30 @@ class _ChernogramWindowsDesktopState
       ),
     );
     controller.dispose();
-    final token = raw == null ? null : _inviteToken(raw);
-    if (token == null) return;
-    final tunnel = CgTunnel.fromInviteToken(token);
-    if (tunnel == null) {
-      _showMessage(
-        widget.ru
-            ? 'Не удалось прочитать приглашение.'
-            : 'The invite could not be read.',
-      );
-      return;
-    }
-    final existing = _tunnels.indexWhere((item) => item.id == tunnel.id);
-    if (existing >= 0) {
-      setState(() => _selectedTunnelId = _tunnels[existing].id);
-      return;
-    }
-    _updateTunnel(tunnel);
-    if (mounted) setState(() => _selectedTunnelId = tunnel.id);
+    if (value != null) await _joinToken(value);
   }
 
-  Future<void> _forwardMessage(CgMessage source) async {
-    if (_tunnels.isEmpty || !mounted) return;
+  Future<void> _pairByQr() async {
+    final invite = await showDesktopRoomPairing(context, ru: widget.ru);
+    if (invite != null) await _joinToken(invite);
+  }
+
+  Future<void> _forward(CgMessage source) async {
+    final profile = _profile;
+    if (profile == null || _tunnels.isEmpty) return;
     final target = await showDialog<CgTunnel>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(widget.ru ? 'Переслать в комнату' : 'Forward to room'),
+        title: Text(widget.ru ? 'Переслать' : 'Forward'),
         content: SizedBox(
           width: 430,
-          height: 420,
+          height: 430,
           child: ListView.builder(
             itemCount: _tunnels.length,
             itemBuilder: (context, index) {
               final tunnel = _tunnels[index];
               return ListTile(
-                leading: ChernogramAvatar(
-                  size: 42,
-                  seed: tunnel.id,
-                  avatarBase64: tunnel.avatarBase64,
-                ),
+                leading: ChernogramAvatar(size: 42, seed: tunnel.id),
                 title: Text(tunnel.displayName),
                 onTap: () => Navigator.pop(context, tunnel),
               );
@@ -318,8 +352,7 @@ class _ChernogramWindowsDesktopState
         ),
       ),
     );
-    final profile = _profile;
-    if (target == null || profile == null) return;
+    if (target == null) return;
     final message = CgMessage(
       id: CgIds.random(24),
       authorId: profile.id,
@@ -334,10 +367,9 @@ class _ChernogramWindowsDesktopState
         'forwardedFrom': source.authorName,
       },
     );
-    final updated = target.copyWith(messages: <CgMessage>[
-      ...target.messages,
-      message,
-    ]);
+    final updated = target.copyWith(
+      messages: <CgMessage>[...target.messages, message],
+    );
     _updateTunnel(updated);
     await ChernogramAppMonitor.publishMessage(
       profile: profile,
@@ -346,146 +378,181 @@ class _ChernogramWindowsDesktopState
     );
   }
 
-  Future<File?> _materialize(CgAttachment attachment) async {
-    final localPath = attachment.localPath;
-    if (localPath != null && await File(localPath).exists()) {
-      return File(localPath);
-    }
-    final raw = attachment.dataBase64;
-    if (raw == null || raw.isEmpty) return null;
-    final directory = await getTemporaryDirectory();
-    final safeName = attachment.name.replaceAll(
-      RegExp(r'[^A-Za-zА-Яа-я0-9._-]'),
-      '_',
-    );
-    final file = File('${directory.path}/${attachment.id}_$safeName');
-    await file.writeAsBytes(base64Decode(raw), flush: true);
-    return file;
-  }
-
-  Future<void> _openAttachment(CgAttachment attachment) async {
-    final file = await _materialize(attachment);
-    if (file == null) {
-      _showMessage(
-        widget.ru
-            ? 'Локальная копия файла пока недоступна.'
-            : 'A local copy of this file is not available yet.',
-      );
+  Future<void> _shareFile() async {
+    final profile = _profile;
+    if (profile == null) return;
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.first;
+    final bytes = picked.bytes;
+    if (bytes == null || bytes.length > 20 * 1024 * 1024) {
+      _toast(widget.ru ? 'Файл должен быть до 20 МБ.' : 'File must be under 20 MB.');
       return;
     }
-    await OpenFilex.open(file.path);
+    final target = await showDialog<CgTunnel>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(widget.ru ? 'Куда отправить файл' : 'Share file to'),
+        content: SizedBox(
+          width: 460,
+          height: 450,
+          child: ListView(
+            children: [
+              for (final tunnel in _tunnels)
+                ListTile(
+                  leading: Icon(
+                    tunnel.isPrivate
+                        ? Icons.lock_outline_rounded
+                        : Icons.public_rounded,
+                  ),
+                  title: Text(tunnel.displayName),
+                  subtitle: Text(
+                    tunnel.isPrivate
+                        ? (widget.ru ? 'Закрытый доступ' : 'Private access')
+                        : (widget.ru ? 'Общий доступ' : 'Public access'),
+                  ),
+                  onTap: () => Navigator.pop(context, tunnel),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (target == null) return;
+    final id = CgIds.random(20);
+    final file = await CgMediaStore.persistBytes(
+      attachmentId: id,
+      name: picked.name,
+      bytes: bytes,
+    );
+    final attachment = CgAttachment(
+      id: id,
+      name: picked.name,
+      size: bytes.length,
+      kind: _kind(picked.name),
+      dataBase64: base64Encode(bytes),
+      localPath: file.path,
+    );
+    final message = CgMessage(
+      id: CgIds.random(24),
+      authorId: profile.id,
+      authorName: profile.nickname,
+      text: '',
+      sentAt: DateTime.now(),
+      type: 'attachment',
+      attachment: attachment,
+      meta: <String, dynamic>{'publicFile': !target.isPrivate},
+    );
+    final updated = target.copyWith(
+      messages: <CgMessage>[...target.messages, message],
+    );
+    _updateTunnel(updated);
+    await ChernogramAppMonitor.publishMessage(
+      profile: profile,
+      tunnel: updated,
+      message: message,
+    );
   }
 
-  void _showMessage(String text) {
+  String _kind(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    if (<String>{'jpg', 'jpeg', 'png', 'webp', 'gif'}.contains(ext)) {
+      return 'image';
+    }
+    if (<String>{'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus'}.contains(ext)) {
+      return 'audio';
+    }
+    if (<String>{'mp4', 'mov', 'mkv', 'webm'}.contains(ext)) return 'video';
+    if (<String>{'zip', 'rar', '7z', 'tar', 'gz'}.contains(ext)) return 'archive';
+    return 'document';
+  }
+
+  Future<void> _allFiles() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CgMediaLibraryScreen(
+          ru: widget.ru,
+          tunnels: _tunnels,
+          onTunnelsChanged: (value) {
+            for (final tunnel in value) {
+              _updateTunnel(tunnel);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  void _toast(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  String _preview(CgTunnel tunnel) {
-    if (tunnel.messages.isEmpty) {
-      return widget.ru ? 'Комната готова' : 'Room is ready';
-    }
-    final message = tunnel.messages.last;
-    if (message.deleted) {
-      return widget.ru ? 'Сообщение удалено' : 'Message deleted';
-    }
-    if (message.attachment != null) return message.attachment!.name;
-    if (message.type == 'call') {
-      return widget.ru ? 'Звонок' : 'Call';
-    }
-    return message.text.trim().isEmpty
-        ? (widget.ru ? 'Новое событие' : 'New event')
-        : message.text.trim();
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
-  IconData _fileIcon(String kind) {
-    switch (kind) {
-      case 'image':
-        return Icons.image_outlined;
-      case 'audio':
-        return Icons.audio_file_outlined;
-      case 'video':
-        return Icons.video_file_outlined;
-      case 'archive':
-        return Icons.folder_zip_outlined;
-      default:
-        return Icons.insert_drive_file_outlined;
-    }
-  }
-
-  Widget _topBar(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: 66,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: .96),
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-      ),
-      child: Row(
-        children: [
-          const ChernogramLogo(size: 38),
-          const SizedBox(width: 11),
-          Text(
-            'Чернограм',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              widget.ru ? 'Windows • 4 устройства' : 'Windows • 4 devices',
-              style: TextStyle(
-                color: scheme.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+  Future<void> _settings() async {
+    final profile = _profile;
+    if (profile == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(widget.ru ? 'Настройки' : 'Settings'),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: Text(widget.ru ? 'Аккаунт и устройство' : 'Account and device'),
+                subtitle: Text('ID ${profile.id}'),
+                onTap: () {
+                  Navigator.pop(context);
+                  showDeviceAccountSheet(this.context, ru: widget.ru, profile: profile);
+                },
               ),
-            ),
+              ListTile(
+                leading: const Icon(Icons.install_mobile_rounded),
+                title: Text(widget.ru ? 'Поделиться приложением' : 'Share app'),
+                onTap: () {
+                  Navigator.pop(context);
+                  showChernogramInstallShare(this.context, ru: widget.ru);
+                },
+              ),
+              ListTile(
+                leading: Icon(widget.darkMode ? Icons.light_mode : Icons.dark_mode),
+                title: Text(widget.ru ? 'Сменить тему' : 'Change theme'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onToggleTheme();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.language_rounded),
+                title: Text(widget.ru ? 'English' : 'Русский'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onChangeLanguage();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.system_update_alt_rounded),
+                title: Text(widget.ru ? 'Проверить обновления' : 'Check updates'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onCheckUpdates();
+                },
+              ),
+            ],
           ),
-          const Spacer(),
-          IconButton(
-            tooltip: widget.ru ? 'Подключиться по ссылке' : 'Join by link',
-            onPressed: _joinRoom,
-            icon: const Icon(Icons.link_rounded),
-          ),
-          IconButton(
-            tooltip: widget.ru ? 'Проверить обновления' : 'Check updates',
-            onPressed: widget.onCheckUpdates,
-            icon: const Icon(Icons.system_update_alt_rounded),
-          ),
-          IconButton(
-            tooltip: widget.ru ? 'Сменить язык' : 'Change language',
-            onPressed: widget.onChangeLanguage,
-            icon: const Icon(Icons.language_rounded),
-          ),
-          IconButton(
-            tooltip: widget.ru ? 'Сменить тему' : 'Change theme',
-            onPressed: widget.onToggleTheme,
-            icon: Icon(
-              widget.darkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _roomsPanel(BuildContext context) {
+  Widget _leftPanel(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final query = _search.text.trim().toLowerCase();
-    final tunnels = _tunnels.where((tunnel) {
+    final rooms = _tunnels.where((tunnel) {
       if (query.isEmpty) return true;
       return tunnel.displayName.toLowerCase().contains(query) ||
           tunnel.messages.any(
@@ -498,13 +565,61 @@ class _ChernogramWindowsDesktopState
       color: scheme.surface,
       child: Column(
         children: [
+          SizedBox(
+            height: 62,
+            child: Row(
+              children: [
+                PopupMenuButton<String>(
+                  tooltip: widget.ru ? 'Меню' : 'Menu',
+                  icon: const Icon(Icons.menu_rounded),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'new':
+                        _createRoom();
+                      case 'link':
+                        _joinByLink();
+                      case 'qr':
+                        _pairByQr();
+                      case 'files':
+                        _allFiles();
+                      case 'share':
+                        showChernogramInstallShare(context, ru: widget.ru);
+                      case 'settings':
+                        _settings();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(value: 'new', child: Text(widget.ru ? 'Новая комната' : 'New room')),
+                    PopupMenuItem(value: 'link', child: Text(widget.ru ? 'Вставить приглашение' : 'Paste invite')),
+                    PopupMenuItem(value: 'qr', child: Text(widget.ru ? 'Подключить по QR' : 'Connect with QR')),
+                    PopupMenuItem(value: 'files', child: Text(widget.ru ? 'Все файлы' : 'All files')),
+                    PopupMenuItem(value: 'share', child: Text(widget.ru ? 'Поделиться приложением' : 'Share app')),
+                    PopupMenuItem(value: 'settings', child: Text(widget.ru ? 'Настройки' : 'Settings')),
+                  ],
+                ),
+                const ChernogramLogo(size: 34),
+                const SizedBox(width: 9),
+                const Expanded(
+                  child: Text(
+                    'Чернограм',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                ),
+                IconButton(
+                  tooltip: widget.ru ? 'Подключить по QR' : 'Connect with QR',
+                  onPressed: _pairByQr,
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                ),
+              ],
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
             child: TextField(
               controller: _search,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: widget.ru ? 'Поиск по чатам' : 'Search chats',
+                hintText: widget.ru ? 'Поиск' : 'Search',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _search.text.isEmpty
                     ? null
@@ -518,47 +633,27 @@ class _ChernogramWindowsDesktopState
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _createRoom,
-                    icon: const Icon(Icons.add_comment_rounded),
-                    label: Text(widget.ru ? 'Комната' : 'Room'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: widget.ru ? 'Вставить приглашение' : 'Paste invite',
-                  onPressed: _joinRoom,
-                  icon: const Icon(Icons.qr_code_2_rounded),
-                ),
-              ],
-            ),
-          ),
           Expanded(
-            child: tunnels.isEmpty
+            child: rooms.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Text(
-                        widget.ru
-                            ? 'Создайте комнату или вставьте приглашение с телефона.'
-                            : 'Create a room or paste an invite from a phone.',
-                        textAlign: TextAlign.center,
+                      child: FilledButton.icon(
+                        onPressed: _createRoom,
+                        icon: const Icon(Icons.add_comment_rounded),
+                        label: Text(widget.ru ? 'Создать комнату' : 'Create room'),
                       ),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                    itemCount: tunnels.length,
+                    padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+                    itemCount: rooms.length,
                     itemBuilder: (context, index) {
-                      final tunnel = tunnels[index];
+                      final tunnel = rooms[index];
                       final selected = tunnel.id == _selectedTunnelId;
+                      final online = _roomOnline(tunnel);
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.only(bottom: 3),
                         child: Material(
                           color: selected
                               ? scheme.primary.withValues(alpha: .14)
@@ -566,17 +661,36 @@ class _ChernogramWindowsDesktopState
                           borderRadius: BorderRadius.circular(14),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () => _selectTunnel(tunnel),
+                            onTap: () => setState(() => _selectedTunnelId = tunnel.id),
                             child: Padding(
                               padding: const EdgeInsets.all(10),
                               child: Row(
                                 children: [
-                                  ChernogramAvatar(
-                                    size: 46,
-                                    seed: tunnel.id,
-                                    avatarBase64: tunnel.avatarBase64,
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      ChernogramAvatar(
+                                        size: 50,
+                                        seed: tunnel.id,
+                                        avatarBase64: tunnel.avatarBase64,
+                                      ),
+                                      if (online)
+                                        Positioned(
+                                          right: -1,
+                                          bottom: -1,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: ChernogramColors.success,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: scheme.surface, width: 2),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 11),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,14 +699,10 @@ class _ChernogramWindowsDesktopState
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                _privacyLens
-                                                    ? '••••••••'
-                                                    : tunnel.displayName,
+                                                _privacyLens ? '••••••' : tunnel.displayName,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w900,
-                                                ),
+                                                style: const TextStyle(fontWeight: FontWeight.w900),
                                               ),
                                             ),
                                             Icon(
@@ -600,7 +710,6 @@ class _ChernogramWindowsDesktopState
                                                   ? Icons.lock_outline_rounded
                                                   : Icons.public_rounded,
                                               size: 14,
-                                              color: scheme.onSurfaceVariant,
                                             ),
                                           ],
                                         ),
@@ -609,10 +718,7 @@ class _ChernogramWindowsDesktopState
                                           _privacyLens ? '••••••••' : _preview(tunnel),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: scheme.onSurfaceVariant,
-                                          ),
+                                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                                         ),
                                       ],
                                     ),
@@ -626,233 +732,200 @@ class _ChernogramWindowsDesktopState
                     },
                   ),
           ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: scheme.outlineVariant)),
+          const Divider(height: 1),
+          ListTile(
+            leading: ChernogramAvatar(
+              size: 42,
+              seed: _profile?.id ?? 'profile',
+              avatarBase64: _profile?.avatarBase64,
             ),
-            child: Row(
-              children: [
-                ChernogramAvatar(
-                  size: 40,
-                  seed: _profile?.id ?? 'profile',
-                  avatarBase64: _profile?.avatarBase64,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _privacyLens
-                            ? '••••••'
-                            : (_profile?.nickname ?? 'Чернограм'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      Text(
-                        widget.ru
-                            ? '${_tunnels.length} комнат'
-                            : '${_tunnels.length} rooms',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: widget.ru ? 'Скрыть данные' : 'Privacy lens',
-                  onPressed: () async {
-                    final next = !_privacyLens;
-                    await CgStore.savePrivacyLens(next);
-                    if (mounted) setState(() => _privacyLens = next);
-                  },
-                  icon: Icon(
-                    _privacyLens
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                ),
-              ],
+            title: Text(
+              _privacyLens ? '••••••' : (_profile?.nickname ?? 'Чернограм'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
+            subtitle: Text(widget.ru ? 'Профиль и настройки' : 'Profile and settings'),
+            trailing: const Icon(Icons.settings_outlined),
+            onTap: _settings,
           ),
         ],
       ),
     );
   }
 
-  Widget _emptyChat(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(36),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ChernogramLogo(size: 92),
-              const SizedBox(height: 18),
-              Text(
-                widget.ru ? 'Выберите комнату' : 'Select a room',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                widget.ru
-                    ? 'Слева находятся комнаты, справа сразу отображаются их файлы.'
-                    : 'Rooms are on the left and their files appear on the right.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-
-  Widget _filesPanel(BuildContext context, CgTunnel? tunnel) {
+  Widget _rightPanelWidget(BuildContext context, CgTunnel tunnel) {
     final scheme = Theme.of(context).colorScheme;
-    final entries = tunnel == null
-        ? const <({CgMessage message, CgAttachment attachment})>[]
-        : tunnel.messages
-            .where((message) => message.attachment != null && !message.deleted)
-            .map(
-              (message) => (
-                message: message,
-                attachment: message.attachment!,
-              ),
-            )
-            .toList()
-          ..sort((a, b) => b.message.sentAt.compareTo(a.message.sentAt));
+    final members = _contacts
+        .where((contact) => contact.tunnelIds.contains(tunnel.id))
+        .toList()
+      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    final attachments = tunnel.messages
+        .where((message) => message.attachment != null && !message.deleted)
+        .toList()
+      ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    final visible = attachments.where((message) {
+      final kind = message.attachment!.kind;
+      if (_rightTab == 0) return true;
+      if (_rightTab == 1) return kind == 'image' || kind == 'video' || kind == 'circle';
+      return kind != 'image' && kind != 'video' && kind != 'circle';
+    }).toList();
     return ColoredBox(
       color: scheme.surface,
       child: Column(
         children: [
-          Container(
+          SizedBox(
             height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-            ),
             child: Row(
               children: [
-                const Icon(Icons.folder_copy_outlined),
-                const SizedBox(width: 9),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Text(
-                    widget.ru ? 'Файлы комнаты' : 'Room files',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                    widget.ru ? 'Информация' : 'Info',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text('${entries.length}'),
+                IconButton(
+                  onPressed: () => setState(() => _rightPanel = false),
+                  icon: const Icon(Icons.close_rounded),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: tunnel == null
-                ? Center(
-                    child: Text(widget.ru ? 'Комната не выбрана' : 'No room selected'),
-                  )
-                : entries.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(22),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.folder_open_rounded, size: 54),
-                              const SizedBox(height: 12),
-                              Text(
-                                widget.ru
-                                    ? 'В этой комнате пока нет файлов'
-                                    : 'This room has no files yet',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                widget.ru
-                                    ? 'Отправьте файл кнопкой «+» в центре.'
-                                    : 'Send a file with the “+” button in the center.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(10),
-                        itemCount: entries.length,
-                        itemBuilder: (context, index) {
-                          final entry = entries[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 7),
-                            child: Material(
-                              color: scheme.surfaceContainerHighest.withValues(alpha: .6),
-                              borderRadius: BorderRadius.circular(14),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(14),
-                                onTap: () => _openAttachment(entry.attachment),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(11),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 42,
-                                        height: 42,
-                                        decoration: BoxDecoration(
-                                          color: scheme.primary.withValues(alpha: .12),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          _fileIcon(entry.attachment.kind),
-                                          color: scheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _privacyLens
-                                                  ? '••••••••'
-                                                  : entry.attachment.name,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              '${_formatBytes(entry.attachment.size)} • ${entry.message.authorName}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: scheme.onSurfaceVariant,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(Icons.open_in_new_rounded, size: 17),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                ChernogramAvatar(size: 78, seed: tunnel.id, avatarBase64: tunnel.avatarBase64),
+                const SizedBox(height: 10),
+                Text(
+                  tunnel.displayName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: const BoxDecoration(
+                        color: ChernogramColors.success,
+                        shape: BoxShape.circle,
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${members.where((item) => item.lastSeenAt.isAfter(DateTime.now().subtract(const Duration(seconds: 55)))).length + 1} ${widget.ru ? 'онлайн' : 'online'}',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pairByQr,
+                        icon: const Icon(Icons.qr_code_2_rounded),
+                        label: Text(widget.ru ? 'QR' : 'QR'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _shareFile,
+                        icon: const Icon(Icons.add_rounded),
+                        label: Text(widget.ru ? 'Файл' : 'File'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: 0, label: Text(widget.ru ? 'Все' : 'All')),
+                ButtonSegment(value: 1, label: Text(widget.ru ? 'Медиа' : 'Media')),
+                ButtonSegment(value: 2, label: Text(widget.ru ? 'Файлы' : 'Files')),
+              ],
+              selected: <int>{_rightTab},
+              onSelectionChanged: (value) => setState(() => _rightTab = value.first),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: visible.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        widget.ru ? 'В этой комнате пока нет файлов.' : 'No files in this room yet.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) {
+                      final message = visible[index];
+                      final attachment = message.attachment!;
+                      return Card(
+                        child: ListTile(
+                          leading: Icon(
+                            attachment.kind == 'image'
+                                ? Icons.image_outlined
+                                : attachment.kind == 'video' || attachment.kind == 'circle'
+                                ? Icons.movie_outlined
+                                : Icons.description_outlined,
+                          ),
+                          title: Text(
+                            attachment.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            tunnel.isPrivate
+                                ? (widget.ru ? 'Закрытый доступ' : 'Private access')
+                                : (widget.ru ? 'Общий доступ' : 'Public access'),
+                          ),
+                          onTap: () => CgMediaStore.open(attachment),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const Divider(height: 1),
+          ExpansionTile(
+            leading: const Icon(Icons.group_outlined),
+            title: Text('${widget.ru ? 'Участники' : 'Members'} • ${members.length + 1}'),
+            children: [
+              ListTile(
+                leading: ChernogramAvatar(size: 34, seed: _profile?.id ?? 'me'),
+                title: Text(_profile?.nickname ?? 'Чернограм'),
+                trailing: const Icon(Icons.circle, size: 10, color: ChernogramColors.success),
+              ),
+              for (final member in members.take(8))
+                ListTile(
+                  leading: ChernogramAvatar(size: 34, seed: member.id),
+                  title: Text(member.nickname),
+                  trailing: Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: member.lastSeenAt.isAfter(DateTime.now().subtract(const Duration(seconds: 55)))
+                        ? ChernogramColors.success
+                        : scheme.outline,
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -861,53 +934,96 @@ class _ChernogramWindowsDesktopState
 
   @override
   Widget build(BuildContext context) {
-    if (_loading || _profile == null) {
-      return const Scaffold(body: Center(child: ChernogramLogo(size: 132)));
+    if (_loading) {
+      return const Scaffold(body: Center(child: ChernogramLogo(size: 124)));
     }
-    final selected = _selectedTunnel;
-    return Scaffold(
-      body: CgChatPatternBackground(
-        child: Column(
-          children: [
-            _topBar(context),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final leftWidth = width < 1180 ? 270.0 : 315.0;
-                  final rightWidth = width < 1180 ? 250.0 : 320.0;
-                  return Row(
-                    children: [
-                      SizedBox(width: leftWidth, child: _roomsPanel(context)),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        child: selected == null
-                            ? _emptyChat(context)
-                            : CgChatScreen(
-                                key: ValueKey<String>(
-                                  'windows-room-${selected.id}',
-                                ),
-                                ru: widget.ru,
-                                profile: _profile!,
-                                tunnel: selected,
-                                privacyLens: _privacyLens,
-                                onChanged: _updateTunnel,
-                                onForward: _forwardMessage,
-                                onContactSeen: _rememberContact,
-                              ),
-                      ),
-                      const VerticalDivider(width: 1),
-                      SizedBox(
-                        width: rightWidth,
-                        child: _filesPanel(context, selected),
-                      ),
-                    ],
-                  );
-                },
+    if (_loadError != null || _profile == null) {
+      return Scaffold(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: GlassPanel(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded, size: 54),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.ru ? 'Не удалось открыть профиль' : 'Could not open profile',
+                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_loadError ?? ''),
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    onPressed: _bootstrap,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: Text(widget.ru ? 'Повторить' : 'Retry'),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
+      );
+    }
+    final selected = _selected;
+    return Scaffold(
+      body: Row(
+        children: [
+          SizedBox(width: 340, child: _leftPanel(context)),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: selected == null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const ChernogramLogo(size: 94),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.ru ? 'Выберите комнату' : 'Select a room',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: _pairByQr,
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          label: Text(widget.ru ? 'Подключить по QR' : 'Connect with QR'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      CgChatScreen(
+                        key: ValueKey<String>('desktop-${selected.id}'),
+                        ru: widget.ru,
+                        profile: _profile!,
+                        tunnel: selected,
+                        privacyLens: _privacyLens,
+                        onChanged: _updateTunnel,
+                        onForward: _forward,
+                        onContactSeen: _rememberContact,
+                      ),
+                      if (!_rightPanel)
+                        Positioned(
+                          right: 12,
+                          top: 12,
+                          child: IconButton.filledTonal(
+                            tooltip: widget.ru ? 'Информация и файлы' : 'Info and files',
+                            onPressed: () => setState(() => _rightPanel = true),
+                            icon: const Icon(Icons.info_outline_rounded),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          if (_rightPanel && selected != null) ...[
+            const VerticalDivider(width: 1),
+            SizedBox(width: 320, child: _rightPanelWidget(context, selected)),
+          ],
+        ],
       ),
     );
   }
