@@ -9,12 +9,12 @@ import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
 import chat.simplex.common.platform.SimplexLabCore
-import io.flutter.embedding.android.FlutterFragmentActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
 
-class MainActivity : FlutterFragmentActivity() {
+class MainActivity : AudioServiceActivity() {
     private val channelName = "chernogram/sound"
     private val simplexExecutor = Executors.newSingleThreadExecutor()
     private var incomingRingtone: Ringtone? = null
@@ -82,9 +82,7 @@ class MainActivity : FlutterFragmentActivity() {
                 "receiveEvent" -> {
                     val waitMicros = call.argument<Int>("waitMicros") ?: 500_000
                     runSimplex(result) {
-                        mapOf(
-                            "event" to SimplexLabCore.receiveEvent(waitMicros)
-                        )
+                        mapOf("event" to SimplexLabCore.receiveEvent(waitMicros))
                     }
                 }
                 "close" -> runSimplex(result) {
