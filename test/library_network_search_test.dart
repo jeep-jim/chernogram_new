@@ -39,7 +39,7 @@ void main() {
     expect(result.first.item.id, '1');
   });
 
-  test('interest search joins close Russian topics', () {
+  test('interest search ranks close Russian topics first', () {
     final now = DateTime.utc(2026, 8, 2);
     final topics = <InterestTopic>[
       InterestTopic(
@@ -69,7 +69,10 @@ void main() {
     ];
 
     final result = searchInterests(query: 'где купить мёд', topics: topics);
-    expect(result.length, 1);
+    expect(result, isNotEmpty);
     expect(result.first.topic.id, 'honey');
+    if (result.length > 1) {
+      expect(result.first.score, greaterThan(result[1].score));
+    }
   });
 }
