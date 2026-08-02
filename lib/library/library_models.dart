@@ -39,16 +39,47 @@ abstract final class LibraryKinds {
     final extension = fileName.contains('.')
         ? fileName.split('.').last.toLowerCase()
         : '';
-    if (<String>{'mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac'}.contains(extension)) {
+    if (<String>{
+      'mp3',
+      'm4a',
+      'aac',
+      'wav',
+      'ogg',
+      'opus',
+      'flac',
+    }.contains(extension)) {
       return audio;
     }
-    if (<String>{'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'}.contains(extension)) {
+    if (<String>{
+      'mp4',
+      'mov',
+      'mkv',
+      'webm',
+      'avi',
+      'm4v',
+    }.contains(extension)) {
       return video;
     }
-    if (<String>{'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic'}.contains(extension)) {
+    if (<String>{
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'gif',
+      'bmp',
+      'heic',
+    }.contains(extension)) {
       return image;
     }
-    if (<String>{'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'}.contains(extension)) {
+    if (<String>{
+      'zip',
+      'rar',
+      '7z',
+      'tar',
+      'gz',
+      'bz2',
+      'xz',
+    }.contains(extension)) {
       return archive;
     }
     if (<String>{

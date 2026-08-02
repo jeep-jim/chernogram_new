@@ -151,7 +151,9 @@ class _ChernogramInterestsPageState extends State<ChernogramInterestsPage> {
   Future<void> _openTopic(InterestTopic topic) async {
     final roomId = topic.roomId;
     if (roomId != null) {
-      final room = widget.rooms.where((value) => value.id == roomId).firstOrNull;
+      final room = widget.rooms
+          .where((value) => value.id == roomId)
+          .firstOrNull;
       if (room != null) {
         await widget.onOpenRoom(room);
         return;
@@ -503,17 +505,18 @@ class _NoInterestMatches extends StatelessWidget {
   );
 }
 
-const List<(String, String, String)> _planetOptions = <(String, String, String)>[
-  (InterestPlanets.all, '🌌', 'Все'),
-  (InterestPlanets.tech, '💻', 'Технологии'),
-  (InterestPlanets.money, '₿', 'Деньги'),
-  (InterestPlanets.world, '🌍', 'Мир'),
-  (InterestPlanets.business, '🚀', 'Бизнес'),
-  (InterestPlanets.creative, '🎨', 'Творчество'),
-  (InterestPlanets.people, '🤝', 'Люди'),
-  (InterestPlanets.auto, '🚗', 'Авто'),
-  (InterestPlanets.home, '🏠', 'Дом'),
-];
+const List<(String, String, String)> _planetOptions =
+    <(String, String, String)>[
+      (InterestPlanets.all, '🌌', 'Все'),
+      (InterestPlanets.tech, '💻', 'Технологии'),
+      (InterestPlanets.money, '₿', 'Деньги'),
+      (InterestPlanets.world, '🌍', 'Мир'),
+      (InterestPlanets.business, '🚀', 'Бизнес'),
+      (InterestPlanets.creative, '🎨', 'Творчество'),
+      (InterestPlanets.people, '🤝', 'Люди'),
+      (InterestPlanets.auto, '🚗', 'Авто'),
+      (InterestPlanets.home, '🏠', 'Дом'),
+    ];
 
 String _kindLabel(String kind) => switch (kind) {
   InterestKinds.ask => 'Вопрос',
@@ -542,8 +545,14 @@ List<Color> _planetColors(String planet) => switch (planet) {
   InterestPlanets.tech => const <Color>[Color(0xFF3294E8), Color(0xFF3855C7)],
   InterestPlanets.money => const <Color>[Color(0xFF36AF80), Color(0xFFD0A43D)],
   InterestPlanets.world => const <Color>[Color(0xFF22AAB3), Color(0xFF3AA66F)],
-  InterestPlanets.business => const <Color>[Color(0xFF7654D6), Color(0xFFD04FB2)],
-  InterestPlanets.creative => const <Color>[Color(0xFFD858A9), Color(0xFFE58B3C)],
+  InterestPlanets.business => const <Color>[
+    Color(0xFF7654D6),
+    Color(0xFFD04FB2),
+  ],
+  InterestPlanets.creative => const <Color>[
+    Color(0xFFD858A9),
+    Color(0xFFE58B3C),
+  ],
   InterestPlanets.people => const <Color>[Color(0xFFE18346), Color(0xFFC94F68)],
   InterestPlanets.auto => const <Color>[Color(0xFF4169B8), Color(0xFF293B63)],
   InterestPlanets.home => const <Color>[Color(0xFF6E9C55), Color(0xFF3F715D)],

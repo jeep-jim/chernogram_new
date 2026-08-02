@@ -69,14 +69,19 @@ class LibraryStore {
     required List<LibraryItem> current,
     required String localDeviceId,
   }) async {
-    final byId = <String, LibraryItem>{for (final item in current) item.id: item};
+    final byId = <String, LibraryItem>{
+      for (final item in current) item.id: item,
+    };
     final now = DateTime.now();
     for (final room in rooms) {
       for (final message in room.messages) {
         if (!message.isFile || message.deleted) continue;
         final itemId = 'chat_${room.id}_${message.id}';
         final old = byId[itemId];
-        final kind = LibraryKinds.detect(message.fileName ?? 'file.bin', hint: message.kind);
+        final kind = LibraryKinds.detect(
+          message.fileName ?? 'file.bin',
+          hint: message.kind,
+        );
         final item = LibraryItem(
           id: itemId,
           name: message.fileName ?? 'Файл',

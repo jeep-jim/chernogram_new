@@ -130,7 +130,9 @@ class _ChernogramLibraryPageState extends State<ChernogramLibraryPage> {
     final path = item.localPath;
     if (path == null || !await File(path).exists()) {
       if (item.roomId != null) {
-        final room = widget.rooms.where((value) => value.id == item.roomId).firstOrNull;
+        final room = widget.rooms
+            .where((value) => value.id == item.roomId)
+            .firstOrNull;
         if (room != null) await widget.onOpenRoom(room);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,22 +148,26 @@ class _ChernogramLibraryPageState extends State<ChernogramLibraryPage> {
           context,
           MaterialPageRoute(builder: (_) => _ImageViewer(item: item)),
         );
+        return;
       case LibraryKinds.audio:
       case LibraryKinds.voice:
         final audio = _items
             .where(
               (value) =>
                   value.available &&
-                  (value.kind == LibraryKinds.audio || value.kind == LibraryKinds.voice),
+                  (value.kind == LibraryKinds.audio ||
+                      value.kind == LibraryKinds.voice),
             )
             .toList();
         final index = max(0, audio.indexWhere((value) => value.id == item.id));
         await Navigator.push<void>(
           context,
           MaterialPageRoute(
-            builder: (_) => LibraryAudioPlayer(items: audio, initialIndex: index),
+            builder: (_) =>
+                LibraryAudioPlayer(items: audio, initialIndex: index),
           ),
         );
+        return;
       case LibraryKinds.video:
       case LibraryKinds.circle:
         await Navigator.push<void>(
@@ -173,16 +179,15 @@ class _ChernogramLibraryPageState extends State<ChernogramLibraryPage> {
             ),
           ),
         );
+        return;
       default:
         await OpenFilex.open(path);
+        return;
     }
   }
 
-  List<LibrarySearchResult> get _results => searchLibrary(
-    query: _search.text,
-    items: _items,
-    kind: _kind,
-  );
+  List<LibrarySearchResult> get _results =>
+      searchLibrary(query: _search.text, items: _items, kind: _kind);
 
   @override
   Widget build(BuildContext context) {
@@ -459,7 +464,9 @@ class _LibraryThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = item.localPath;
-    if (item.kind == LibraryKinds.image && path != null && File(path).existsSync()) {
+    if (item.kind == LibraryKinds.image &&
+        path != null &&
+        File(path).existsSync()) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(13),
         child: Image.file(
@@ -579,7 +586,7 @@ class LibraryAudioPlayer extends StatefulWidget {
 
 class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
   final AudioPlayer _player = AudioPlayer();
-  late int _index = widget.initialIndex.clamp(0, max(0, widget.items.length - 1));
+  late int _index;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   double _speed = 1;
@@ -593,6 +600,9 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex
+        .clamp(0, max(0, widget.items.length - 1))
+        .toInt();
     _durationSubscription = _player.durationStream.listen((value) {
       if (mounted) setState(() => _duration = value ?? Duration.zero);
     });
@@ -600,7 +610,8 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
       if (mounted) setState(() => _position = value);
     });
     _stateSubscription = _player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) unawaited(_next());
+      if (state.processingState == ProcessingState.completed)
+        unawaited(_next());
       if (mounted) setState(() {});
     });
     unawaited(_loadCurrent(autoplay: true));
@@ -644,8 +655,8 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
             children: [
               const Spacer(),
               Container(
-                width: min(MediaQuery.sizeOf(context).width - 70, 320),
-                height: min(MediaQuery.sizeOf(context).width - 70, 320),
+                width: min(MediaQuery.sizeOf(context).width - 70, 320.0),
+                height: min(MediaQuery.sizeOf(context).width - 70, 320.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(42),
                   gradient: const LinearGradient(
@@ -665,14 +676,19 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 _item.artist ?? _item.ownerName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 20),
               Slider(
@@ -680,7 +696,8 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
                 max: maxMs.toDouble(),
                 onChanged: _loading
                     ? null
-                    : (next) => _player.seek(Duration(milliseconds: next.round())),
+                    : (next) =>
+                          _player.seek(Duration(milliseconds: next.round())),
               ),
               Row(
                 children: [
@@ -710,7 +727,9 @@ class _LibraryAudioPlayerState extends State<LibraryAudioPlayer> {
                               await _player.play();
                             }
                           },
-                    icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                    icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   IconButton(
@@ -801,7 +820,11 @@ class _LibraryVideoPlayerState extends State<LibraryVideoPlayer> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(widget.item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          widget.item.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       body: Center(
         child: !_ready || controller == null
@@ -817,7 +840,10 @@ class _LibraryVideoPlayerState extends State<LibraryVideoPlayer> {
                 },
                 child: widget.circular
                     ? SizedBox.square(
-                        dimension: min(MediaQuery.sizeOf(context).width - 44, 420),
+                        dimension: min(
+                          MediaQuery.sizeOf(context).width - 44,
+                          420.0,
+                        ),
                         child: ClipOval(child: _video(controller)),
                       )
                     : AspectRatio(
@@ -834,7 +860,9 @@ class _LibraryVideoPlayerState extends State<LibraryVideoPlayer> {
                 child: VideoProgressIndicator(
                   controller,
                   allowScrubbing: true,
-                  colors: const VideoProgressColors(playedColor: Color(0xFF8C7BFF)),
+                  colors: const VideoProgressColors(
+                    playedColor: Color(0xFF8C7BFF),
+                  ),
                 ),
               ),
             ),
@@ -857,7 +885,11 @@ class _LibraryVideoPlayerState extends State<LibraryVideoPlayer> {
           child: CircleAvatar(
             radius: 34,
             backgroundColor: Colors.black54,
-            child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 42),
+            child: Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 42,
+            ),
           ),
         ),
     ],

@@ -250,8 +250,8 @@ double interestSimilarity(String query, InterestTopic topic) {
   final normalizedTopic = topic.text.toLowerCase().replaceAll('ё', 'е');
   if (normalizedTopic.contains(normalizedQuery)) score += 16;
   if (topic.planet == inferInterestPlanet(query)) score += 2;
-  score += min(3, topic.followers / 5);
-  score += min(2, topic.replies / 8);
+  score += min<double>(3, topic.followers / 5);
+  score += min<double>(2, topic.replies / 8);
   return score;
 }
 
@@ -262,7 +262,9 @@ List<InterestMatch> searchInterests({
 }) {
   final result = <InterestMatch>[];
   for (final topic in topics) {
-    if (planet != null && planet != InterestPlanets.all && topic.planet != planet) {
+    if (planet != null &&
+        planet != InterestPlanets.all &&
+        topic.planet != planet) {
       continue;
     }
     final score = query.trim().isEmpty ? 1.0 : interestSimilarity(query, topic);
@@ -278,7 +280,9 @@ List<InterestMatch> searchInterests({
 
 List<InterestTopic> topicsFromRooms(List<OpticalRoom> rooms) {
   return rooms.map((room) {
-    final messages = room.messages.where((message) => !message.deleted).toList();
+    final messages = room.messages
+        .where((message) => !message.deleted)
+        .toList();
     final textParts = <String>[room.name];
     for (final message in messages.reversed.take(4)) {
       if (message.text.trim().isNotEmpty) textParts.add(message.text.trim());

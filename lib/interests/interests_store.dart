@@ -22,9 +22,7 @@ class InterestsStore {
       final result = decoded
           .whereType<Map>()
           .map(
-            (value) => InterestTopic.fromJson(
-              Map<String, dynamic>.from(value),
-            ),
+            (value) => InterestTopic.fromJson(Map<String, dynamic>.from(value)),
           )
           .where((topic) => topic.text.trim().isNotEmpty)
           .toList();

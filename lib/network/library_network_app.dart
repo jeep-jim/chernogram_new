@@ -301,10 +301,7 @@ class _RoomsPage extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 14),
-            child: _NetworkPill(),
-          ),
+          Padding(padding: EdgeInsets.only(right: 14), child: _NetworkPill()),
         ],
         flexibleSpace: FlexibleSpaceBar(
           background: SafeArea(
@@ -331,7 +328,9 @@ class _RoomsPage extends StatelessWidget {
                         Text(
                           'Общение, медиа, библиотека и поиск тем в одном месте',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                             fontSize: 12,
                           ),
                         ),
@@ -392,10 +391,7 @@ class _RoomsPage extends StatelessWidget {
         ),
       ),
       if (rooms.isEmpty)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: _EmptyRooms(),
-        )
+        const SliverFillRemaining(hasScrollBody: false, child: _EmptyRooms())
       else
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 24),
@@ -647,7 +643,10 @@ class _ProfilePage extends StatelessWidget {
                       profile.id,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -664,10 +663,15 @@ class _ProfilePage extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                leading: Icon(darkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded),
+                leading: Icon(
+                  darkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                ),
                 title: const Text('Тема'),
                 subtitle: Text(darkMode ? 'Градиентная тёмная' : 'Светлая'),
-                trailing: Switch(value: darkMode, onChanged: (_) => onToggleTheme()),
+                trailing: Switch(
+                  value: darkMode,
+                  onChanged: (_) => onToggleTheme(),
+                ),
               ),
               const Divider(height: 1),
               ListTile(
@@ -692,7 +696,9 @@ class _ProfilePage extends StatelessWidget {
               ListTile(
                 leading: Icon(Icons.devices_rounded),
                 title: Text('Мои устройства'),
-                subtitle: Text('Этот телефон зарегистрирован как локальный узел'),
+                subtitle: Text(
+                  'Этот телефон зарегистрирован как локальный узел',
+                ),
               ),
             ],
           ),

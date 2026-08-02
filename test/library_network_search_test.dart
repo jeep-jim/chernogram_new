@@ -68,10 +68,7 @@ void main() {
       ),
     ];
 
-    final result = searchInterests(
-      query: 'где купить мёд',
-      topics: topics,
-    );
+    final result = searchInterests(query: 'где купить мёд', topics: topics);
     expect(result.length, 1);
     expect(result.first.topic.id, 'honey');
   });
