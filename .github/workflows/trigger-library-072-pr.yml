@@ -1,0 +1,46 @@
+name: Контроль Library Network build 72
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - TRIGGER_LIBRARY_072.md
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    name: Запустить Android Library Network build 72
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Запустить основной workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BEFORE=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow build-library-network-072.yml \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // 0')
+          gh workflow run build-library-network-072.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          for attempt in $(seq 1 20); do
+            sleep 2
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow build-library-network-072.yml \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ] && [ "$RUN_ID" != "$BEFORE" ]; then
+              echo "Library Network build 72: $RUN_ID"
+              exit 0
+            fi
+          done
+          echo "Событие принято, но ID сборки ещё не появился."
