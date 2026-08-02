@@ -1,0 +1,27 @@
+name: Контроль запуска build 68
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - TRIGGER_EXECUTE_068.md
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    name: Запустить Android и Windows build 68
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Запустить основной исполнитель
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run execute-unified-068.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          echo "Исполнитель Android и Windows build 68 принят GitHub Actions."
