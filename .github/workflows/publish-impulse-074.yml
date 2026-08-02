@@ -1,0 +1,349 @@
+name: Опубликовать Чернограм Impulse 0.51.0+74
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-impulse-publish-074
+  cancel-in-progress: false
+
+env:
+  SOURCE_REF: rebuild/impulse-transport-074
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.51.0
+  VERSION_CODE: 74
+  RELEASE_TAG: chernogram-0.51.0-build74
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  publish:
+    name: Развернуть Worker, собрать и включить обновление
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+      FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить инфраструктурные параметры
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            CLOUDFLARE_API_TOKEN \
+            CLOUDFLARE_ACCOUNT_ID \
+            FIREBASE_SERVICE_ACCOUNT_JSON \
+            FIREBASE_API_KEY \
+            FIREBASE_APP_ID \
+            FIREBASE_MESSAGING_SENDER_ID \
+            FIREBASE_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          import json, os
+          account = json.loads(os.environ['FIREBASE_SERVICE_ACCOUNT_JSON'])
+          required = ('client_email', 'private_key', 'project_id')
+          missing = [key for key in required if not account.get(key)]
+          if missing:
+              raise SystemExit('Firebase service account is missing: ' + ', '.join(missing))
+          if account['project_id'] != os.environ['FIREBASE_PROJECT_ID']:
+              raise SystemExit('FIREBASE_PROJECT_ID does not match service account project_id')
+          PY
+
+      - name: Проверить код перед публикацией
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tool/finish_impulse_074.py
+          dart format --set-exit-if-changed \
+            lib/main.dart \
+            lib/push_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/chat_screen.dart \
+            lib/light/light_invite_qr.dart
+          grep -q 'version: 0.51.0+74' pubspec.yaml
+          grep -q '_jumpToBottomImmediately' lib/chat_screen.dart
+          grep -q '_dismissKeyboard' lib/chat_screen.dart
+          grep -q 'LightInviteScannerScreen' lib/light/light_chat_app.dart
+          grep -q 'class Room extends DurableObject' worker/impulse/src/index.ts
+          ! grep -q "'ntfy.sh'" lib/internet_core.dart
+          ! grep -q 'class _DialerPage' lib/light/light_chat_app.dart
+
+      - name: Проверить и развернуть Impulse Worker
+        working-directory: worker/impulse
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install
+          npm run check
+          npx wrangler deploy 2>&1 | tee ../../wrangler-deploy74.log
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" | \
+            npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON
+
+      - name: Определить адрес Worker и проверить health
+        shell: bash
+        run: |
+          set -euo pipefail
+          SUBDOMAIN=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('success'); print(d['result']['subdomain'])")
+          IMPULSE_BASE_URL="https://chernogram-impulse.${SUBDOMAIN}.workers.dev"
+          echo "IMPULSE_BASE_URL=$IMPULSE_BASE_URL" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --retry 8 --retry-delay 3 \
+            "$IMPULSE_BASE_URL/health" | tee impulse-health74.json
+          python3 - <<'PY'
+          import json
+          with open('impulse-health74.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert data.get('ok') is True
+          assert data.get('service') == 'chernogram-impulse'
+          PY
+
+      - name: Проверить очередь Worker без открытых данных
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOM=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+          AUTH=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+          PACKET=$(python3 -c "import secrets; print(secrets.token_urlsafe(18))")
+          BASE="$IMPULSE_BASE_URL/v1/rooms/$ROOM"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $AUTH" \
+            -H 'Content-Type: application/json' \
+            -d '{"deviceId":"ci-a","name":"CI A"}' \
+            "$BASE/register" >/dev/null
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $AUTH" \
+            -H 'Content-Type: application/json' \
+            -d "{\"packetId\":\"$PACKET\",\"from\":\"ci-a\",\"kind\":\"message\",\"wake\":\"none\",\"ciphertext\":\"ci-encrypted-envelope\",\"createdAt\":$(date +%s000)}" \
+            "$BASE/envelopes" >/dev/null
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $AUTH" \
+            "$BASE/pull?device=ci-b" > impulse-pull74.json
+          python3 - "$PACKET" <<'PY'
+          import json, sys
+          packet = sys.argv[1]
+          with open('impulse-pull74.json', encoding='utf-8') as f:
+              data = json.load(f)
+          assert any(item.get('packetId') == packet for item in data.get('envelopes', []))
+          PY
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $AUTH" \
+            -H 'Content-Type: application/json' \
+            -d "{\"packetIds\":[\"$PACKET\"]}" \
+            "$BASE/ack" >/dev/null
+
+      - name: Flutter analyze, тесты и release APK
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze \
+            --no-fatal-infos \
+            --no-fatal-warnings \
+            lib/main.dart \
+            lib/push_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart \
+            lib/group_call_service.dart \
+            lib/chat_screen.dart \
+            lib/chat_media.dart \
+            lib/core_models.dart \
+            lib/sound_service.dart \
+            lib/update_service.dart \
+            lib/brand.dart \
+            lib/light \
+            2>&1 | tee impulse-analyze74.log
+          flutter test 2>&1 | tee impulse-tests74.log
+          rm -rf android/app/src/main/jniLibs
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --dart-define=IMPULSE_BASE_URL="$IMPULSE_BASE_URL" \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            2>&1 | tee impulse-build74.log
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee impulse-signature74.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' impulse-signature74.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee impulse-badging74.txt
+          grep -q "package: name='com.example.chernogram'" impulse-badging74.txt
+          grep -q "versionCode='74'" impulse-badging74.txt
+          grep -q "versionName='0.51.0'" impulse-badging74.txt
+          grep -q "application-label:'Чернограм'" impulse-badging74.txt
+          SIZE=$(stat -c%s chernogram.apk)
+          test "$SIZE" -lt 90000000
+          echo "$SIZE" | tee impulse-size74.txt
+          sha256sum chernogram.apk | tee impulse-sha256-74.txt
+
+      - name: Создать проверенный update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 impulse-sha256-74.txt)
+          SIZE=$(cat impulse-size74.txt)
+          cat > update-build74.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Чернограм 0.51.0: новый Impulse Worker, FCM-уведомления и пробуждение Android, очередь зашифрованных сообщений, WebRTC-аудио и видео, QR-подключение, быстрый чат без циферблата, прозрачная круглая строка ввода и исправленная клавиатура.",
+            "notesEn": "Chernogram 0.51.0: Impulse Worker, FCM wake-up and notifications, encrypted message queue, WebRTC audio/video, QR pairing, lightweight chat without a dialer and polished composer behavior."
+          }
+          EOF
+          python3 -m json.tool update-build74.json >/dev/null
+
+      - name: Опубликовать release и канал online update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build74.json \
+            impulse-sha256-74.txt \
+            impulse-signature74.txt \
+            impulse-badging74.txt \
+            impulse-size74.txt \
+            impulse-health74.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.51.0+74 — Impulse" \
+            --notes "Лёгкий чат, QR-подключение, Worker + FCM доставка и WebRTC аудио/видео."
+          gh release delete latest-apk --cleanup-tag -y || true
+          cp update-build74.json update.json
+          gh release create latest-apk \
+            chernogram.apk \
+            update.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Android 0.51.0+74" \
+            --notes "Онлайн-обновление с build 73 на новый Impulse transport."
+
+      - name: Контрольно скачать online update
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 6 --retry-delay 3 \
+            -o published-build74.apk \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=74"
+          test "$(sha256sum published-build74.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 impulse-sha256-74.txt)"
+          test "$(stat -c%s published-build74.apk)" = "$(cat impulse-size74.txt)"
+
+      - name: Включить build 74 в основном update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-074
+          git worktree add -B publish-impulse-074 /tmp/chernogram-main-074 origin/main
+          cd /tmp/chernogram-main-074
+          cp "$GITHUB_WORKSPACE/update-build74.json" update.json
+          cat > BUILD_074_STATUS.md <<EOF
+          # Чернограм 0.51.0+74 — опубликован
+
+          Android: success
+          Worker health: success
+          Release: ${RELEASE_TAG}
+          Source: ${SOURCE_REF}
+          Workflow run: ${GITHUB_RUN_ID}
+          APK size bytes: $(cat "$GITHUB_WORKSPACE/impulse-size74.txt")
+          Worker URL: ${IMPULSE_BASE_URL}
+          Published at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json BUILD_074_STATUS.md
+          git commit -m "Опубликовать Чернограм Impulse 0.51.0+74 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Выдать APK и диагностику
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-impulse-0.51.0-build74
+          path: |
+            chernogram.apk
+            update-build74.json
+            impulse-sha256-74.txt
+            impulse-signature74.txt
+            impulse-badging74.txt
+            impulse-size74.txt
+            impulse-health74.json
+            impulse-pull74.json
+            impulse-analyze74.log
+            impulse-tests74.log
+            impulse-build74.log
+            wrangler-deploy74.log
+          if-no-files-found: warn
+          retention-days: 14
