@@ -21,6 +21,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // OTA-сборка выпускается для современных Android arm64. Без фильтра
+        // зависимости WebRTC и сканера добавляли внутрь APK ещё x86_64/armeabi-v7a.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     // SimpleX содержит крупную нативную библиотеку. Для прямого OTA-обновления
