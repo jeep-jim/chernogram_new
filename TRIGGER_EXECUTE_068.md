@@ -1,2 +1,2 @@
-Trigger Chernogram unified Android and Windows 0.26.0+68 build.
-Attempt: 4 — Android round icon resource fixed; Windows runner already verified.
+Finalize Chernogram Android and Windows 0.26.0+68.
+Attempt: 5 — Android backup rules fixed; use already verified Windows package.
