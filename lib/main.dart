@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_access.dart';
 import 'app_navigation.dart';
-import 'brand.dart';
-import 'optical/optical_app.dart';
+import 'hybrid/hybrid_app.dart';
+import 'hybrid/hybrid_theme.dart';
 import 'update_service.dart';
 import 'windows_desktop_app.dart';
 
@@ -37,18 +37,16 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   SystemUiOverlayStyle _overlay(bool dark) => SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-    statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-    systemNavigationBarColor: dark
-        ? ChernogramColors.background
-        : const Color(0xFFF2F5FC),
-    systemNavigationBarIconBrightness: dark
-        ? Brightness.light
-        : Brightness.dark,
-    systemNavigationBarContrastEnforced: false,
-    systemStatusBarContrastEnforced: false,
-  );
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor:
+            dark ? const Color(0xFF151B2A) : const Color(0xFFF4F3FC),
+        systemNavigationBarIconBrightness:
+            dark ? Brightness.light : Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        systemStatusBarContrastEnforced: false,
+      );
 
   void _applySystemUi(bool dark) {
     SystemChrome.setSystemUIOverlayStyle(_overlay(dark));
@@ -59,9 +57,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
       final prefs = await SharedPreferences.getInstance().timeout(
         const Duration(seconds: 4),
       );
-      final dark = Platform.isAndroid
-          ? true
-          : (prefs.getBool('dark_mode') ?? true);
+      final dark = prefs.getBool('dark_mode') ?? true;
       if (!mounted) return;
       setState(() {
         _ru = prefs.getString('lang') != 'en';
@@ -69,7 +65,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
       });
       _applySystemUi(dark);
     } catch (_) {
-      // Интерфейс уже запущен с безопасными значениями по умолчанию.
+      // Интерфейс уже работает с безопасными значениями по умолчанию.
     }
     _scheduleUpdateCheck();
   }
@@ -112,7 +108,19 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   Widget _applicationHome(BuildContext context) {
     if (Platform.isAndroid) {
-      return const ChernogramOpticalHome();
+      return ChernogramHybridHome(
+        darkMode: _darkMode,
+        onToggleTheme: _toggleTheme,
+        onCheckUpdates: () {
+          unawaited(
+            ChernogramUpdater.checkAndPrompt(
+              context,
+              ru: _ru,
+              manual: true,
+            ),
+          );
+        },
+      );
     }
     final desktop = ChernogramWindowsDesktop(
       ru: _ru,
@@ -130,16 +138,23 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: _overlay(_darkMode),
-    child: MaterialApp(
-      navigatorKey: chernogramNavigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: 'Чернограм Optical',
-      theme: chernogramLightTheme(),
-      darkTheme: chernogramTheme(),
-      themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-      themeAnimationDuration: Duration.zero,
-      home: Builder(builder: _applicationHome),
-    ),
-  );
+        value: _overlay(_darkMode),
+        child: MaterialApp(
+          navigatorKey: chernogramNavigatorKey,
+          debugShowCheckedModeBanner: false,
+          title: 'Чернограм Hybrid',
+          theme: HybridTheme.light(),
+          darkTheme: HybridTheme.dark(),
+          themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
+          themeAnimationDuration: const Duration(milliseconds: 220),
+          home: HybridBackdrop(
+            dark: _darkMode,
+            child: Builder(builder: _applicationHome),
+          ),
+          builder: (context, child) => HybridBackdrop(
+            dark: _darkMode,
+            child: child ?? const SizedBox.shrink(),
+          ),
+        ),
+      );
 }
