@@ -70,7 +70,6 @@ text = replace_once(
     'connect and start method',
 )
 
-# Replace app bar title subtitle with compact presence line.
 old_title = """        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -131,7 +130,6 @@ new_title = """        title: Column(
 """
 text = replace_once(text, old_title, new_title, 'compact title')
 
-# Replace overloaded actions with three direct actions.
 actions_pattern = re.compile(
     r"        actions: \[\n"
     r"          GlassIconButton\(\n"
@@ -163,7 +161,6 @@ text, count = actions_pattern.subn(actions_replacement, text, count=1)
 if count != 1:
     raise RuntimeError('Could not replace chat actions')
 
-# Remove the large reconnect banner; keep the tiny presence indicator in the header.
 banner_pattern = re.compile(
     r"            if \(_networkState != 'connected'\)\n"
     r"              Padding\(.*?"
@@ -179,7 +176,6 @@ text, count = banner_pattern.subn(
 if count != 1:
     raise RuntimeError('Could not remove reconnect banner')
 
-# Human-facing vocabulary.
 replacements = {
     'Сначала дождитесь подключения туннеля.': 'Сначала дождитесь подключения чата.',
     'Wait for the tunnel to connect first.': 'Wait for the chat to connect first.',
@@ -193,4 +189,17 @@ for old, new in replacements.items():
     text = text.replace(old, new)
 
 path.write_text(text, encoding='utf-8')
+
+manifest = Path('android/app/src/main/AndroidManifest.xml')
+manifest_text = manifest.read_text(encoding='utf-8')
+manifest_text = manifest_text.replace(
+    'android:icon="@mipmap/ic_launcher"',
+    'android:icon="@drawable/chernogram_launcher_icon"',
+)
+manifest_text = manifest_text.replace(
+    'android:roundIcon="@mipmap/ic_launcher"',
+    'android:roundIcon="@drawable/chernogram_launcher_icon"',
+)
+manifest.write_text(manifest_text, encoding='utf-8')
+
 print('Light chat build 73 patch applied.')
