@@ -15,6 +15,7 @@ type StoredEnvelope = {
   from: string;
   kind: string;
   wake: string;
+  video?: boolean;
   ciphertext: string;
   createdAt: number;
 };
@@ -119,7 +120,7 @@ async function sendPush(
   envelope: StoredEnvelope,
   roomKey: string,
 ): Promise<void> {
-  if (!participant.fcmToken) return;
+  if (!participant.fcmToken || envelope.wake === "none") return;
   const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON || "{}") as Partial<ServiceAccount>;
   if (!account.project_id) return;
   const accessToken = await googleAccessToken(env);
@@ -137,23 +138,29 @@ async function sendPush(
     body: JSON.stringify({
       message: {
         token: participant.fcmToken,
-        notification: { title, body },
+        ...(!call ? { notification: { title, body } } : {}),
         data: {
           roomKey,
           packetId: envelope.packetId,
           kind: envelope.kind,
           wake: envelope.wake,
+          video: envelope.video === true ? "true" : "false",
         },
-        android: {
-          priority: "HIGH",
-          ttl: call ? "60s" : "86400s",
-          notification: {
-            channel_id: call ? "chernogram_calls" : "chernogram_messages",
-            priority: call ? "PRIORITY_MAX" : "PRIORITY_HIGH",
-            visibility: "PRIVATE",
-            sound: "default",
-          },
-        },
+        android: call
+          ? {
+              priority: "HIGH",
+              ttl: "60s",
+            }
+          : {
+              priority: "HIGH",
+              ttl: "86400s",
+              notification: {
+                channel_id: "chernogram_messages",
+                priority: "PRIORITY_HIGH",
+                visibility: "PRIVATE",
+                sound: "default",
+              },
+            },
       },
     }),
   });
@@ -234,6 +241,10 @@ export class Room extends DurableObject<Env> {
     }
     if (envelope.ciphertext.length > 1_800_000) throw new Error("envelope_too_large");
     envelope.createdAt = envelope.createdAt || Date.now();
+    if (envelope.kind === "presence") {
+      this.broadcast(envelope);
+      return;
+    }
     await this.ctx.storage.put(`env:${envelope.packetId}`, envelope);
     await this.ctx.storage.setAlarm(Date.now() + 60_000);
     this.broadcast(envelope);

@@ -57,9 +57,9 @@ class _QueuedEnvelope {
           DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
       attempts: int.tryParse(json['attempts']?.toString() ?? '') ?? 0,
-      nextAttemptAt:
-          DateTime.tryParse(json['nextAttemptAt']?.toString() ?? '')
-              ?.toLocal(),
+      nextAttemptAt: DateTime.tryParse(
+        json['nextAttemptAt']?.toString() ?? '',
+      )?.toLocal(),
     );
   }
 }
@@ -251,11 +251,13 @@ class InternetTunnelSession {
       } catch (_) {}
     }
 
-    final httpUri = _endpoint('ws', query: <String, String>{
-      'device': profileId,
-      'name': nickname,
-    });
-    final wsUri = httpUri.replace(scheme: httpUri.scheme == 'https' ? 'wss' : 'ws');
+    final httpUri = _endpoint(
+      'ws',
+      query: <String, String>{'device': profileId, 'name': nickname},
+    );
+    final wsUri = httpUri.replace(
+      scheme: httpUri.scheme == 'https' ? 'wss' : 'ws',
+    );
     final socket = await WebSocket.connect(
       wsUri.toString(),
       headers: <String, dynamic>{'authorization': 'Bearer ${_authToken!}'},
@@ -381,7 +383,10 @@ class InternetTunnelSession {
           final meta = rawMeta is Map
               ? Map<String, dynamic>.from(rawMeta)
               : <String, dynamic>{};
-          meta.putIfAbsent('relayAt', () => DateTime.now().toUtc().toIso8601String());
+          meta.putIfAbsent(
+            'relayAt',
+            () => DateTime.now().toUtc().toIso8601String(),
+          );
           message['meta'] = meta;
           _rememberMessage(_sanitizeMessage(message));
           final transferId = meta['fileTransferId']?.toString() ?? '';
@@ -488,7 +493,9 @@ class InternetTunnelSession {
   ) {
     final manifest = _pendingFileManifests[transferId];
     final chunks = _pendingFileChunks[transferId];
-    if (manifest == null || chunks == null || chunks.any((item) => item == null)) {
+    if (manifest == null ||
+        chunks == null ||
+        chunks.any((item) => item == null)) {
       return;
     }
     final rawAttachment = manifest['attachment'];
@@ -565,27 +572,32 @@ class InternetTunnelSession {
   List<Map<String, dynamic>> replaySignals(String callId) {
     if (callId.isEmpty) return const <Map<String, dynamic>>[];
     final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 3));
-    return _signalHistory.where((signal) {
-      if (signal['callId']?.toString() != callId) return false;
-      final receivedAt = DateTime.tryParse(signal['receivedAt']?.toString() ?? '');
-      return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
-    }).map((signal) => Map<String, dynamic>.from(signal)).toList();
+    return _signalHistory
+        .where((signal) {
+          if (signal['callId']?.toString() != callId) return false;
+          final receivedAt = DateTime.tryParse(
+            signal['receivedAt']?.toString() ?? '',
+          );
+          return receivedAt == null || !receivedAt.toUtc().isBefore(cutoff);
+        })
+        .map((signal) => Map<String, dynamic>.from(signal))
+        .toList();
   }
 
   Future<void> sendHistory() async {
     if (_history.isEmpty) return;
     final start = _history.length > 120 ? _history.length - 120 : 0;
     final recent = _history.skip(start).toList(growable: false);
-    final plain = recent.where((message) {
-      final id = message['id']?.toString() ?? '';
-      return !_filePayloads.containsKey(id);
-    }).toList(growable: false);
+    final plain = recent
+        .where((message) {
+          final id = message['id']?.toString() ?? '';
+          return !_filePayloads.containsKey(id);
+        })
+        .toList(growable: false);
     if (plain.isNotEmpty) {
-      await _sendEnvelope(
-        'history',
-        <String, dynamic>{'messages': plain},
-        queueOnFailure: false,
-      );
+      await _sendEnvelope('history', <String, dynamic>{
+        'messages': plain,
+      }, queueOnFailure: false);
     }
   }
 
@@ -599,14 +611,10 @@ class InternetTunnelSession {
 
   Future<void> _publishPresence() async {
     await _registerDevice();
-    await _sendEnvelope(
-      'presence',
-      <String, dynamic>{
-        'online': true,
-        'at': DateTime.now().toUtc().toIso8601String(),
-      },
-      queueOnFailure: false,
-    );
+    await _sendEnvelope('presence', <String, dynamic>{
+      'online': true,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    }, queueOnFailure: false);
   }
 
   Future<void> _sendEnvelope(
@@ -623,7 +631,8 @@ class InternetTunnelSession {
       data: Map<String, dynamic>.from(data),
       createdAt: DateTime.now(),
     );
-    final reliable = queueOnFailure &&
+    final reliable =
+        queueOnFailure &&
         (kind == 'message' || kind == 'control' || kind == 'file_chunk');
     if (reliable) {
       _outbox.putIfAbsent(queued.packetId, () => queued);
@@ -676,6 +685,8 @@ class InternetTunnelSession {
               'from': profileId,
               'kind': envelope.kind,
               'wake': _wakeFor(envelope),
+              if (_wakeFor(envelope) == 'call')
+                'video': envelope.data['video'] == true,
               'ciphertext': encrypted,
               'createdAt': envelope.createdAt.millisecondsSinceEpoch,
             }),

@@ -96,7 +96,9 @@ class CgPushService {
     }
 
     const initialization = InitializationSettings(
-      android: AndroidInitializationSettings('@drawable/chernogram_launcher_icon'),
+      android: AndroidInitializationSettings(
+        '@drawable/chernogram_launcher_icon',
+      ),
     );
     await _notifications.initialize(initialization);
 
@@ -159,7 +161,9 @@ class CgPushService {
     Map<String, dynamic> data,
   ) async {
     const initialization = InitializationSettings(
-      android: AndroidInitializationSettings('@drawable/chernogram_launcher_icon'),
+      android: AndroidInitializationSettings(
+        '@drawable/chernogram_launcher_icon',
+      ),
     );
     await _notifications.initialize(initialization);
     final android = _notifications
