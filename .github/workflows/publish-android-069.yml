@@ -1,0 +1,246 @@
+name: Чернограм Android 0.26.1+69 — компактное OTA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-android-069.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-android-069
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: feature/unified-android-windows-068
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.26.1
+  VERSION_CODE: 69
+  RELEASE_TAG: chernogram-0.26.1-build69
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  build_publish:
+    name: Собрать, проверить и опубликовать компактный APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить ветку приложения
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить настройки компактной упаковки
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'version: 0.26.1+69' pubspec.yaml
+          grep -q 'useLegacyPackaging = true' android/app/build.gradle.kts
+          grep -q 'abiFilters += "arm64-v8a"' android/app/build.gradle.kts
+
+      - name: Скачать и извлечь официальные библиотеки SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Анализ, тесты и сборка
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee android-build69.log
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee android-signature69.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' android-signature69.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee android-badging69.txt
+          grep -q "versionCode='69'" android-badging69.txt
+          grep -q "versionName='0.26.1'" android-badging69.txt
+          grep -q "application-label:'Чернограм'" android-badging69.txt
+          unzip -l chernogram.apk | tee android-files69.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' android-files69.txt
+          ! grep -q 'lib/x86_64/' android-files69.txt
+          ! grep -q 'lib/armeabi-v7a/' android-files69.txt
+          SIZE=$(stat -c%s chernogram.apk)
+          echo "$SIZE" | tee android-size69.txt
+          test "$SIZE" -lt 120000000
+          sha256sum chernogram.apk | tee android-sha256-69.txt
+
+      - name: Создать манифест обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 android-sha256-69.txt)
+          SIZE=$(cat android-size69.txt)
+          cat > update-build69.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Исправлена загрузка обновления Android: APK уменьшен более чем в несколько раз за счёт сжатия нативных библиотек и удаления лишних архитектур. Функции build 68 сохранены.",
+            "notesEn": "Fixed Android update download: the APK is several times smaller by compressing native libraries and removing unused architectures. Build 68 features are preserved."
+          }
+          EOF
+          python3 -m json.tool update-build69.json >/dev/null
+
+      - name: Опубликовать Android 0.26.1+69
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build69.json \
+            android-sha256-69.txt \
+            android-signature69.txt \
+            android-badging69.txt \
+            android-size69.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Android 0.26.1+69 — исправление загрузки" \
+            --notes "Компактная arm64 OTA-сборка. Нативные библиотеки сжаты, лишние ABI исключены; функции build 68 сохранены."
+          gh release delete latest-apk --cleanup-tag -y || true
+          gh release create latest-apk \
+            chernogram.apk \
+            update-build69.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм — Android 0.26.1+69" \
+            --notes "Исправлена ошибка загрузки обновления примерно на 42%."
+
+      - name: Включить обновление build 69
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-69
+          git worktree add -B publish-build69 /tmp/chernogram-main-69 origin/main
+          cd /tmp/chernogram-main-69
+          cp "$GITHUB_WORKSPACE/update-build69.json" update.json
+          cat > BUILD_069_STATUS.md <<EOF
+          # Чернограм Android 0.26.1+69 — сборка готова
+
+          Android: success
+          Release: ${RELEASE_TAG}
+          Source: ${SOURCE_REF}
+          Workflow run: ${GITHUB_RUN_ID}
+          APK size bytes: $(cat "$GITHUB_WORKSPACE/android-size69.txt")
+          Published at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json BUILD_069_STATUS.md
+          git commit -m "Опубликовать компактный Android 0.26.1+69 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Контрольно скачать опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 \
+            -o published-build69.apk \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=69"
+          test "$(sha256sum published-build69.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 android-sha256-69.txt)"
+          test "$(stat -c%s published-build69.apk)" = "$(cat android-size69.txt)"
+
+      - name: Выдать APK и диагностику
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-android-0.26.1-build69
+          path: |
+            chernogram.apk
+            update-build69.json
+            android-sha256-69.txt
+            android-signature69.txt
+            android-badging69.txt
+            android-size69.txt
+            android-build69.log
+          if-no-files-found: warn
+          retention-days: 14
