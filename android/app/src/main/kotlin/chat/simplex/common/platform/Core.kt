@@ -27,8 +27,11 @@ object SimplexLabCore {
     @Synchronized
     private fun ensureNativeLoaded() {
         if (nativeLoaded) return
-        System.loadLibrary("support")
-        System.loadLibrary("simplex")
+
+        // В официальном Android-клиенте SimpleX загружается только JNI-мост.
+        // Android linker сам подтягивает его зависимости в правильном порядке:
+        // libsimplex.so, затем libsupport.so. Прямая загрузка libsupport.so
+        // раньше libsimplex.so и вызывала ошибку stg_SRT_2_info.
         System.loadLibrary("app-lib")
         initHS()
         nativeLoaded = true
