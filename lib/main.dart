@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,13 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_navigation.dart';
 import 'light/light_chat_app.dart';
 import 'light/light_theme.dart';
+import 'push_service.dart';
 import 'update_service.dart';
 import 'windows_desktop_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FirebaseMessaging.onBackgroundMessage(chernogramFirebaseBackgroundHandler);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const ChernogramApp());
+  unawaited(CgPushService.initialize());
 }
 
 class ChernogramApp extends StatefulWidget {
