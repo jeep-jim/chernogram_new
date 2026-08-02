@@ -1,0 +1,48 @@
+name: Исправить Optical build 70
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-optical-070-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/optical-chat-070
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Применить исправления
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'trailing: Flexible' lib/optical/optical_app.dart; then
+            python3 tool/patch_optical_070.py
+          fi
+          dart format lib/optical/optical_app.dart lib/optical/optical_transfer_screens.dart lib/optical/optical_codec.dart
+
+      - name: Сохранить в Optical-ветке
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/optical tool/patch_optical_070.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Исправить размеры и лабораторный интерфейс Optical build 70 [skip ci]"
+            git push origin HEAD:experiment/optical-chat-070
+          fi
