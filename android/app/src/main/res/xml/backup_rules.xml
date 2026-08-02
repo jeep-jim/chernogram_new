@@ -2,6 +2,4 @@
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <include domain="database" path="." />
-    <exclude domain="cache" path="." />
-    <exclude domain="file" path="flutter_assets" />
 </full-backup-content>
