@@ -1,2 +1,2 @@
 Trigger Chernogram Impulse transport 0.51.0+74 validation.
-Attempt: 2 — published Cloudflare SDK versions, reconnect and all-contact push registration.
+Attempt: 3 — notification API fixed and analysis limited to the lightweight product graph.
