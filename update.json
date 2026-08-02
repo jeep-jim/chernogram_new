@@ -1,10 +1,10 @@
 {
-  "versionName": "0.30.0",
-  "versionCode": 70,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=70",
-  "sha256": "33365e1892592fe5a2f95cff55dfaa63e5401628670acb1bd3886eb989d2d34e",
+  "versionName": "0.31.0",
+  "versionCode": 71,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-apk/chernogram.apk?v=71",
+  "sha256": "c4d84fe98b8a13dad8a8bd8124731ec7249f5d717bbccee8d24aaf2b4d435756",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "sizeBytes": 72070815,
-  "notesRu": "Первый Чернограм Optical: новый интерфейс, комнаты по QR, зашифрованный текстовый чат и передача файлов через экран и камеру без Wi-Fi, Bluetooth и интернета. Исправлен чёрный экран запуска Android.",
-  "notesEn": "First Chernogram Optical MVP: redesigned UI, QR room pairing, encrypted text chat and file transfer through screen and camera without Wi-Fi, Bluetooth or internet. Android black startup screen fixed."
+  "sizeBytes": 72115479,
+  "notesRu": "Чернограм Hybrid: удалённые сообщения и файлы через зашифрованный интернет-канал, очередь без сети, оптическая передача как резерв рядом, реакции, удаление, прочтение, онлайн-статусы, две темы, мягкий градиент и прозрачная маска без подложки.",
+  "notesEn": "Chernogram Hybrid: encrypted remote messages and files, offline queue, optical nearby fallback, reactions, deletion, read receipts, presence, two themes, soft gradients and the transparent mask launcher icon."
 }
