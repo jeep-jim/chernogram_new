@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "impulseEnabled": false,
+  "impulseBaseUrl": "",
+  "firebase": {
+    "enabled": false,
+    "apiKey": "",
+    "appId": "",
+    "messagingSenderId": "",
+    "projectId": ""
+  },
+  "fallbackRelayEnabled": true,
+  "updatedAt": "2026-08-02T11:15:00Z"
+}
