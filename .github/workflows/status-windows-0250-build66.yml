@@ -1,0 +1,80 @@
+name: Статус Windows 0.25.0 build 66
+
+on:
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - .github/workflows/status-windows-0250-build66.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 125
+    steps:
+      - name: Найти Windows build 66
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow windows-0250-room-desktop-build66.yml \
+              --branch experiment/windows-room-desktop-066 \
+              --limit 5 \
+              --json databaseId,status,conclusion,url,headSha,createdAt \
+              > windows-runs.json
+            if python3 - <<'PY'
+          import json
+          runs = json.load(open('windows-runs.json', encoding='utf-8'))
+          raise SystemExit(0 if runs else 1)
+          PY
+            then
+              break
+            fi
+            sleep 5
+          done
+          python3 - <<'PY'
+          import json
+          runs = json.load(open('windows-runs.json', encoding='utf-8'))
+          if not runs:
+              raise SystemExit('Windows build 66 не найден')
+          run = runs[0]
+          print('WINDOWS_RUN_ID=' + str(run['databaseId']))
+          print('WINDOWS_STATUS=' + str(run['status']))
+          print('WINDOWS_CONCLUSION=' + str(run['conclusion']))
+          print('WINDOWS_URL=' + str(run['url']))
+          open('windows-run-id.txt', 'w', encoding='utf-8').write(str(run['databaseId']))
+          PY
+
+      - name: Дождаться завершения Windows build 66
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID=$(cat windows-run-id.txt)
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status || true
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,url,jobs \
+            | tee windows-build66-status.json
+
+      - name: Сохранить статус
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-windows-build66-status
+          path: |
+            windows-runs.json
+            windows-run-id.txt
+            windows-build66-status.json
+          if-no-files-found: warn
+          retention-days: 3
