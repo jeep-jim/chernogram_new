@@ -159,7 +159,7 @@ class InternetTunnelSession {
   };
 
   Future<void> connect() async {
-    if (_closed || _connecting || connected) return;
+    if (_closed || _connecting || (_httpReady && _socket != null)) return;
     _connecting = true;
     try {
       if (!_configured) {

@@ -66,7 +66,9 @@ class ChernogramAppMonitor {
         final bTime = b.messages.isEmpty ? b.createdAt : b.messages.last.sentAt;
         return bTime.compareTo(aTime);
       });
-    final monitored = recent.take(8).toList(growable: false);
+    // Every saved direct contact must register with Impulse/FCM,
+    // otherwise a quiet old dialog could not wake the phone.
+    final monitored = recent.toList(growable: false);
     final activeIds = monitored.map((tunnel) => tunnel.id).toSet();
     final obsolete = _subscriptions.keys
         .where((tunnelId) => !activeIds.contains(tunnelId))

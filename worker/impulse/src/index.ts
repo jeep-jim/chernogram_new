@@ -1,3 +1,5 @@
+import { DurableObject } from "cloudflare:workers";
+
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
   FIREBASE_SERVICE_ACCOUNT_JSON: string;
