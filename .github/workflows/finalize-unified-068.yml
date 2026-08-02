@@ -1,0 +1,266 @@
+name: Финализация Чернограм 0.26.0+68
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-unified-068.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: finalize-unified-068
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: feature/unified-android-windows-068
+  FLUTTER_VERSION: 3.44.8
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+  WINDOWS_RUN_ID: 30736108861
+  RELEASE_TAG: chernogram-0.26.0-build68
+
+jobs:
+  finalize:
+    name: Собрать Android и опубликовать Android + Windows
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить общую ветку build 68
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Скачать и извлечь официальные библиотеки SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Проверить исходный код и собрать Android APK
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee android-final-build.log
+
+      - name: Подписать и проверить Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee android-signature.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' android-signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee android-badging.txt
+          grep -q "package: name='com.example.chernogram'" android-badging.txt
+          grep -q "versionCode='68'" android-badging.txt
+          grep -q "versionName='0.26.0'" android-badging.txt
+          grep -q "application-label:'Чернограм'" android-badging.txt
+          unzip -l chernogram.apk | tee android-files.txt
+          grep -q 'lib/arm64-v8a/libapp-lib.so' android-files.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' android-files.txt
+          grep -q 'lib/arm64-v8a/libsupport.so' android-files.txt
+          sha256sum chernogram.apk | tee android-sha256.txt
+
+      - name: Скачать уже проверенную Windows-сборку
+        uses: actions/download-artifact@v4
+        with:
+          name: unified-068-windows
+          path: windows-package
+          github-token: ${{ github.token }}
+          run-id: ${{ env.WINDOWS_RUN_ID }}
+
+      - name: Проверить Windows EXE и portable ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          find windows-package -maxdepth 2 -type f -printf '%p %s\n'
+          EXE=$(find windows-package -type f -name 'Chernogram-Windows-0.26.0-build68-Setup.exe' | head -n1)
+          ZIP=$(find windows-package -type f -name 'chernogram-windows-0.26.0-build68-portable.zip' | head -n1)
+          test -s "$EXE"
+          test -s "$ZIP"
+          cp "$EXE" Chernogram-Windows-0.26.0-build68-Setup.exe
+          cp "$ZIP" chernogram-windows-0.26.0-build68-portable.zip
+          sha256sum Chernogram-Windows-0.26.0-build68-Setup.exe | tee windows-setup-sha256.txt
+          sha256sum chernogram-windows-0.26.0-build68-portable.zip | tee windows-portable-sha256.txt
+
+      - name: Создать манифест обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_SHA=$(cut -d' ' -f1 android-sha256.txt)
+          cat > update-build68.json <<EOF
+          {
+            "versionName": "0.26.0",
+            "versionCode": 68,
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=68",
+            "sha256": "${APK_SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Убраны агент и внутренние тексты. Возвращена утверждённая маска. Добавлены QR установки и подключения Windows, устойчивый ID устройства, профиль и настройки, реакции, удаление по удерживанию, статусы прочтения, онлайн-точки, круглые видео и фоновая доставка сообщений и звонков.",
+            "notesEn": "Removed agent and internal roadmap text. Restored the approved mask icon. Added install and Windows pairing QR, stable device identity, profile settings, reactions, long-press deletion, read receipts, online dots, circular video and background message/call delivery."
+          }
+          EOF
+          python3 -m json.tool update-build68.json >/dev/null
+
+      - name: Опубликовать объединённый Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            Chernogram-Windows-0.26.0-build68-Setup.exe \
+            chernogram-windows-0.26.0-build68-portable.zip \
+            update-build68.json \
+            android-sha256.txt \
+            windows-setup-sha256.txt \
+            windows-portable-sha256.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.26.0+68 — Android и Windows" \
+            --notes "Единая тестовая версия Android и Windows: один принцип интерфейса, QR-подключение комнаты с телефона к компьютеру, профиль устройства, реакции, прочтение, онлайн, круги, файлы и фоновая доставка."
+          gh release delete latest-apk --cleanup-tag -y || true
+          gh release create latest-apk \
+            chernogram.apk \
+            update-build68.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм — Android 0.26.0+68" \
+            --notes "Актуальная Android-сборка build 68."
+
+      - name: Включить Android-обновление build 68
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          rm -rf /tmp/chernogram-main-final68
+          git worktree add -B publish-final68 /tmp/chernogram-main-final68 origin/main
+          cd /tmp/chernogram-main-final68
+          cp "$GITHUB_WORKSPACE/update-build68.json" update.json
+          cat > BUILD_068_STATUS.md <<EOF
+          # Чернограм 0.26.0+68 — сборка готова
+
+          Android: success
+          Windows: success
+          Release: ${RELEASE_TAG}
+          Source: ${SOURCE_REF}
+          Workflow run: ${GITHUB_RUN_ID}
+          Published at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.json BUILD_068_STATUS.md
+          git commit -m "Опубликовать Android и Windows Чернограм 0.26.0+68 [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          exit 1
+
+      - name: Контрольно скачать опубликованные файлы
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 5 \
+            -o published-android.apk \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/chernogram.apk"
+          curl --fail --location --retry 5 \
+            -o published-windows.exe \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Chernogram-Windows-0.26.0-build68-Setup.exe"
+          curl --fail --location --retry 5 \
+            -o published-windows.zip \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/chernogram-windows-0.26.0-build68-portable.zip"
+          test "$(sha256sum published-android.apk | cut -d' ' -f1)" = "$(cut -d' ' -f1 android-sha256.txt)"
+          test "$(sha256sum published-windows.exe | cut -d' ' -f1)" = "$(cut -d' ' -f1 windows-setup-sha256.txt)"
+          test "$(sha256sum published-windows.zip | cut -d' ' -f1)" = "$(cut -d' ' -f1 windows-portable-sha256.txt)"
+
+      - name: Выдать финальные файлы
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-0.26.0-build68-final
+          path: |
+            chernogram.apk
+            Chernogram-Windows-0.26.0-build68-Setup.exe
+            chernogram-windows-0.26.0-build68-portable.zip
+            update-build68.json
+            android-signature.txt
+            android-badging.txt
+            android-sha256.txt
+            windows-setup-sha256.txt
+            windows-portable-sha256.txt
+            android-final-build.log
+          if-no-files-found: warn
+          retention-days: 14
