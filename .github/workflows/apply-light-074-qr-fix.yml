@@ -57,3 +57,6 @@ jobs:
             git commit -m "Добавить показ и сканирование QR-приглашений [skip ci]"
             git push origin HEAD:rebuild/impulse-transport-074
           fi
+
+      - name: QR-патч запущен
+        run: echo "QR pairing patch 74 applied"
