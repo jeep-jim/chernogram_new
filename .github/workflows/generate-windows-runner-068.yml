@@ -1,0 +1,62 @@
+name: Подготовить Windows runner build 68
+
+on:
+  push:
+    branches:
+      - feature/unified-android-windows-068
+    paths:
+      - .github/workflows/generate-windows-runner-068.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-windows-runner-068
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/unified-android-windows-068
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Создать стандартный Windows-проект
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter config --enable-windows-desktop
+          if (-not (Test-Path 'windows/CMakeLists.txt')) {
+            flutter create --platforms=windows --project-name chernogram --no-pub .
+          }
+          $definition = 'add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)'
+          $cmakePath = 'windows/CMakeLists.txt'
+          $cmake = Get-Content $cmakePath
+          if (-not ($cmake -contains $definition)) {
+            $patched = @($cmake[0], '', $definition) + $cmake[1..($cmake.Length - 1)]
+            Set-Content $cmakePath $patched -Encoding UTF8
+          }
+          Test-Path windows/runner/main.cpp
+          Test-Path windows/runner/resources/app_icon.ico
+
+      - name: Сохранить Windows runner в общей ветке
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add windows .metadata
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'Добавить нативный Windows runner build 68 [skip ci]'
+            git push origin HEAD:feature/unified-android-windows-068
+          }
