@@ -1,9 +1,9 @@
 {
-  "versionName": "0.24.2",
-  "versionCode": 62,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-0.24.2-build62/chernogram.apk?v=62",
-  "sha256": "26a74fdba1d772248126d98005d2417489d7152f1fcb98bbb78e85ef09cda81a",
+  "versionName": "0.25.0",
+  "versionCode": 66,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-0.25.0-build66/chernogram.apk?v=66",
+  "sha256": "6fad120a7eda6bb31a5888bae7beb6898b9ab700d889c5c85cc93eff5ff00572",
   "certificateSha256": "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE",
-  "notesRu": "В разделе Файлы показаны занятое, свободное и общее место. В профиле добавлены версия, номер сборки, ссылка и QR-код. Иконка рабочего стола повторяет полосатый логотип приложения.",
-  "notesEn": "Files shows used, free and total storage. Profile includes version, build, link and QR code. The launcher icon matches the striped in-app logo."
+  "notesRu": "Исправлена загрузка ядра SimpleX: библиотеки подключаются в официальном порядке без ошибки stg_SRT_2_info. В профиль добавлена лаборатория связи. Иконка рабочего стола теперь без чёрной подложки.",
+  "notesEn": "Fixed SimpleX core loading using the official native dependency order. Added the connection laboratory. The launcher icon no longer has a black background."
 }
