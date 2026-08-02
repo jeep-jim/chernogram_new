@@ -1,7 +1,7 @@
 name: chernogram
 description: Chernogram — lightweight private chats, voice calls and video calls
 publish_to: 'none'
-version: 0.50.0+73
+version: 0.51.0+74
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -14,6 +14,8 @@ dependencies:
   camera: ^0.12.0+2
   cryptography: ^2.9.0
   file_picker: 10.3.10
+  firebase_core: ^4.12.1
+  firebase_messaging: ^16.4.3
   flutter_background_service: ^5.1.0
   flutter_contacts: ^1.1.9+2
   flutter_local_notifications: ^22.2.0
