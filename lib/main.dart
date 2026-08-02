@@ -134,10 +134,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
       darkTheme: lightChatTheme(Brightness.dark),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
       themeAnimationDuration: const Duration(milliseconds: 180),
-      home: LightBackdrop(
-        dark: _darkMode,
-        child: Builder(builder: _home),
-      ),
+      home: Builder(builder: _home),
       builder: (context, child) => LightBackdrop(
         dark: _darkMode,
         child: child ?? const SizedBox.shrink(),
