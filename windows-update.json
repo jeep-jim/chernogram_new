@@ -5,9 +5,9 @@
   "architecture": "x64",
   "minimumWindows": "10",
   "portableUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.25.0-build66/chernogram-windows-0.25.0-portable.zip",
-  "portableSha256": "9f672fe915eb0d120c10547a890b123a9a7c801a55798164ba8cf986db37207a",
+  "portableSha256": "ed21def25bdbaf1dcf6c076dae8007ab3832b7dd2ae432741f6a9f1cb29e5f10",
   "installerUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-windows-0.25.0-build66/Chernogram-Windows-0.25.0-Setup.exe",
-  "installerSha256": "cffd050fa5e336e1b82993a3ffbe52e5c4bfd93f3a90b3b55cdfc0fd7c689668",
+  "installerSha256": "fad4c35925da4832513bff56720ba58c2130e48b2a09fc9b6cbaee150d7c86b5",
   "packageType": "three-column-room-desktop-build66",
   "notesRu": "Трёхколоночный интерфейс: комнаты слева, чат по центру, файлы комнаты справа. Совместим с комнатами Android build 66."
 }
