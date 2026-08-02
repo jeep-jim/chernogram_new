@@ -270,202 +270,202 @@ class _HybridRoomsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 192,
-            title: const Text(
-              'Чернограм',
-              style: TextStyle(fontWeight: FontWeight.w900),
+    slivers: [
+      SliverAppBar(
+        pinned: true,
+        expandedHeight: 192,
+        title: const Text(
+          'Чернограм',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 14),
+            child: _RoutePill(
+              icon: Icons.language_rounded,
+              label: 'HYBRID',
+              color: Color(0xFF59D7C4),
             ),
-            actions: const [
-              Padding(
-                padding: EdgeInsets.only(right: 14),
-                child: _RoutePill(
-                  icon: Icons.language_rounded,
-                  label: 'HYBRID',
-                  color: Color(0xFF59D7C4),
+          ),
+        ],
+        flexibleSpace: FlexibleSpaceBar(
+          background: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 58, 20, 10),
+              child: Row(
+                children: [
+                  const ChernogramLogo(size: 88),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'УДАЛЁННАЯ СВЯЗЬ\nИ ОПТИКА РЯДОМ',
+                          style: TextStyle(
+                            fontSize: 20,
+                            height: 1.05,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          'Wi‑Fi / 4G автоматически • экран и камера без сети',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 10),
+        sliver: SliverToBoxAdapter(
+          child: Row(
+            children: [
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.add_comment_rounded,
+                  title: 'Новая комната',
+                  subtitle: 'Чат на любом расстоянии',
+                  colors: const [Color(0xFF745CFF), Color(0xFF4E65D9)],
+                  onTap: onCreate,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.qr_code_scanner_rounded,
+                  title: 'Подключиться',
+                  subtitle: 'Считать ключ комнаты',
+                  colors: const [Color(0xFF159A91), Color(0xFF1977A2)],
+                  onTap: onScan,
                 ),
               ),
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 58, 20, 10),
-                  child: Row(
-                    children: [
-                      const ChernogramLogo(size: 88),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'УДАЛЁННАЯ СВЯЗЬ\nИ ОПТИКА РЯДОМ',
-                              style: TextStyle(
-                                fontSize: 20,
-                                height: 1.05,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            Text(
-                              'Wi‑Fi / 4G автоматически • экран и камера без сети',
-                              style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+        sliver: SliverToBoxAdapter(
+          child: Row(
+            children: [
+              const Text(
+                'КОМНАТЫ',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.4,
                 ),
               ),
-            ),
+              const Spacer(),
+              Text('${rooms.length}'),
+            ],
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(14, 16, 14, 10),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _QuickAction(
-                      icon: Icons.add_comment_rounded,
-                      title: 'Новая комната',
-                      subtitle: 'Чат на любом расстоянии',
-                      colors: const [Color(0xFF745CFF), Color(0xFF4E65D9)],
-                      onTap: onCreate,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _QuickAction(
-                      icon: Icons.qr_code_scanner_rounded,
-                      title: 'Подключиться',
-                      subtitle: 'Считать ключ комнаты',
-                      colors: const [Color(0xFF159A91), Color(0xFF1977A2)],
-                      onTap: onScan,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        ),
+      ),
+      if (rooms.isEmpty)
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: _HybridEmpty(
+            icon: Icons.forum_outlined,
+            title: 'Создайте первый удалённый чат',
+            subtitle:
+                'Передайте ключ комнаты второму телефону один раз. После этого сообщения и файлы будут идти через интернет автоматически.',
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  const Text(
-                    'КОМНАТЫ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text('${rooms.length}'),
-                ],
-              ),
-            ),
-          ),
-          if (rooms.isEmpty)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: _HybridEmpty(
-                icon: Icons.forum_outlined,
-                title: 'Создайте первый удалённый чат',
-                subtitle:
-                    'Передайте ключ комнаты второму телефону один раз. После этого сообщения и файлы будут идти через интернет автоматически.',
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 24),
-              sliver: SliverList.builder(
-                itemCount: rooms.length,
-                itemBuilder: (context, index) {
-                  final room = rooms[index];
-                  final last = room.messages.isEmpty ? null : room.messages.last;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 7),
-                    child: Card(
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-                        leading: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            ChernogramAvatar(size: 52, seed: room.id),
-                            Positioned(
-                              right: -2,
-                              bottom: -2,
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF45D3AF),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Theme.of(context).colorScheme.surface,
-                                    width: 3,
-                                  ),
-                                ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 24),
+          sliver: SliverList.builder(
+            itemCount: rooms.length,
+            itemBuilder: (context, index) {
+              final room = rooms[index];
+              final last = room.messages.isEmpty ? null : room.messages.last;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Card(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+                    leading: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ChernogramAvatar(size: 52, seed: room.id),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF45D3AF),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.surface,
+                                width: 3,
                               ),
                             ),
-                          ],
-                        ),
-                        title: Text(
-                          room.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            last == null
-                                ? 'Комната готова к удалённой связи'
-                                : last.deleted
-                                    ? 'Сообщение удалено'
-                                    : last.isFile
-                                        ? 'Файл: ${last.fileName}'
-                                        : last.text,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'delete') onDelete(room);
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete_outline_rounded),
-                                  SizedBox(width: 10),
-                                  Text('Удалить'),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        onTap: () => onOpen(room),
+                      ],
+                    ),
+                    title: Text(
+                      room.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        last == null
+                            ? 'Комната готова к удалённой связи'
+                            : last.deleted
+                            ? 'Сообщение удалено'
+                            : last.isFile
+                            ? 'Файл: ${last.fileName}'
+                            : last.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-        ],
-      );
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'delete') onDelete(room);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded),
+                              SizedBox(width: 10),
+                              Text('Удалить'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    onTap: () => onOpen(room),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+    ],
+  );
 }
 
 class HybridRoomChatScreen extends StatefulWidget {
@@ -568,7 +568,8 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
         break;
       case 'file_progress':
         final id = event.data['transferId']?.toString() ?? '';
-        final received = int.tryParse(event.data['received']?.toString() ?? '') ?? 0;
+        final received =
+            int.tryParse(event.data['received']?.toString() ?? '') ?? 0;
         final total = int.tryParse(event.data['total']?.toString() ?? '') ?? 0;
         if (id.isNotEmpty && total > 0) {
           setState(() => _fileProgress[id] = received / total);
@@ -617,13 +618,14 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
 
     final incoming = OpticalMessage(
       id: id,
-      senderId: wire['authorId']?.toString() ??
-          wire['senderId']?.toString() ??
-          '',
-      senderName: wire['authorName']?.toString() ??
+      senderId:
+          wire['authorId']?.toString() ?? wire['senderId']?.toString() ?? '',
+      senderName:
+          wire['authorName']?.toString() ??
           wire['senderName']?.toString() ??
           'Устройство',
-      sentAt: DateTime.tryParse(wire['sentAt']?.toString() ?? '')?.toLocal() ??
+      sentAt:
+          DateTime.tryParse(wire['sentAt']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
       kind: attachment == null ? 'text' : 'file',
       text: wire['text']?.toString() ?? '',
@@ -665,30 +667,29 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
   Map<String, dynamic> _messageToWire(
     OpticalMessage message, {
     String? dataBase64,
-  }) =>
-      <String, dynamic>{
-        'id': message.id,
-        'authorId': message.senderId,
-        'authorName': message.senderName,
-        'text': message.text,
-        'sentAt': message.sentAt.toUtc().toIso8601String(),
-        'type': message.isFile ? 'attachment' : 'text',
-        if (message.isFile)
-          'attachment': <String, dynamic>{
-            'id': 'att_${message.id}',
-            'name': message.fileName ?? 'file.bin',
-            'size': message.fileSize,
-            'kind': 'document',
-            if (dataBase64 != null) 'dataBase64': dataBase64,
-            if (message.filePath != null) 'localPath': message.filePath,
-          },
-        'meta': <String, dynamic>{
-          'hybridVersion': 1,
-          'deleted': message.deleted,
-          'reactions': message.reactions,
-          'readBy': message.readBy,
-        },
-      };
+  }) => <String, dynamic>{
+    'id': message.id,
+    'authorId': message.senderId,
+    'authorName': message.senderName,
+    'text': message.text,
+    'sentAt': message.sentAt.toUtc().toIso8601String(),
+    'type': message.isFile ? 'attachment' : 'text',
+    if (message.isFile)
+      'attachment': <String, dynamic>{
+        'id': 'att_${message.id}',
+        'name': message.fileName ?? 'file.bin',
+        'size': message.fileSize,
+        'kind': 'document',
+        if (dataBase64 != null) 'dataBase64': dataBase64,
+        if (message.filePath != null) 'localPath': message.filePath,
+      },
+    'meta': <String, dynamic>{
+      'hybridVersion': 1,
+      'deleted': message.deleted,
+      'reactions': message.reactions,
+      'readBy': message.readBy,
+    },
+  };
 
   void _persist() {
     widget.onChanged(_room);
@@ -824,10 +825,8 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => OpticalTransmitScreen(
-          transfer: transfer,
-          roomName: _room.name,
-        ),
+        builder: (_) =>
+            OpticalTransmitScreen(transfer: transfer, roomName: _room.name),
       ),
     );
   }
@@ -916,7 +915,9 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
     final action = data['action']?.toString() ?? '';
     final messageId = data['messageId']?.toString() ?? '';
     if (messageId.isEmpty) return;
-    final message = _room.messages.where((item) => item.id == messageId).firstOrNull;
+    final message = _room.messages
+        .where((item) => item.id == messageId)
+        .firstOrNull;
     if (message == null) return;
     if (action == 'hybrid_delete') {
       _updateMessage(messageId, message.copyWith(deleted: true));
@@ -977,9 +978,9 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
   }
 
   Future<void> _showRoomKey() => Navigator.push<void>(
-        context,
-        MaterialPageRoute(builder: (_) => OpticalRoomInviteScreen(room: _room)),
-      );
+    context,
+    MaterialPageRoute(builder: (_) => OpticalRoomInviteScreen(room: _room)),
+  );
 
   void _toast(String value) {
     if (!mounted) return;
@@ -988,7 +989,9 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
 
   String get _statusText {
     if (_networkState == 'connected') {
-      return _online > 1 ? 'Интернет • $_online онлайн' : 'Интернет • подключено';
+      return _online > 1
+          ? 'Интернет • $_online онлайн'
+          : 'Интернет • подключено';
     }
     if (_networkState == 'connecting') return 'Подключаем интернет…';
     return 'В очереди • отправим при подключении';
@@ -1035,9 +1038,9 @@ class _HybridRoomChatScreenState extends State<HybridRoomChatScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 10,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -1183,8 +1186,8 @@ class _HybridMessageRow extends StatelessWidget {
     final receipt = message.state == 'queued'
         ? Icons.schedule_rounded
         : message.isRead
-            ? Icons.done_all_rounded
-            : Icons.done_rounded;
+        ? Icons.done_all_rounded
+        : Icons.done_rounded;
     final reactions = message.reactions.entries
         .where((entry) => entry.value.isNotEmpty)
         .toList();
@@ -1304,7 +1307,9 @@ class _HybridMessageRow extends StatelessWidget {
                                   color: Colors.white.withValues(alpha: .13),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                child: Text('${entry.key} ${entry.value.length}'),
+                                child: Text(
+                                  '${entry.key} ${entry.value.length}',
+                                ),
                               ),
                           ],
                         ),
@@ -1373,13 +1378,17 @@ class _HybridFilesPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Файлы', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Файлы',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
       ),
       body: entries.isEmpty
           ? const _HybridEmpty(
               icon: Icons.folder_copy_outlined,
               title: 'Файлов пока нет',
-              subtitle: 'Файлы из удалённых и оптических сеансов появятся здесь.',
+              subtitle:
+                  'Файлы из удалённых и оптических сеансов появятся здесь.',
             )
           : ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -1402,7 +1411,10 @@ class _HybridFilesPage extends StatelessWidget {
                       subtitle: Text(
                         '${entry.room.name} • ${_formatBytes(entry.message.fileSize)}',
                       ),
-                      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 16,
+                      ),
                       onTap: () async {
                         final path = entry.message.filePath;
                         if (path != null && await File(path).exists()) {
@@ -1437,112 +1449,110 @@ class _HybridSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text(
-            'Настройки',
-            style: TextStyle(fontWeight: FontWeight.w900),
+    backgroundColor: Colors.transparent,
+    appBar: AppBar(
+      title: const Text(
+        'Настройки',
+        style: TextStyle(fontWeight: FontWeight.w900),
+      ),
+    ),
+    body: ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(14),
+            leading: ChernogramAvatar(size: 58, seed: profile.id),
+            title: Text(
+              profile.nickname,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: Text(profile.id),
+            trailing: const Icon(Icons.edit_rounded),
+            onTap: onEditProfile,
           ),
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(14),
-          children: [
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(14),
-                leading: ChernogramAvatar(size: 58, seed: profile.id),
+        const SizedBox(height: 12),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                value: darkMode,
+                onChanged: (_) => onToggleTheme(),
+                secondary: Icon(
+                  darkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                ),
                 title: Text(
-                  profile.nickname,
+                  darkMode ? 'Мягкая тёмная тема' : 'Светлая тема',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                subtitle: Text(profile.id),
-                trailing: const Icon(Icons.edit_rounded),
-                onTap: onEditProfile,
+                subtitle: const Text('Выбор сохраняется после перезапуска'),
               ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    value: darkMode,
-                    onChanged: (_) => onToggleTheme(),
-                    secondary: Icon(
-                      darkMode
-                          ? Icons.dark_mode_rounded
-                          : Icons.light_mode_rounded,
-                    ),
-                    title: Text(
-                      darkMode ? 'Мягкая тёмная тема' : 'Светлая тема',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    subtitle: const Text('Выбор сохраняется после перезапуска'),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.system_update_alt_rounded),
-                    title: const Text(
-                      'Проверить обновления',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    subtitle: const Text('Скачать новую версию через интернет'),
-                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                    onTap: onCheckUpdates,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'МАРШРУТЫ СВЯЗИ',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.3,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    _SettingRoute(
-                      icon: Icons.language_rounded,
-                      title: 'Интернет',
-                      subtitle: 'Основной канал для любого расстояния',
-                      color: Color(0xFF59D7C4),
-                    ),
-                    _SettingRoute(
-                      icon: Icons.center_focus_strong_rounded,
-                      title: 'Экран и камера',
-                      subtitle: 'Резервный канал рядом без сети',
-                      color: Color(0xFF9B8CFF),
-                    ),
-                    _SettingRoute(
-                      icon: Icons.inventory_2_outlined,
-                      title: 'Очередь',
-                      subtitle: 'Хранит сообщения до восстановления сети',
-                      color: Color(0xFFFFBC66),
-                    ),
-                  ],
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.system_update_alt_rounded),
+                title: const Text(
+                  'Проверить обновления',
+                  style: TextStyle(fontWeight: FontWeight.w900),
                 ),
+                subtitle: const Text('Скачать новую версию через интернет'),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: onCheckUpdates,
               ),
-            ),
-            const SizedBox(height: 12),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Чернограм Hybrid 0.31 — удалённые зашифрованные чаты и файлы через интернет, оптическая передача как дополнительный офлайн-канал.',
-                  style: TextStyle(height: 1.45),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+        const SizedBox(height: 12),
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'МАРШРУТЫ СВЯЗИ',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.3,
+                  ),
+                ),
+                SizedBox(height: 12),
+                _SettingRoute(
+                  icon: Icons.language_rounded,
+                  title: 'Интернет',
+                  subtitle: 'Основной канал для любого расстояния',
+                  color: Color(0xFF59D7C4),
+                ),
+                _SettingRoute(
+                  icon: Icons.center_focus_strong_rounded,
+                  title: 'Экран и камера',
+                  subtitle: 'Резервный канал рядом без сети',
+                  color: Color(0xFF9B8CFF),
+                ),
+                _SettingRoute(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'Очередь',
+                  subtitle: 'Хранит сообщения до восстановления сети',
+                  color: Color(0xFFFFBC66),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Чернограм Hybrid 0.31 — удалённые зашифрованные чаты и файлы через интернет, оптическая передача как дополнительный офлайн-канал.',
+              style: TextStyle(height: 1.45),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SettingRoute extends StatelessWidget {
@@ -1560,33 +1570,33 @@ class _SettingRoute extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: .16),
-              foregroundColor: color,
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      children: [
+        CircleAvatar(
+          backgroundColor: color.withValues(alpha: .16),
+          foregroundColor: color,
+          child: Icon(icon),
         ),
-      );
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _QuickAction extends StatelessWidget {
@@ -1606,42 +1616,39 @@ class _QuickAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: Colors.transparent,
-        child: InkWell(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: Ink(
+        height: 122,
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: colors),
           borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          child: Ink(
-            height: 122,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: colors),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, size: 30, color: Colors.white),
-                const Spacer(),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
-      );
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 30, color: Colors.white),
+            const Spacer(),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white70, fontSize: 10.5),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _RoutePill extends StatelessWidget {
@@ -1657,28 +1664,28 @@ class _RoutePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .14),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: color.withValues(alpha: .35)),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .14),
+      borderRadius: BorderRadius.circular(30),
+      border: Border.all(color: color.withValues(alpha: .35)),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .8,
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .8,
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 class _HybridEmpty extends StatelessWidget {
@@ -1694,35 +1701,35 @@ class _HybridEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 66,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: .65),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  height: 1.4,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 66,
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: .65),
           ),
-        ),
-      );
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              height: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 String _formatBytes(int bytes) {

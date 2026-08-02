@@ -37,16 +37,18 @@ class _ChernogramAppState extends State<ChernogramApp> {
   }
 
   SystemUiOverlayStyle _overlay(bool dark) => SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor:
-            dark ? const Color(0xFF151B2A) : const Color(0xFFF4F3FC),
-        systemNavigationBarIconBrightness:
-            dark ? Brightness.light : Brightness.dark,
-        systemNavigationBarContrastEnforced: false,
-        systemStatusBarContrastEnforced: false,
-      );
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+    statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+    systemNavigationBarColor: dark
+        ? const Color(0xFF151B2A)
+        : const Color(0xFFF4F3FC),
+    systemNavigationBarIconBrightness: dark
+        ? Brightness.light
+        : Brightness.dark,
+    systemNavigationBarContrastEnforced: false,
+    systemStatusBarContrastEnforced: false,
+  );
 
   void _applySystemUi(bool dark) {
     SystemChrome.setSystemUIOverlayStyle(_overlay(dark));
@@ -113,11 +115,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
         onToggleTheme: _toggleTheme,
         onCheckUpdates: () {
           unawaited(
-            ChernogramUpdater.checkAndPrompt(
-              context,
-              ru: _ru,
-              manual: true,
-            ),
+            ChernogramUpdater.checkAndPrompt(context, ru: _ru, manual: true),
           );
         },
       );
@@ -138,23 +136,23 @@ class _ChernogramAppState extends State<ChernogramApp> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: _overlay(_darkMode),
-        child: MaterialApp(
-          navigatorKey: chernogramNavigatorKey,
-          debugShowCheckedModeBanner: false,
-          title: 'Чернограм Hybrid',
-          theme: HybridTheme.light(),
-          darkTheme: HybridTheme.dark(),
-          themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-          themeAnimationDuration: const Duration(milliseconds: 220),
-          home: HybridBackdrop(
-            dark: _darkMode,
-            child: Builder(builder: _applicationHome),
-          ),
-          builder: (context, child) => HybridBackdrop(
-            dark: _darkMode,
-            child: child ?? const SizedBox.shrink(),
-          ),
-        ),
-      );
+    value: _overlay(_darkMode),
+    child: MaterialApp(
+      navigatorKey: chernogramNavigatorKey,
+      debugShowCheckedModeBanner: false,
+      title: 'Чернограм Hybrid',
+      theme: HybridTheme.light(),
+      darkTheme: HybridTheme.dark(),
+      themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: const Duration(milliseconds: 220),
+      home: HybridBackdrop(
+        dark: _darkMode,
+        child: Builder(builder: _applicationHome),
+      ),
+      builder: (context, child) => HybridBackdrop(
+        dark: _darkMode,
+        child: child ?? const SizedBox.shrink(),
+      ),
+    ),
+  );
 }

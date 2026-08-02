@@ -4,40 +4,33 @@ class HybridTheme {
   static const darkGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: <Color>[
-      Color(0xFF121826),
-      Color(0xFF1B1934),
-      Color(0xFF102A35),
-    ],
+    colors: <Color>[Color(0xFF121826), Color(0xFF1B1934), Color(0xFF102A35)],
     stops: <double>[0, .52, 1],
   );
 
   static const lightGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: <Color>[
-      Color(0xFFF7F8FF),
-      Color(0xFFF1EDFF),
-      Color(0xFFEAF8FA),
-    ],
+    colors: <Color>[Color(0xFFF7F8FF), Color(0xFFF1EDFF), Color(0xFFEAF8FA)],
     stops: <double>[0, .52, 1],
   );
 
   static ThemeData dark() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF7B68EE),
-      brightness: Brightness.dark,
-      surface: const Color(0xFF20263A),
-    ).copyWith(
-      primary: const Color(0xFF9B8CFF),
-      secondary: const Color(0xFF4ED7C5),
-      surface: const Color(0xFF20263A),
-      surfaceContainer: const Color(0xCC252B40),
-      surfaceContainerHigh: const Color(0xE62B3148),
-      surfaceContainerHighest: const Color(0xFF30374F),
-      outline: const Color(0xFF586078),
-      outlineVariant: const Color(0xFF41485F),
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF7B68EE),
+          brightness: Brightness.dark,
+          surface: const Color(0xFF20263A),
+        ).copyWith(
+          primary: const Color(0xFF9B8CFF),
+          secondary: const Color(0xFF4ED7C5),
+          surface: const Color(0xFF20263A),
+          surfaceContainer: const Color(0xCC252B40),
+          surfaceContainerHigh: const Color(0xE62B3148),
+          surfaceContainerHighest: const Color(0xFF30374F),
+          outline: const Color(0xFF586078),
+          outlineVariant: const Color(0xFF41485F),
+        );
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -99,20 +92,21 @@ class HybridTheme {
   }
 
   static ThemeData light() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF6656D9),
-      brightness: Brightness.light,
-      surface: const Color(0xFFF9F9FF),
-    ).copyWith(
-      primary: const Color(0xFF6656D9),
-      secondary: const Color(0xFF087F78),
-      surface: const Color(0xFFF9F9FF),
-      surfaceContainer: const Color(0xE6FFFFFF),
-      surfaceContainerHigh: const Color(0xFFF3F1FF),
-      surfaceContainerHighest: const Color(0xFFEDEAFB),
-      outline: const Color(0xFF77758A),
-      outlineVariant: const Color(0xFFD4D0E3),
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6656D9),
+          brightness: Brightness.light,
+          surface: const Color(0xFFF9F9FF),
+        ).copyWith(
+          primary: const Color(0xFF6656D9),
+          secondary: const Color(0xFF087F78),
+          surface: const Color(0xFFF9F9FF),
+          surfaceContainer: const Color(0xE6FFFFFF),
+          surfaceContainerHigh: const Color(0xFFF3F1FF),
+          surfaceContainerHighest: const Color(0xFFEDEAFB),
+          outline: const Color(0xFF77758A),
+          outlineVariant: const Color(0xFFD4D0E3),
+        );
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -182,9 +176,9 @@ class HybridBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: dark ? HybridTheme.darkGradient : HybridTheme.lightGradient,
-        ),
-        child: child,
-      );
+    decoration: BoxDecoration(
+      gradient: dark ? HybridTheme.darkGradient : HybridTheme.lightGradient,
+    ),
+    child: child,
+  );
 }
