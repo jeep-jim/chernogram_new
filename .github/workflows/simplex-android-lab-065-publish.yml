@@ -1,0 +1,191 @@
+name: Чернограм Лаб 0.64.1+65 — публикация и автообновление
+
+on:
+  push:
+    branches: [experiment/simplex-core-064]
+    paths: [.github/workflows/simplex-android-lab-065-publish.yml]
+  pull_request:
+    branches: [feature/storage-version-qr-062]
+    paths: [.github/workflows/simplex-android-lab-065-publish.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-lab-065-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: "F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE"
+  RELEASE_TAG: chernogram-lab-0.64.1-build65
+  LATEST_TAG: chernogram-lab-latest
+
+jobs:
+  build_publish:
+    name: Подписать, проверить и опубликовать Lab APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/simplex-core-064
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить и проверить постоянную подпись
+        env:
+          CHERNOGRAM_KEYSTORE_B64: ${{ secrets.CHERNOGRAM_KEYSTORE_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CHERNOGRAM_KEYSTORE_B64:-}"
+          mkdir -p "$HOME/.android"
+          printf '%s' "$CHERNOGRAM_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android | tee certificate.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Подключить нативное ядро SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 3 -o simplex.apk "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  simplex.apk\n' "$SIMPLEX_APK_SHA256" | sha256sum --check
+          rm -rf android/app/src/main/jniLibs/arm64-v8a .simplex
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a .simplex
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          out = Path('android/app/src/main/jniLibs/arm64-v8a')
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as z:
+              entries = {Path(n).name:n for n in z.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              done = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in done or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  src = Path(z.extract(member, '.simplex'))
+                  dst = out / lib
+                  shutil.copy2(src, dst)
+                  done.add(lib)
+                  data = subprocess.check_output(['readelf','-d',str(dst)], text=True, errors='replace')
+                  queue.extend(d for d in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', data) if d not in done and d not in system)
+          for lib in ('libapp-lib.so','libsimplex.so','libsupport.so'):
+              if not (out/lib).is_file(): raise RuntimeError(f'missing required {lib}')
+          PY
+          readelf -Ws android/app/src/main/jniLibs/arm64-v8a/libapp-lib.so | tee jni.txt
+          grep -q Java_chat_simplex_common_platform_CoreKt_initHS jni.txt
+          grep -q Java_chat_simplex_common_platform_CoreKt_chatMigrateInit jni.txt
+
+      - name: Включить версию 65 и отдельный канал обновлений
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('pubspec.yaml')
+          s = p.read_text(encoding='utf-8')
+          s, n = re.subn(r'(?m)^version:\s*[^\n]+$', 'version: 0.64.1+65', s, count=1)
+          if n != 1: raise RuntimeError('version not found')
+          p.write_text(s, encoding='utf-8')
+          p = Path('lib/update_service.dart')
+          s = p.read_text(encoding='utf-8')
+          pairs = [
+            ('main/update.json','main/lab-update.json'),
+            ('latest-apk/update.json','chernogram-lab-latest/lab-update.json'),
+            ('@main/update.json','@main/lab-update.json')]
+          for old,new in pairs:
+              if old not in s: raise RuntimeError(f'URL fragment not found: {old}')
+              s = s.replace(old,new,1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          dart format lib/update_service.dart lib/simplex_lab.dart lib/device_product_panels.dart
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Собрать и проверить подписанный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk --release --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-release.apk chernogram-lab.apk
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          "$AAPT" dump badging chernogram-lab.apk | tee badging.txt
+          grep -q "package: name='com.example.chernogram.lab'" badging.txt
+          grep -q "versionCode='65'" badging.txt
+          grep -q "versionName='0.64.1'" badging.txt
+          "$APKSIGNER" verify --print-certs chernogram-lab.apk | tee signature.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          unzip -l chernogram-lab.apk | tee files.txt
+          grep -q 'lib/arm64-v8a/libapp-lib.so' files.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' files.txt
+          grep -q 'lib/arm64-v8a/libsupport.so' files.txt
+          sha256sum chernogram-lab.apk | tee sha256.txt
+
+      - name: Создать манифест обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 sha256.txt)
+          printf '{\n  "versionName": "0.64.1",\n  "versionFull": "0.64.1+65",\n  "versionCode": 65,\n  "packageName": "com.example.chernogram.lab",\n  "apkUrl": "https://github.com/%s/releases/download/%s/chernogram-lab.apk",\n  "sha256": "%s",\n  "notesRu": "Чернограм Лаб с официальным ядром SimpleX и отдельным каналом обновлений.",\n  "notesEn": "Chernogram Lab with the official SimpleX core and a separate update channel."\n}\n' "$GITHUB_REPOSITORY" "$LATEST_TAG" "$SHA" > lab-update.json
+          python3 -m json.tool lab-update.json
+
+      - name: Опубликовать Release и main/lab-update.json
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" chernogram-lab.apk lab-update.json sha256.txt signature.txt --title "Чернограм Лаб 0.64.1 build 65" --notes "Отдельная Android Lab-сборка с официальным ядром SimpleX."
+          gh release delete "$LATEST_TAG" --cleanup-tag -y || true
+          gh release create "$LATEST_TAG" chernogram-lab.apk lab-update.json sha256.txt --title "Чернограм Лаб — актуальная версия 0.64.1" --notes "Стабильная ссылка для установки и обновления Lab."
+          cp lab-update.json /tmp/lab-update.json
+          git fetch origin main
+          git checkout main
+          cp /tmp/lab-update.json lab-update.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add lab-update.json
+          git commit -m "Включить обновление Чернограм Лаб 0.64.1+65 [skip ci]" || true
+          git push origin main
+          curl --fail --location --retry 6 --retry-delay 5 -o published.apk "https://github.com/${GITHUB_REPOSITORY}/releases/download/${LATEST_TAG}/chernogram-lab.apk"
+          printf '%s  published.apk\n' "$(cut -d' ' -f1 sha256.txt)" | sha256sum --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-lab-0.64.1-build65
+          path: |
+            chernogram-lab.apk
+            lab-update.json
+            sha256.txt
+            signature.txt
+            badging.txt
+          if-no-files-found: error
+          retention-days: 14

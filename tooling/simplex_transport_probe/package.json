@@ -1,0 +1,14 @@
+{
+  "name": "chernogram-simplex-transport-probe",
+  "private": true,
+  "type": "module",
+  "version": "0.64.0",
+  "description": "Independent delivery and offline queue probe for the future Chernogram transport",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@simplex-chat/types": "0.10.2",
+    "simplex-chat": "6.5.4"
+  }
+}

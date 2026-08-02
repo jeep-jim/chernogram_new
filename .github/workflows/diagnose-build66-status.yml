@@ -1,0 +1,64 @@
+name: Статус основного Чернограм build 66
+
+on:
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - .github/workflows/diagnose-build66-status.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  status:
+    name: Найти push-run сборки и показать его этапы
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Найти последний build 66
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow android-0250-simplex-core-fix-066.yml \
+            --branch experiment/simplex-core-064 \
+            --limit 5 \
+            --json databaseId,status,conclusion,name,url,headSha,createdAt \
+            | tee build66-runs.json
+          python3 - <<'PY'
+          import json
+          runs = json.load(open('build66-runs.json', encoding='utf-8'))
+          if not runs:
+              raise SystemExit('Не найден push-run build 66')
+          print('BUILD66_RUN_ID=' + str(runs[0]['databaseId']))
+          print('BUILD66_STATUS=' + str(runs[0]['status']))
+          print('BUILD66_CONCLUSION=' + str(runs[0]['conclusion']))
+          PY
+
+      - name: Показать задания последнего build 66
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID=$(python3 -c "import json; print(json.load(open('build66-runs.json'))[0]['databaseId'])")
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,url,jobs \
+            | tee build66-status.json
+
+      - name: Сохранить статус
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-build66-status
+          path: |
+            build66-runs.json
+            build66-status.json
+          if-no-files-found: error
+          retention-days: 3

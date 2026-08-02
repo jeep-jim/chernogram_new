@@ -1,0 +1,396 @@
+name: Чернограм 0.25.0+66 — исправление SimpleX и иконки
+
+on:
+  push:
+    branches:
+      - experiment/simplex-core-064
+    paths:
+      - .github/workflows/android-0250-simplex-core-fix-066.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-android-0250-build66
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.25.0
+  VERSION_CODE: 66
+  VERSION_FULL: 0.25.0+66
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+  RELEASE_TAG: chernogram-0.25.0-build66
+
+jobs:
+  build_publish:
+    name: Проверить, подписать и опубликовать основной APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+
+    steps:
+      - name: Получить экспериментальную ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/simplex-core-064
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись основного Чернограма
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить сертификат подписи до сборки
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android | tee signing-certificate.txt
+          ACTUAL=$(grep -m1 'SHA256:' signing-certificate.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Скачать официальное Android-ядро SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex-aarch64.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex-aarch64.apk | sha256sum --check
+
+      - name: Извлечь JNI-мост и все нативные зависимости
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import shutil
+          import subprocess
+          import zipfile
+
+          apk = Path('simplex-aarch64.apk')
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists():
+              shutil.rmtree(output)
+          output.mkdir(parents=True, exist_ok=True)
+          temp = Path('.simplex-libs')
+          if temp.exists():
+              shutil.rmtree(temp)
+          temp.mkdir()
+
+          system = {
+              'libandroid.so', 'libc.so', 'libdl.so', 'libEGL.so',
+              'libGLESv2.so', 'libjnigraphics.so', 'liblog.so',
+              'libm.so', 'libOpenSLES.so', 'libvulkan.so', 'libz.so',
+          }
+
+          with zipfile.ZipFile(apk) as archive:
+              entries = {
+                  Path(name).name: name
+                  for name in archive.namelist()
+                  if name.startswith('lib/arm64-v8a/') and name.endswith('.so')
+              }
+              required = ['libapp-lib.so', 'libsimplex.so', 'libsupport.so']
+              queue = list(required)
+              copied = set()
+              while queue:
+                  library = queue.pop(0)
+                  if library in copied or library in system:
+                      continue
+                  member = entries.get(library)
+                  if member is None:
+                      raise RuntimeError(f'В APK отсутствует зависимость {library}')
+                  extracted = Path(archive.extract(member, temp))
+                  destination = output / library
+                  shutil.copy2(extracted, destination)
+                  copied.add(library)
+                  dynamic = subprocess.check_output(
+                      ['readelf', '-d', str(destination)],
+                      text=True,
+                      errors='replace',
+                  )
+                  for dependency in re.findall(
+                      r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic
+                  ):
+                      if dependency not in copied and dependency not in system:
+                          queue.append(dependency)
+
+          for name in required:
+              if not (output / name).is_file():
+                  raise RuntimeError(f'Не извлечена библиотека {name}')
+          PY
+
+      - name: Доказать исправление ошибки stg_SRT_2_info
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=android/app/src/main/jniLibs/arm64-v8a/libapp-lib.so
+          SIMPLEX=android/app/src/main/jniLibs/arm64-v8a/libsimplex.so
+          SUPPORT=android/app/src/main/jniLibs/arm64-v8a/libsupport.so
+
+          readelf -d "$APP" | tee app-lib-dynamic.txt
+          grep -q 'Shared library: \[libsimplex.so\]' app-lib-dynamic.txt
+          grep -q 'Shared library: \[libsupport.so\]' app-lib-dynamic.txt
+          SIMPLEX_LINE=$(grep -n 'Shared library: \[libsimplex.so\]' app-lib-dynamic.txt | cut -d: -f1)
+          SUPPORT_LINE=$(grep -n 'Shared library: \[libsupport.so\]' app-lib-dynamic.txt | cut -d: -f1)
+          test "$SIMPLEX_LINE" -lt "$SUPPORT_LINE"
+
+          readelf -Ws "$SIMPLEX" | tee simplex-symbols.txt
+          readelf -Ws "$SUPPORT" | tee support-symbols.txt
+          grep -Eq 'GLOBAL +DEFAULT +[0-9]+ +stg_SRT_2_info' simplex-symbols.txt
+          grep -Eq 'GLOBAL +DEFAULT +UND +stg_SRT_2_info' support-symbols.txt
+
+          grep -q 'System.loadLibrary("app-lib")' android/app/src/main/kotlin/chat/simplex/common/platform/Core.kt
+          ! grep -q 'System.loadLibrary("support")' android/app/src/main/kotlin/chat/simplex/common/platform/Core.kt
+          ! grep -q 'System.loadLibrary("simplex")' android/app/src/main/kotlin/chat/simplex/common/platform/Core.kt
+
+      - name: Подключить лабораторию в основной интерфейс и выставить версию
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          pubspec = Path('pubspec.yaml')
+          pub = pubspec.read_text(encoding='utf-8')
+          pub, count = re.subn(
+              r'(?m)^version:\s*[^\n]+$',
+              'version: 0.25.0+66',
+              pub,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError('Не найдена версия pubspec')
+          pubspec.write_text(pub, encoding='utf-8')
+
+          ui_path = Path('lib/android_data_first.dart')
+          text = ui_path.read_text(encoding='utf-8')
+          import_anchor = "import 'core_models.dart';\n"
+          if "import 'device_product_panels.dart';" not in text:
+              if import_anchor not in text:
+                  raise RuntimeError('Не найден импорт core_models.dart')
+              text = text.replace(
+                  import_anchor,
+                  import_anchor + "import 'device_product_panels.dart';\n",
+                  1,
+              )
+
+          if "title: ru ? 'Лаборатория связи'" not in text:
+              update_anchor = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.system_update_alt_rounded,\n"
+                  "        title: ru ? 'Проверить обновления' : 'Check updates',\n"
+              )
+              if update_anchor not in text:
+                  raise RuntimeError('Не найден пункт проверки обновлений')
+              lab_action = (
+                  "      _ProfileAction(\n"
+                  "        icon: Icons.science_outlined,\n"
+                  "        title: ru ? 'Лаборатория связи' : 'Connection laboratory',\n"
+                  "        subtitle: ru\n"
+                  "            ? 'Проверка нового ядра SimpleX внутри основного Чернограма.'\n"
+                  "            : 'New SimpleX core probe inside the main Chernogram app.',\n"
+                  "        onTap: () => showChernogramProductInfo(context, ru: ru),\n"
+                  "      ),\n"
+                  "      const SizedBox(height: 8),\n"
+              )
+              text = text.replace(update_anchor, lab_action + update_anchor, 1)
+          ui_path.write_text(text, encoding='utf-8')
+
+          panel_path = Path('lib/device_product_panels.dart')
+          panel = panel_path.read_text(encoding='utf-8')
+          panel = panel.replace(
+              "https://githubraw.com/jeep-jim/chernogram_new/main/docs/index.html",
+              "https://github.com/jeep-jim/chernogram_new/releases/download/chernogram-0.25.0-build66/chernogram.apk",
+          )
+          panel = panel.replace(
+              "            if (isLab) ...[",
+              "            ...[",
+              1,
+          )
+          panel_path.write_text(panel, encoding='utf-8')
+          PY
+
+          dart format \
+            lib/android_data_first.dart \
+            lib/device_product_panels.dart \
+            lib/simplex_lab.dart \
+            lib/update_service.dart
+
+          grep -q 'version: 0.25.0+66' pubspec.yaml
+          grep -q 'Лаборатория связи' lib/android_data_first.dart
+          grep -q 'CgSimplexLabCard' lib/device_product_panels.dart
+          grep -q 'applicationId = "com.example.chernogram"' android/app/build.gradle.kts
+          grep -q 'android:label="Чернограм"' android/app/src/main/AndroidManifest.xml
+          ! grep -q '#070A12' android/app/src/main/res/drawable/chernogram_launcher_icon.xml
+
+      - name: Анализ и тесты
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+
+      - name: Собрать основной Android APK и сохранить точную ошибку
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee build-full.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          tail -n 300 build-full.log > build-tail.log
+          if [ "$STATUS" -ne 0 ]; then
+            echo "Сборка APK завершилась с кодом $STATUS"
+            cat build-tail.log
+            exit "$STATUS"
+          fi
+          test -s build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Подписать постоянным ключом и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            "$SOURCE_APK"
+
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee apk-signature.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' apk-signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+          "$AAPT" dump badging chernogram.apk | tee apk-badging.txt
+          grep -q "package: name='com.example.chernogram'" apk-badging.txt
+          grep -q "versionCode='66'" apk-badging.txt
+          grep -q "versionName='0.25.0'" apk-badging.txt
+          grep -q "application-label:'Чернограм'" apk-badging.txt
+
+          unzip -l chernogram.apk | tee apk-files.txt
+          grep -q 'lib/arm64-v8a/libapp-lib.so' apk-files.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' apk-files.txt
+          grep -q 'lib/arm64-v8a/libsupport.so' apk-files.txt
+          sha256sum chernogram.apk | tee apk-sha256.txt
+
+      - name: Создать манифест обновления
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 apk-sha256.txt)
+          cat > update.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "notesRu": "Исправлена загрузка ядра SimpleX: библиотеки подключаются в официальном порядке без ошибки stg_SRT_2_info. В профиль добавлена лаборатория связи. Иконка рабочего стола теперь без чёрной подложки.",
+            "notesEn": "Fixed SimpleX core loading using the official native dependency order. Added the connection laboratory. The launcher icon no longer has a black background."
+          }
+          EOF
+          python3 -m json.tool update.json
+
+      - name: Опубликовать Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update.json \
+            apk-sha256.txt \
+            apk-signature.txt \
+            apk-badging.txt \
+            app-lib-dynamic.txt \
+            --title "Чернограм ${VERSION_NAME} build ${VERSION_CODE}" \
+            --notes "Основное Android-обновление с исправленной загрузкой SimpleX и прозрачной launcher-иконкой."
+
+      - name: Включить обновление для всех устройств
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git worktree add ../chernogram-main origin/main
+          cp update.json ../chernogram-main/update.json
+          cd ../chernogram-main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json
+          git commit -m 'Опубликовать Чернограм 0.25.0+66 с исправленным SimpleX'
+          git push origin HEAD:main
+
+      - name: Финально скачать и проверить опубликованное обновление
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          curl --fail --location --retry 6 --retry-delay 3 \
+            -o published-update.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json?t=${GITHUB_RUN_ID}"
+          python3 -m json.tool published-update.json
+          test "$(python3 -c "import json; print(json.load(open('published-update.json'))['versionCode'])")" = "66"
+          URL=$(python3 -c "import json; print(json.load(open('published-update.json'))['apkUrl'])")
+          EXPECTED=$(python3 -c "import json; print(json.load(open('published-update.json'))['sha256'])")
+          curl --fail --location --retry 6 --retry-delay 3 -o published-chernogram.apk "$URL"
+          ACTUAL=$(sha256sum published-chernogram.apk | cut -d' ' -f1)
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Сохранить доказательства сборки
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-0.25.0-build66-verified
+          path: |
+            chernogram.apk
+            update.json
+            published-update.json
+            apk-sha256.txt
+            apk-signature.txt
+            apk-badging.txt
+            apk-files.txt
+            signing-certificate.txt
+            app-lib-dynamic.txt
+            simplex-symbols.txt
+            support-symbols.txt
+            build-full.log
+            build-tail.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,109 @@
+name: Чернограм 0.64 — испытание нового ядра связи
+
+on:
+  push:
+    branches:
+      - experiment/simplex-core-064
+    paths:
+      - tooling/simplex_transport_probe/**
+      - docs/TRANSPORT_REBOOT_064.md
+      - .github/workflows/simplex-transport-probe-064.yml
+  pull_request:
+    branches:
+      - feature/storage-version-qr-062
+    paths:
+      - tooling/simplex_transport_probe/**
+      - docs/TRANSPORT_REBOOT_064.md
+      - .github/workflows/simplex-transport-probe-064.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chernogram-simplex-transport-064-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  delivery_probe:
+    name: Два клиента, онлайн-доставка и офлайн-очередь
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    defaults:
+      run:
+        working-directory: tooling/simplex_transport_probe
+
+    steps:
+      - name: Получить экспериментальную ветку
+        uses: actions/checkout@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Установить системные зависимости нативного binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            python3 \
+            pkg-config \
+            libgmp10 \
+            zlib1g
+
+      - name: Установить официальное ядро SimpleX
+        shell: bash
+        env:
+          SIMPLEX_BACKEND: sqlite
+          npm_config_simplex_backend: sqlite
+        run: |
+          set -o pipefail
+          npm install --no-audit --no-fund 2>&1 | tee npm-install.log
+          npm ls simplex-chat @simplex-chat/types | tee npm-tree.log
+
+      - name: Проверить синтаксис пробника
+        shell: bash
+        run: node --check probe.mjs
+
+      - name: Проверить реальную доставку между двумя независимыми базами
+        shell: bash
+        env:
+          CG_PROBE_ONLINE_MESSAGES: '20'
+          CG_PROBE_OFFLINE_MESSAGES: '10'
+          CG_PROBE_CONNECT_TIMEOUT_MS: '120000'
+          CG_PROBE_MESSAGE_TIMEOUT_MS: '90000'
+          CG_PROBE_OFFLINE_TIMEOUT_MS: '180000'
+        run: |
+          set -o pipefail
+          npm run probe 2>&1 | tee simplex-probe.log
+
+      - name: Проверить итоговый отчёт
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s simplex-probe-report.json
+          python3 -m json.tool simplex-probe-report.json > /dev/null
+          cat simplex-probe-report.json
+          if [ "$(python3 -c "import json; print(json.load(open('simplex-probe-report.json'))['result'])")" != "pass" ]; then
+            echo 'Новое ядро пока не прошло критерий 100% доставки.' >&2
+            exit 1
+          fi
+
+      - name: Сохранить доказательства испытания
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-simplex-transport-probe-064
+          path: |
+            tooling/simplex_transport_probe/simplex-probe-report.json
+            tooling/simplex_transport_probe/simplex-probe-events.jsonl
+            tooling/simplex_transport_probe/simplex-probe.log
+            tooling/simplex_transport_probe/npm-install.log
+            tooling/simplex_transport_probe/npm-tree.log
+          if-no-files-found: warn
+          retention-days: 14
