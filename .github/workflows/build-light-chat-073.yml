@@ -1,0 +1,209 @@
+name: Чернограм Light 0.50.0+73
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-light-chat-073.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-light-chat-073
+  cancel-in-progress: true
+
+env:
+  SOURCE_REF: rebuild/light-chat-calls-073
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.50.0
+  VERSION_CODE: 73
+  RELEASE_TAG: chernogram-light-0.50.0-build73
+  SIMPLEX_VERSION: v6.5.6
+  SIMPLEX_APK_SHA256: 79ae9650905abf0de50f83d72ee2c8b159feb67e093a6fac30f578a66d0181b6
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  build:
+    name: Собрать лёгкий Android-клиент
+    runs-on: ubuntu-22.04
+    timeout-minutes: 110
+
+    steps:
+      - name: Получить ветку Light
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Применить лёгкий чат и иконку маски
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q 'final String initialAction' lib/chat_screen.dart; then
+            python3 tool/patch_light_chat_073.py
+          fi
+          dart format lib/main.dart lib/light lib/chat_screen.dart
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart lib/light lib/chat_screen.dart android/app/src/main/AndroidManifest.xml
+          if ! git diff --cached --quiet; then
+            git commit -m "Применить лёгкий интерфейс Чернограма build 73 [skip ci]"
+            git push origin HEAD:${SOURCE_REF}
+          fi
+
+      - name: Проверить состав продукта
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'version: 0.50.0+73' pubspec.yaml
+          grep -q 'ChernogramLightHome' lib/main.dart
+          grep -q "label: 'Звонки'" lib/light/light_chat_app.dart
+          grep -q "label: 'Чаты'" lib/light/light_chat_app.dart
+          grep -q "label: 'Профиль'" lib/light/light_chat_app.dart
+          grep -q 'Версия .*сборка' lib/light/light_chat_app.dart
+          grep -q 'final String initialAction' lib/chat_screen.dart
+          grep -q 'android:icon="@drawable/chernogram_launcher_icon"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@drawable/chernogram_launcher_icon"' android/app/src/main/AndroidManifest.xml
+          ! grep -q 'ChernogramLibraryNetworkHome' lib/main.dart
+          ! grep -q 'ChernogramOpticalHome' lib/main.dart
+          grep -q 'useLegacyPackaging = true' android/app/build.gradle.kts
+          grep -q 'abiFilters += "arm64-v8a"' android/app/build.gradle.kts
+
+      - name: Скачать и извлечь официальные библиотеки SimpleX
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 3 \
+            -o simplex.apk \
+            "https://github.com/simplex-chat/simplex-chat/releases/download/${SIMPLEX_VERSION}/simplex-aarch64.apk"
+          printf '%s  %s\n' "$SIMPLEX_APK_SHA256" simplex.apk | sha256sum --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil, subprocess, zipfile
+          output = Path('android/app/src/main/jniLibs/arm64-v8a')
+          if output.exists(): shutil.rmtree(output)
+          output.mkdir(parents=True)
+          temp = Path('.simplex-libs')
+          if temp.exists(): shutil.rmtree(temp)
+          temp.mkdir()
+          system = {'libandroid.so','libc.so','libdl.so','libEGL.so','libGLESv2.so','libjnigraphics.so','liblog.so','libm.so','libOpenSLES.so','libvulkan.so','libz.so'}
+          with zipfile.ZipFile('simplex.apk') as archive:
+              entries = {Path(n).name:n for n in archive.namelist() if n.startswith('lib/arm64-v8a/') and n.endswith('.so')}
+              queue = ['libapp-lib.so','libsimplex.so','libsupport.so']
+              copied = set()
+              while queue:
+                  lib = queue.pop(0)
+                  if lib in copied or lib in system: continue
+                  member = entries.get(lib)
+                  if member is None: raise RuntimeError(f'missing {lib}')
+                  source = Path(archive.extract(member, temp))
+                  target = output / lib
+                  shutil.copy2(source, target)
+                  copied.add(lib)
+                  dynamic = subprocess.check_output(['readelf','-d',str(target)], text=True, errors='replace')
+                  for dep in re.findall(r'\(NEEDED\).*Shared library: \[(.+?)\]', dynamic):
+                      if dep not in copied and dep not in system: queue.append(dep)
+          PY
+
+      - name: Анализ, тесты и сборка
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee light-build73.log
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram-light.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram-light.apk | tee light-signature73.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' light-signature73.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram-light.apk | tee light-badging73.txt
+          grep -q "package: name='com.example.chernogram'" light-badging73.txt
+          grep -q "versionCode='73'" light-badging73.txt
+          grep -q "versionName='0.50.0'" light-badging73.txt
+          grep -q "application-label:'Чернограм'" light-badging73.txt
+          unzip -l chernogram-light.apk | tee light-files73.txt
+          grep -q 'lib/arm64-v8a/libsimplex.so' light-files73.txt
+          ! grep -q 'lib/x86_64/' light-files73.txt
+          ! grep -q 'lib/armeabi-v7a/' light-files73.txt
+          SIZE=$(stat -c%s chernogram-light.apk)
+          echo "$SIZE" | tee light-size73.txt
+          test "$SIZE" -lt 120000000
+          sha256sum chernogram-light.apk | tee light-sha256-73.txt
+
+      - name: Опубликовать тестовый Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram-light.apk \
+            light-sha256-73.txt \
+            light-signature73.txt \
+            light-badging73.txt \
+            light-size73.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Light 0.50.0+73" \
+            --notes "Тестовая Android-сборка нового лёгкого интерфейса: циферблат, контакты, постоянные чаты, аудио- и видеозвонки, профиль с фотографией, ссылкой на установку, онлайн-обновлением и подписью версии. Библиотека, Интересы, хабы и лаборатория удалены из основной навигации. Канал обязательного обновления пока не переключается."
+
+      - name: Сохранить хвост диагностики
+        if: always()
+        shell: bash
+        run: |
+          tail -n 450 light-build73.log 2>/dev/null > light-build73-tail.log || true
+
+      - name: Выдать APK и диагностику
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-light-0.50.0-build73
+          path: |
+            chernogram-light.apk
+            light-sha256-73.txt
+            light-signature73.txt
+            light-badging73.txt
+            light-size73.txt
+            light-build73.log
+            light-build73-tail.log
+          if-no-files-found: warn
+          retention-days: 14
