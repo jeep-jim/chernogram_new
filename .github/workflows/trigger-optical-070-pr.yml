@@ -1,0 +1,46 @@
+name: Контроль Optical build 70
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - TRIGGER_OPTICAL_070.md
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    name: Запустить Чернограм Optical build 70
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Запустить основной Optical workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BEFORE=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow publish-optical-070.yml \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // 0')
+          gh workflow run publish-optical-070.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          for attempt in $(seq 1 20); do
+            sleep 2
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow publish-optical-070.yml \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ] && [ "$RUN_ID" != "$BEFORE" ]; then
+              echo "Чернограм Optical build 70: $RUN_ID"
+              exit 0
+            fi
+          done
+          echo "Событие принято, но ID сборки ещё не появился."
