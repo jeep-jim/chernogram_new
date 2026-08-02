@@ -1320,7 +1320,8 @@ class _LabRow extends StatelessWidget {
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon, color: const Color(0xFF8A7BFF)),
     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-    trailing: Flexible(
+    trailing: SizedBox(
+      width: 170,
       child: Text(
         value,
         textAlign: TextAlign.right,

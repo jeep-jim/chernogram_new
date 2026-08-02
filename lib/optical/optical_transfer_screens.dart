@@ -62,7 +62,7 @@ class OpticalRoomInviteScreen extends StatelessWidget {
                     child: QrImageView(
                       data: data,
                       version: QrVersions.auto,
-                      size: min(MediaQuery.sizeOf(context).width - 76, 330),
+                      size: min(MediaQuery.sizeOf(context).width - 76, 330.0),
                       gapless: true,
                       errorCorrectionLevel: QrErrorCorrectLevel.M,
                       eyeStyle: const QrEyeStyle(
@@ -587,8 +587,8 @@ class _ScannerFrame extends StatelessWidget {
   Widget build(BuildContext context) => IgnorePointer(
     child: Center(
       child: Container(
-        width: min(MediaQuery.sizeOf(context).width - 42, 390),
-        height: min(MediaQuery.sizeOf(context).width - 42, 390),
+        width: min(MediaQuery.sizeOf(context).width - 42, 390.0),
+        height: min(MediaQuery.sizeOf(context).width - 42, 390.0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
           border: Border.all(color: const Color(0xFF8A7BFF), width: 3),

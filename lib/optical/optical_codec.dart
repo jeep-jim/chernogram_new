@@ -168,7 +168,10 @@ class OpticalTransferCodec {
     final digest = await _hash.hash(packed);
     final hashHex = _hex(digest.bytes);
     final transferId = opticalRandomId(10);
-    final count = (packed.length / frameChunkBytes).ceil().clamp(1, 1 << 30);
+    final count = (packed.length / frameChunkBytes)
+        .ceil()
+        .clamp(1, 1 << 30)
+        .toInt();
     final frames = <String>[];
     for (var index = 0; index < count; index++) {
       final start = index * frameChunkBytes;
