@@ -1,0 +1,58 @@
+name: Исправить Light UI build 74
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-light-074-ui-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/impulse-transport-074
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.8
+          channel: stable
+          cache: true
+
+      - name: Удалить циферблат и поставить реальные контакты
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'class _DialerPage' lib/light/light_chat_app.dart; then
+            python3 tool/remove_fake_dialer_074.py
+          fi
+          dart format lib/light/light_chat_app.dart
+
+      - name: Проверить интерфейс
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -q 'class _DialerPage' lib/light/light_chat_app.dart
+          ! grep -q "label: 'Звонки'" lib/light/light_chat_app.dart
+          grep -q 'class _ContactsHomePage' lib/light/light_chat_app.dart
+          grep -q "label: 'Контакты'" lib/light/light_chat_app.dart
+          grep -q "tooltip: 'Видеозвонок'" lib/light/light_chat_app.dart
+
+      - name: Сохранить исправление в ветке build 74
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/light/light_chat_app.dart tool/remove_fake_dialer_074.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Убрать фальшивый циферблат и открыть реальные контакты [skip ci]"
+            git push origin HEAD:rebuild/impulse-transport-074
+          fi
