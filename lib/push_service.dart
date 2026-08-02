@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -27,6 +28,7 @@ FirebaseOptions get _firebaseOptions => const FirebaseOptions(
 @pragma('vm:entry-point')
 Future<void> chernogramFirebaseBackgroundHandler(RemoteMessage message) async {
   if (!_firebaseConfigured) return;
+  DartPluginRegistrant.ensureInitialized();
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(options: _firebaseOptions);
   }
@@ -100,7 +102,7 @@ class CgPushService {
         '@drawable/chernogram_launcher_icon',
       ),
     );
-    await _notifications.initialize(initialization);
+    await _notifications.initialize(settings: initialization);
 
     final android = _notifications
         .resolvePlatformSpecificImplementation<
@@ -124,10 +126,10 @@ class CgPushService {
         await showIncomingCallNotification(message.data);
       } else {
         await _notifications.show(
-          message.hashCode,
-          message.notification?.title ?? 'Чернограм',
-          message.notification?.body ?? 'Новое сообщение',
-          const NotificationDetails(
+          id: message.hashCode,
+          title: message.notification?.title ?? 'Чернограм',
+          body: message.notification?.body ?? 'Новое сообщение',
+          notificationDetails: const NotificationDetails(
             android: AndroidNotificationDetails(
               'chernogram_messages',
               'Сообщения Чернограма',
@@ -165,7 +167,7 @@ class CgPushService {
         '@drawable/chernogram_launcher_icon',
       ),
     );
-    await _notifications.initialize(initialization);
+    await _notifications.initialize(settings: initialization);
     final android = _notifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
@@ -173,10 +175,10 @@ class CgPushService {
     await android?.createNotificationChannel(_callChannel);
 
     await _notifications.show(
-      data['packetId']?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
-      data['video'] == 'true' ? 'Видеозвонок' : 'Входящий звонок',
-      'Откройте Чернограм, чтобы ответить',
-      const NotificationDetails(
+      id: data['packetId']?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
+      title: data['video'] == 'true' ? 'Видеозвонок' : 'Входящий звонок',
+      body: 'Откройте Чернограм, чтобы ответить',
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'chernogram_calls',
           'Звонки Чернограма',
