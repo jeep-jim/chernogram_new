@@ -87,6 +87,9 @@ class _CgChatScreenState extends State<CgChatScreen> {
     super.initState();
     _tunnel = widget.tunnel;
     _text.addListener(_onComposerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _jumpToBottomImmediately();
+    });
     unawaited(_connectAndStart());
     if (widget.autoInvite) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -471,6 +474,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   Future<void> _sendText() async {
     final value = _text.text.trim();
     if (value.isEmpty) return;
+    _dismissKeyboard();
     final message = CgMessage(
       id: CgIds.random(24),
       authorId: widget.profile.id,
@@ -709,6 +713,7 @@ class _CgChatScreenState extends State<CgChatScreen> {
   }
 
   Future<void> _sendAttachment(CgAttachment attachment) async {
+    _dismissKeyboard();
     final message = CgMessage(
       id: CgIds.random(24),
       authorId: widget.profile.id,
@@ -876,13 +881,28 @@ class _CgChatScreenState extends State<CgChatScreen> {
     return 'document';
   }
 
+  void _dismissKeyboard() {
+    _composerFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _jumpToBottomImmediately() {
+    if (!_scroll.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpToBottomImmediately();
+      });
+      return;
+    }
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       _scroll.animateTo(
         _scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
       );
     });
   }
@@ -1537,289 +1557,317 @@ class _CgChatScreenState extends State<CgChatScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: CgChatPatternBackground(
-        child: Column(
-          children: [
-            if (_selectedMessageIds.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),
-                child: Material(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(18),
-                  child: Row(
-                    children: <Widget>[
-                      IconButton(
-                        onPressed: () => setState(_selectedMessageIds.clear),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                      Expanded(
-                        child: Text(
-                          widget.ru
-                              ? 'Выбрано: ${_selectedMessageIds.length}'
-                              : 'Selected: ${_selectedMessageIds.length}',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _dismissKeyboard,
+        child: CgChatPatternBackground(
+          child: Column(
+            children: [
+              if (_selectedMessageIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),
+                  child: Material(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(18),
+                    child: Row(
+                      children: <Widget>[
+                        IconButton(
+                          onPressed: () => setState(_selectedMessageIds.clear),
+                          icon: const Icon(Icons.close_rounded),
                         ),
+                        Expanded(
+                          child: Text(
+                            widget.ru
+                                ? 'Выбрано: ${_selectedMessageIds.length}'
+                                : 'Selected: ${_selectedMessageIds.length}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: widget.ru ? 'Копировать' : 'Copy',
+                          onPressed: _copySelectedMessages,
+                          icon: const Icon(Icons.copy_rounded),
+                        ),
+                        IconButton(
+                          tooltip: widget.ru ? 'Переслать' : 'Forward',
+                          onPressed: _forwardSelectedMessages,
+                          icon: const Icon(Icons.forward_rounded),
+                        ),
+                        IconButton(
+                          tooltip: widget.ru ? 'Удалить свои' : 'Delete mine',
+                          onPressed: _deleteSelectedMessages,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: _tunnel.messages.isEmpty
+                    ? _EmptyChat(
+                        ru: widget.ru,
+                        onInvite: canInvite ? _showInvite : null,
+                      )
+                    : ListView.builder(
+                        controller: _scroll,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+                        itemCount: _tunnel.messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _tunnel.messages[index];
+                          final mine =
+                              message.authorId == widget.profile.id ||
+                              (message.authorId.isEmpty &&
+                                  message.authorName ==
+                                      widget.profile.nickname);
+                          final selected = _selectedMessageIds.contains(
+                            message.id,
+                          );
+                          final bubble = Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 34),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: selected
+                                        ? Border.all(
+                                            color: scheme.primary,
+                                            width: 2,
+                                          )
+                                        : null,
+                                  ),
+                                  child: _MessageBubble(
+                                    message: message,
+                                    mine: mine,
+                                    groupChat: _isGroupChat,
+                                    privacyLens: widget.privacyLens,
+                                    ru: widget.ru,
+                                    delivered: _networkState == 'connected',
+                                    read:
+                                        ((message.meta['readBy'] as List?) ??
+                                                const <dynamic>[])
+                                            .isNotEmpty,
+                                    onLongPress: () =>
+                                        _showMessageActions(message),
+                                  ),
+                                ),
+                              ),
+                              if (!message.deleted)
+                                Positioned(
+                                  left: 0,
+                                  bottom: 10,
+                                  child: SizedBox.square(
+                                    dimension: 32,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      tooltip: widget.ru
+                                          ? 'Реакция'
+                                          : 'Reaction',
+                                      onPressed: () =>
+                                          _showReactionPicker(message),
+                                      icon: const Icon(
+                                        Icons.add_reaction_outlined,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                          return GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: _selectedMessageIds.isEmpty
+                                ? null
+                                : () => _toggleMessageSelection(message),
+                            child:
+                                _selectedMessageIds.isNotEmpty ||
+                                    message.deleted
+                                ? bubble
+                                : Dismissible(
+                                    key: ValueKey<String>(
+                                      'swipe:${message.id}',
+                                    ),
+                                    direction: DismissDirection.horizontal,
+                                    confirmDismiss: (direction) async {
+                                      if (direction ==
+                                          DismissDirection.startToEnd) {
+                                        _replyTo(message);
+                                      } else {
+                                        await _forward(message);
+                                      }
+                                      return false;
+                                    },
+                                    background: const Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: EdgeInsets.only(left: 18),
+                                        child: Icon(Icons.reply_rounded),
+                                      ),
+                                    ),
+                                    secondaryBackground: const Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Padding(
+                                        padding: EdgeInsets.only(right: 18),
+                                        child: Icon(Icons.forward_rounded),
+                                      ),
+                                    ),
+                                    child: bubble,
+                                  ),
+                          );
+                        },
                       ),
-                      IconButton(
-                        tooltip: widget.ru ? 'Копировать' : 'Copy',
-                        onPressed: _copySelectedMessages,
-                        icon: const Icon(Icons.copy_rounded),
-                      ),
-                      IconButton(
-                        tooltip: widget.ru ? 'Переслать' : 'Forward',
-                        onPressed: _forwardSelectedMessages,
-                        icon: const Icon(Icons.forward_rounded),
-                      ),
-                      IconButton(
-                        tooltip: widget.ru ? 'Удалить свои' : 'Delete mine',
-                        onPressed: _deleteSelectedMessages,
-                        icon: const Icon(Icons.delete_outline_rounded),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_replyingTo != null)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.fromLTRB(13, 9, 7, 9),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest.withValues(
+                              alpha: .86,
+                            ),
+                            borderRadius: BorderRadius.circular(17),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.reply_rounded,
+                                size: 18,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      widget.privacyLens
+                                          ? '••••'
+                                          : _replyingTo!.authorName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: scheme.primary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    Text(
+                                      widget.privacyLens
+                                          ? '••••••••'
+                                          : (_replyingTo!.text.isNotEmpty
+                                                ? _replyingTo!.text
+                                                : _replyingTo!
+                                                          .attachment
+                                                          ?.name ??
+                                                      ''),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () =>
+                                    setState(() => _replyingTo = null),
+                                icon: const Icon(Icons.close_rounded, size: 19),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(7, 5, 7, 5),
+                        decoration: BoxDecoration(
+                          color: scheme.surface.withValues(alpha: .58),
+                          borderRadius: BorderRadius.circular(32),
+                          border: Border.all(
+                            color: scheme.onSurface.withValues(alpha: .10),
+                          ),
+                          boxShadow: const <BoxShadow>[
+                            BoxShadow(
+                              color: Color(0x1A000000),
+                              blurRadius: 18,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              tooltip: widget.ru ? 'Добавить' : 'Add',
+                              onPressed: _sendingFile
+                                  ? null
+                                  : _showAttachmentMenu,
+                              icon: _sendingFile
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.add_rounded),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _text,
+                                focusNode: _composerFocus,
+                                minLines: 1,
+                                maxLines: 5,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                onSubmitted: (_) => _sendText(),
+                                decoration: InputDecoration(
+                                  hintText: widget.ru ? 'Сообщение' : 'Message',
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: _hasText
+                                  ? IconButton.filled(
+                                      key: const ValueKey('send'),
+                                      onPressed: _sendText,
+                                      icon: const Icon(
+                                        Icons.arrow_upward_rounded,
+                                      ),
+                                    )
+                                  : CgVoiceRecordButton(
+                                      key: const ValueKey('voice'),
+                                      ru: widget.ru,
+                                      enabled: _networkState == 'connected',
+                                      onRecorded: _sendVoice,
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-            Expanded(
-              child: _tunnel.messages.isEmpty
-                  ? _EmptyChat(
-                      ru: widget.ru,
-                      onInvite: canInvite ? _showInvite : null,
-                    )
-                  : ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-                      itemCount: _tunnel.messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _tunnel.messages[index];
-                        final mine =
-                            message.authorId == widget.profile.id ||
-                            (message.authorId.isEmpty &&
-                                message.authorName == widget.profile.nickname);
-                        final selected = _selectedMessageIds.contains(
-                          message.id,
-                        );
-                        final bubble = Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 34),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: selected
-                                      ? Border.all(
-                                          color: scheme.primary,
-                                          width: 2,
-                                        )
-                                      : null,
-                                ),
-                                child: _MessageBubble(
-                                  message: message,
-                                  mine: mine,
-                                  groupChat: _isGroupChat,
-                                  privacyLens: widget.privacyLens,
-                                  ru: widget.ru,
-                                  delivered: _networkState == 'connected',
-                                  read:
-                                      ((message.meta['readBy'] as List?) ??
-                                              const <dynamic>[])
-                                          .isNotEmpty,
-                                  onLongPress: () =>
-                                      _showMessageActions(message),
-                                ),
-                              ),
-                            ),
-                            if (!message.deleted)
-                              Positioned(
-                                left: 0,
-                                bottom: 10,
-                                child: SizedBox.square(
-                                  dimension: 32,
-                                  child: IconButton(
-                                    padding: EdgeInsets.zero,
-                                    tooltip: widget.ru ? 'Реакция' : 'Reaction',
-                                    onPressed: () =>
-                                        _showReactionPicker(message),
-                                    icon: const Icon(
-                                      Icons.add_reaction_outlined,
-                                      size: 19,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        );
-                        return GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: _selectedMessageIds.isEmpty
-                              ? null
-                              : () => _toggleMessageSelection(message),
-                          child:
-                              _selectedMessageIds.isNotEmpty || message.deleted
-                              ? bubble
-                              : Dismissible(
-                                  key: ValueKey<String>('swipe:${message.id}'),
-                                  direction: DismissDirection.horizontal,
-                                  confirmDismiss: (direction) async {
-                                    if (direction ==
-                                        DismissDirection.startToEnd) {
-                                      _replyTo(message);
-                                    } else {
-                                      await _forward(message);
-                                    }
-                                    return false;
-                                  },
-                                  background: const Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(left: 18),
-                                      child: Icon(Icons.reply_rounded),
-                                    ),
-                                  ),
-                                  secondaryBackground: const Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(right: 18),
-                                      child: Icon(Icons.forward_rounded),
-                                    ),
-                                  ),
-                                  child: bubble,
-                                ),
-                        );
-                      },
-                    ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_replyingTo != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.fromLTRB(13, 9, 7, 9),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest.withValues(
-                            alpha: .86,
-                          ),
-                          borderRadius: BorderRadius.circular(17),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.reply_rounded,
-                              size: 18,
-                              color: scheme.primary,
-                            ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.privacyLens
-                                        ? '••••'
-                                        : _replyingTo!.authorName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: scheme.primary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.privacyLens
-                                        ? '••••••••'
-                                        : (_replyingTo!.text.isNotEmpty
-                                              ? _replyingTo!.text
-                                              : _replyingTo!.attachment?.name ??
-                                                    ''),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () =>
-                                  setState(() => _replyingTo = null),
-                              icon: const Icon(Icons.close_rounded, size: 19),
-                            ),
-                          ],
-                        ),
-                      ),
-                    GlassPanel(
-                      padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-                      borderRadius: BorderRadius.circular(22),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          IconButton(
-                            tooltip: widget.ru ? 'Добавить' : 'Add',
-                            onPressed: _sendingFile
-                                ? null
-                                : _showAttachmentMenu,
-                            icon: _sendingFile
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.add_rounded),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _text,
-                              focusNode: _composerFocus,
-                              minLines: 1,
-                              maxLines: 5,
-                              textCapitalization: TextCapitalization.sentences,
-                              onSubmitted: (_) => _sendText(),
-                              decoration: InputDecoration(
-                                hintText: widget.ru ? 'Сообщение' : 'Message',
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 10,
-                                ),
-                              ),
-                            ),
-                          ),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
-                            child: _hasText
-                                ? IconButton.filled(
-                                    key: const ValueKey('send'),
-                                    onPressed: _sendText,
-                                    icon: const Icon(
-                                      Icons.arrow_upward_rounded,
-                                    ),
-                                  )
-                                : CgVoiceRecordButton(
-                                    key: const ValueKey('voice'),
-                                    ru: widget.ru,
-                                    enabled: _networkState == 'connected',
-                                    onRecorded: _sendVoice,
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

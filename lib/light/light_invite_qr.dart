@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -158,7 +160,7 @@ class _LightInviteScannerScreenState extends State<LightInviteScannerScreen> {
         continue;
       }
       _finished = true;
-      await _controller.stop();
+      unawaited(_controller.stop());
       if (mounted) Navigator.pop(context, chat);
       return;
     }
