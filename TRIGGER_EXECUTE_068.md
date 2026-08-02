@@ -1,2 +1,2 @@
-Finalize Chernogram Android and Windows 0.26.0+68.
-Attempt: 5 — Android backup rules fixed; use already verified Windows package.
+Build Chernogram Android 0.26.1+69.
+Fix: compress native libraries and keep only arm64 to solve update failure near 42 percent.
