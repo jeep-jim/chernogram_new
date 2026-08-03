@@ -1,0 +1,297 @@
+name: Чернограм 0.52.1+76 — чистая главная и QR в профиле
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-076-install-qr-ui.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-ui-076
+  cancel-in-progress: false
+
+env:
+  SOURCE_REF: ui/install-qr-profile-076
+  FALLBACK_REF: rebuild/light-chat-calls-073
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.52.1
+  VERSION_CODE: 76
+  RELEASE_TAG: chernogram-0.52.1-build76
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  publish:
+    name: Проверить, собрать и включить обновление
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+
+    steps:
+      - name: Получить исходники build 76
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить сертификат подписи
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > certificate76.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate76.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Применить build 75 и новый интерфейс build 76
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$FALLBACK_REF"
+          git show "origin/$FALLBACK_REF:lib/internet_core.dart" > lib/internet_core.dart
+          python3 tool/finish_reliability_075.py
+          python3 tool/finish_reliability_075_extra.py
+          python3 tool/finish_ui_076.py
+          dart format \
+            lib/main.dart \
+            lib/background_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart \
+            lib/light/light_chat_app.dart
+
+          grep -q 'version: 0.52.1+76' pubspec.yaml
+          grep -q "package:qr_flutter/qr_flutter.dart" lib/light/light_chat_app.dart
+          grep -q "'Установить Чернограм'" lib/light/light_chat_app.dart
+          grep -q "'Отправить ссылку на установку'" lib/light/light_chat_app.dart
+          grep -q "QrImageView" lib/light/light_chat_app.dart
+          ! grep -q "'Добавить человека'" lib/light/light_chat_app.dart
+          ! grep -q "leading: const Icon(Icons.install_mobile_rounded)" lib/light/light_chat_app.dart
+          grep -q 'ChernogramBackgroundService.start' lib/main.dart
+          grep -q 'Future<void> _pollRelays' lib/internet_core.dart
+          grep -q '_negotiating = false' lib/call_service.dart
+
+      - name: Получить зависимости
+        shell: bash
+        run: flutter pub get
+
+      - name: Анализ кода
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter analyze \
+            --no-fatal-infos \
+            --no-fatal-warnings \
+            lib/main.dart \
+            lib/background_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart \
+            lib/group_call_service.dart \
+            lib/chat_screen.dart \
+            lib/chat_media.dart \
+            lib/core_models.dart \
+            lib/sound_service.dart \
+            lib/update_service.dart \
+            lib/brand.dart \
+            lib/light \
+            2>&1 | tee ui-analyze76.log
+
+      - name: Запустить тесты
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee ui-tests76.log
+
+      - name: Собрать release APK
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf android/app/src/main/jniLibs
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            2>&1 | tee ui-build76.log
+          test -s build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee ui-signature76.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' ui-signature76.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee ui-badging76.txt
+          grep -q "package: name='com.example.chernogram'" ui-badging76.txt
+          grep -q "versionCode='76'" ui-badging76.txt
+          grep -q "versionName='0.52.1'" ui-badging76.txt
+          grep -q "application-label:'Чернограм'" ui-badging76.txt
+          SIZE=$(stat -c%s chernogram.apk)
+          test "$SIZE" -gt 10000000
+          test "$SIZE" -lt 90000000
+          printf '%s\n' "$SIZE" | tee ui-size76.txt
+          sha256sum chernogram.apk | tee ui-sha256-76.txt
+
+      - name: Создать update.json build 76
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 ui-sha256-76.txt)
+          SIZE=$(cat ui-size76.txt)
+          cat > update-build76.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Чернограм 0.52.1 build 76: главная страница стала чище — удалён большой блок с текстом и QR-действиями. QR для установки перенесён в профиль: один крупный код и кнопка отправки ссылки. Все исправления надёжности сообщений и звонков из build 75 сохранены.",
+            "notesEn": "Chernogram 0.52.1 build 76: cleaner home screen, installation QR moved to the profile with one clear share action, while retaining build 75 messaging and calling reliability fixes."
+          }
+          EOF
+          python3 -m json.tool update-build76.json >/dev/null
+
+      - name: Опубликовать release и online update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build76.json \
+            ui-sha256-76.txt \
+            ui-signature76.txt \
+            ui-badging76.txt \
+            ui-size76.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.52.1+76 — QR в профиле" \
+            --notes "Чистая главная страница и единый QR установки в профиле."
+
+          gh release delete latest-apk --cleanup-tag -y || true
+          cp update-build76.json update.json
+          gh release create latest-apk \
+            chernogram.apk \
+            update.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Android 0.52.1+76" \
+            --notes "Онлайн-обновление интерфейса поверх build 75."
+
+      - name: Скачать и проверить опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}&run=${GITHUB_RUN_ID}"
+          curl --fail --location --retry 10 --retry-delay 3 "$URL" -o published-chernogram76.apk
+          EXPECTED_SHA=$(cut -d' ' -f1 ui-sha256-76.txt)
+          ACTUAL_SHA=$(sha256sum published-chernogram76.apk | cut -d' ' -f1)
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs published-chernogram76.apk | tee published-signature76.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' published-signature76.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging published-chernogram76.apk | tee published-badging76.txt
+          grep -q "versionCode='76'" published-badging76.txt
+          grep -q "versionName='0.52.1'" published-badging76.txt
+
+      - name: Включить build 76 в main/update.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CURRENT_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" --jq .sha)
+          CONTENT=$(base64 -w0 update-build76.json)
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/update.json" \
+            -f message='Опубликовать Чернограм 0.52.1 build 76' \
+            -f content="$CONTENT" \
+            -f sha="$CURRENT_SHA" \
+            -f branch=main >/dev/null
+
+      - name: Финально проверить оба канала обновления
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh api "repos/${GITHUB_REPOSITORY}/contents/update.json?ref=main" \
+            -H 'Accept: application/vnd.github.raw+json' > main-update76.json
+          curl --fail --location --retry 8 --retry-delay 2 \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/update.json?v=76&run=${GITHUB_RUN_ID}" \
+            -o release-update76.json
+          python3 - <<'PY'
+          import json
+          for name in ('main-update76.json', 'release-update76.json'):
+              with open(name, encoding='utf-8') as f:
+                  data = json.load(f)
+              assert data['versionCode'] == 76, (name, data)
+              assert data['versionName'] == '0.52.1', (name, data)
+              assert data['apkUrl'].endswith('chernogram.apk?v=76'), (name, data)
+          PY
+
+      - name: Сохранить доказательства build 76
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-ui-0.52.1-build76
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            chernogram.apk
+            update-build76.json
+            ui-sha256-76.txt
+            ui-signature76.txt
+            ui-badging76.txt
+            ui-size76.txt
+            ui-analyze76.log
+            ui-tests76.log
+            ui-build76.log
+            published-signature76.txt
+            published-badging76.txt
+            main-update76.json
+            release-update76.json
