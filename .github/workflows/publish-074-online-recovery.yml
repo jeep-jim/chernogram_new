@@ -1,0 +1,276 @@
+name: Чернограм 0.51.0+74 — online recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-074-online-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-online-recovery-074
+  cancel-in-progress: false
+
+env:
+  SOURCE_REF: rebuild/impulse-transport-074
+  FALLBACK_REF: rebuild/light-chat-calls-073
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.51.0
+  VERSION_CODE: 74
+  RELEASE_TAG: chernogram-0.51.0-build74
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  publish:
+    name: Собрать, подписать и включить online update
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Получить исходники build 74
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить сертификат подписи
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > certificate74.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate74.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Подключить рабочий зашифрованный relay как резерв
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$FALLBACK_REF"
+          git show "origin/$FALLBACK_REF:lib/internet_core.dart" > lib/internet_core.dart
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/main.dart')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace("import 'package:firebase_messaging/firebase_messaging.dart';\n", '')
+          text = text.replace("import 'push_service.dart';\n", '')
+          text = text.replace('  FirebaseMessaging.onBackgroundMessage(chernogramFirebaseBackgroundHandler);\n', '')
+          text = text.replace('  unawaited(CgPushService.initialize());\n', '')
+          path.write_text(text, encoding='utf-8')
+          PY
+          dart format lib/main.dart lib/internet_core.dart
+          grep -q "'ntfy.sh'" lib/internet_core.dart
+          grep -q "'ntfy.jae.fi'" lib/internet_core.dart
+          ! grep -q 'IMPULSE_BASE_URL' lib/internet_core.dart
+          ! grep -q 'FirebaseMessaging.onBackgroundMessage' lib/main.dart
+          ! grep -q 'CgPushService.initialize' lib/main.dart
+          grep -q 'version: 0.51.0+74' pubspec.yaml
+
+      - name: Анализ и тесты
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee recovery-analyze74.log
+          flutter test 2>&1 | tee recovery-tests74.log
+
+      - name: Собрать release APK
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf android/app/src/main/jniLibs
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            2>&1 | tee recovery-build74.log
+          test -s build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee recovery-signature74.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' recovery-signature74.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee recovery-badging74.txt
+          grep -q "package: name='com.example.chernogram'" recovery-badging74.txt
+          grep -q "versionCode='74'" recovery-badging74.txt
+          grep -q "versionName='0.51.0'" recovery-badging74.txt
+          grep -q "application-label:'Чернограм'" recovery-badging74.txt
+          SIZE=$(stat -c%s chernogram.apk)
+          test "$SIZE" -gt 10000000
+          test "$SIZE" -lt 90000000
+          printf '%s\n' "$SIZE" > recovery-size74.txt
+          sha256sum chernogram.apk | tee recovery-sha256-74.txt
+
+      - name: Создать update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 recovery-sha256-74.txt)
+          SIZE=$(cat recovery-size74.txt)
+          cat > update-build74.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Чернограм 0.51.0 build 74: онлайн-обновление поверх build 73, быстрый чат, QR-подключение, исправленная клавиатура и прозрачная иконка. Для надёжности сохранён зашифрованный relay-транспорт build 73; Impulse будет включён отдельным обновлением после развёртывания.",
+            "notesEn": "Chernogram 0.51.0 build 74: online update over build 73, faster chat, QR pairing, keyboard fixes and transparent launcher icon. The encrypted build 73 relay transport remains as a safe fallback; Impulse will be enabled after deployment."
+          }
+          EOF
+          python3 -m json.tool update-build74.json >/dev/null
+
+      - name: Опубликовать specific release и latest-apk
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build74.json \
+            recovery-sha256-74.txt \
+            recovery-signature74.txt \
+            recovery-badging74.txt \
+            recovery-size74.txt \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.51.0+74 — Online Recovery" \
+            --notes "Подписанное онлайн-обновление поверх 0.50.0+73 с безопасным relay fallback."
+
+          cp update-build74.json update.json
+          if gh release view latest-apk >/dev/null 2>&1; then
+            gh release upload latest-apk chernogram.apk update.json --clobber
+          else
+            gh release create latest-apk \
+              chernogram.apk \
+              update.json \
+              --target "$SOURCE_REF" \
+              --title "Чернограм Android 0.51.0+74" \
+              --notes "Онлайн-обновление поверх build 73."
+          fi
+
+      - name: Проверить опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}&run=${GITHUB_RUN_ID}"
+          curl --fail --location --retry 8 --retry-delay 3 -o published74.apk "$URL"
+          EXPECTED=$(cut -d' ' -f1 recovery-sha256-74.txt)
+          ACTUAL=$(sha256sum published74.apk | cut -d' ' -f1)
+          test "$ACTUAL" = "$EXPECTED"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs published74.apk | tee published-signature74.txt
+          "$AAPT" dump badging published74.apk | tee published-badging74.txt
+          grep -q "package: name='com.example.chernogram'" published-badging74.txt
+          grep -q "versionCode='74'" published-badging74.txt
+          grep -q "versionName='0.51.0'" published-badging74.txt
+
+      - name: Включить build 74 в main/update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git worktree add ../chernogram-main origin/main
+          cp update-build74.json ../chernogram-main/update.json
+          cd ../chernogram-main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Включить online update Чернограм 0.51.0+74'
+            git push origin HEAD:main
+          fi
+
+      - name: Финально проверить оба канала update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          curl --fail --location --retry 8 --retry-delay 3 \
+            -o main-update74.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json?t=${GITHUB_RUN_ID}"
+          curl --fail --location --retry 8 --retry-delay 3 \
+            -o release-update74.json \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/update.json?t=${GITHUB_RUN_ID}"
+          python3 - <<'PY'
+          import json
+          for path in ('main-update74.json', 'release-update74.json'):
+              data = json.load(open(path, encoding='utf-8'))
+              assert data['versionName'] == '0.51.0', (path, data)
+              assert int(data['versionCode']) == 74, (path, data)
+              assert data['apkUrl'].endswith('chernogram.apk?v=74'), (path, data)
+          PY
+          EXPECTED=$(cut -d' ' -f1 recovery-sha256-74.txt)
+          test "$(python3 -c "import json; print(json.load(open('main-update74.json'))['sha256'])")" = "$EXPECTED"
+          test "$(python3 -c "import json; print(json.load(open('release-update74.json'))['sha256'])")" = "$EXPECTED"
+
+      - name: Сохранить доказательства публикации
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-online-recovery-0.51.0-build74
+          path: |
+            chernogram.apk
+            update-build74.json
+            recovery-sha256-74.txt
+            recovery-signature74.txt
+            recovery-badging74.txt
+            recovery-size74.txt
+            recovery-analyze74.log
+            recovery-tests74.log
+            recovery-build74.log
+            published-signature74.txt
+            published-badging74.txt
+            main-update74.json
+            release-update74.json
+          if-no-files-found: warn
+          retention-days: 14
