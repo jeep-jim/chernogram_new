@@ -1,0 +1,49 @@
+name: Контроль online recovery build 74
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - STATUS_ONLINE_RECOVERY_074.md
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Найти и дождаться recovery run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID=0
+          for attempt in $(seq 1 30); do
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow publish-074-online-recovery.yml \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ]; then break; fi
+            sleep 2
+          done
+          test "$RUN_ID" != "0"
+          echo "RECOVERY_RUN_ID=$RUN_ID"
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,url,jobs \
+            | tee recovery-status74.json
+
+      - name: Сохранить статус
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-recovery-074-status
+          path: recovery-status74.json
+          if-no-files-found: error
+          retention-days: 3
