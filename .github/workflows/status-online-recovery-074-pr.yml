@@ -1,4 +1,4 @@
-name: Контроль online recovery build 74
+name: Контроль online recovery build 74 v2
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
-      - name: Найти и дождаться recovery run
+      - name: Найти и дождаться recovery v2
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -25,7 +25,7 @@ jobs:
           for attempt in $(seq 1 30); do
             RUN_ID=$(gh run list \
               --repo "$GITHUB_REPOSITORY" \
-              --workflow publish-074-online-recovery.yml \
+              --workflow publish-074-online-recovery-v2.yml \
               --limit 1 \
               --json databaseId \
               --jq '.[0].databaseId // 0')
@@ -33,17 +33,17 @@ jobs:
             sleep 2
           done
           test "$RUN_ID" != "0"
-          echo "RECOVERY_RUN_ID=$RUN_ID"
+          echo "RECOVERY_V2_RUN_ID=$RUN_ID"
           gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
           gh run view "$RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
             --json databaseId,status,conclusion,url,jobs \
-            | tee recovery-status74.json
+            | tee recovery-status74-v2.json
 
       - name: Сохранить статус
         uses: actions/upload-artifact@v4
         with:
-          name: online-recovery-074-status
-          path: recovery-status74.json
+          name: online-recovery-074-v2-status
+          path: recovery-status74-v2.json
           if-no-files-found: error
           retention-days: 3
