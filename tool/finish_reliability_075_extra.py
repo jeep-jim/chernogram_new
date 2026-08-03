@@ -9,6 +9,15 @@ def replace_once(path: str, old: str, new: str) -> None:
     file.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
+# Both notification packages export NotificationVisibility. Keep the local
+# notifications enum visible and hide the foreground-task enum.
+replace_once(
+    "lib/background_service.dart",
+    "import 'package:flutter_foreground_task/flutter_foreground_task.dart';\n",
+    "import 'package:flutter_foreground_task/flutter_foreground_task.dart'\n"
+    "    hide NotificationVisibility;\n",
+)
+
 # HTTP polling must also run when a network blocks WebSocket upgrades entirely.
 replace_once(
     "lib/internet_core.dart",
