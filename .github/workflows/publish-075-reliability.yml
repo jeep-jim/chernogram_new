@@ -1,0 +1,333 @@
+name: Чернограм 0.52.0+75 — надёжные чат и звонки
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-075-reliability.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-reliability-075
+  cancel-in-progress: false
+
+env:
+  SOURCE_REF: reliability/chat-calls-075
+  FALLBACK_REF: rebuild/light-chat-calls-073
+  FLUTTER_VERSION: 3.44.8
+  VERSION_NAME: 0.52.0
+  VERSION_CODE: 75
+  RELEASE_TAG: chernogram-0.52.0-build75
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  publish:
+    name: Проверить, собрать и включить online update
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+
+    steps:
+      - name: Получить исходники build 75
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Восстановить постоянную подпись
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить сертификат подписи
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > certificate75.txt
+          ACTUAL=$(grep -m1 'SHA256:' certificate75.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Применить исправления надёжности build 75
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$FALLBACK_REF"
+          git show "origin/$FALLBACK_REF:lib/internet_core.dart" > lib/internet_core.dart
+          python3 tool/finish_reliability_075.py
+          python3 tool/finish_reliability_075_extra.py
+          dart format \
+            lib/main.dart \
+            lib/background_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart
+
+          grep -q 'version: 0.52.0+75' pubspec.yaml
+          grep -q 'flutter_foreground_task: \^10.0.0' pubspec.yaml
+          grep -q 'final bool listenOnly' lib/internet_core.dart
+          grep -q 'Future<void> _pollRelays' lib/internet_core.dart
+          grep -q "kind == 'signal'" lib/internet_core.dart
+          grep -q "CgSignalRegistry.claim('\$tunnelId:\$callId')" lib/app_monitor.dart
+          grep -q '_negotiating = false' lib/call_service.dart
+          grep -q 'ChernogramBackgroundService.start' lib/main.dart
+          grep -q 'FOREGROUND_SERVICE_REMOTE_MESSAGING' android/app/src/main/AndroidManifest.xml
+          grep -q 'foregroundServiceType="remoteMessaging"' android/app/src/main/AndroidManifest.xml
+
+      - name: Получить зависимости
+        shell: bash
+        run: flutter pub get
+
+      - name: Анализ активного клиента
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter analyze \
+            --no-fatal-infos \
+            --no-fatal-warnings \
+            lib/main.dart \
+            lib/background_service.dart \
+            lib/internet_core.dart \
+            lib/app_monitor.dart \
+            lib/call_service.dart \
+            lib/group_call_service.dart \
+            lib/chat_screen.dart \
+            lib/chat_media.dart \
+            lib/core_models.dart \
+            lib/sound_service.dart \
+            lib/update_service.dart \
+            lib/brand.dart \
+            lib/light \
+            2>&1 | tee reliability-analyze75.log
+
+      - name: Запустить тесты
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee reliability-tests75.log
+
+      - name: Проверить публичные relay через публикацию и HTTP fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOPIC="cg_ci_$(python3 -c 'import secrets; print(secrets.token_urlsafe(20))')"
+          MARKER="cg75-$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')"
+          OK=0
+          : > relay-smoke75.log
+          for HOST in ntfy.sh ntfy.jae.fi; do
+            echo "=== $HOST ===" | tee -a relay-smoke75.log
+            if curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+              -H 'Content-Type: text/plain; charset=utf-8' \
+              -H 'Cache: yes' \
+              -d "$MARKER" \
+              "https://$HOST/$TOPIC" >> relay-smoke75.log 2>&1; then
+              sleep 2
+              if curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+                "https://$HOST/$TOPIC/json?poll=1&since=10m" \
+                | tee relay-poll75.json \
+                | grep -q "$MARKER"; then
+                echo "PASS $HOST" | tee -a relay-smoke75.log
+                OK=$((OK + 1))
+              else
+                echo "POLL FAILED $HOST" | tee -a relay-smoke75.log
+              fi
+            else
+              echo "PUBLISH FAILED $HOST" | tee -a relay-smoke75.log
+            fi
+          done
+          echo "relay successes: $OK" | tee -a relay-smoke75.log
+          test "$OK" -ge 1
+
+      - name: Собрать release APK
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf android/app/src/main/jniLibs
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            2>&1 | tee reliability-build75.log
+          test -s build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Подписать и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out chernogram.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --print-certs chernogram.apk | tee reliability-signature75.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' reliability-signature75.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram.apk | tee reliability-badging75.txt
+          grep -q "package: name='com.example.chernogram'" reliability-badging75.txt
+          grep -q "versionCode='75'" reliability-badging75.txt
+          grep -q "versionName='0.52.0'" reliability-badging75.txt
+          grep -q "application-label:'Чернограм'" reliability-badging75.txt
+          SIZE=$(stat -c%s chernogram.apk)
+          test "$SIZE" -gt 10000000
+          test "$SIZE" -lt 90000000
+          printf '%s\n' "$SIZE" | tee reliability-size75.txt
+          sha256sum chernogram.apk | tee reliability-sha256-75.txt
+
+      - name: Создать update.json build 75
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 reliability-sha256-75.txt)
+          SIZE=$(cat reliability-size75.txt)
+          cat > update-build75.json <<EOF
+          {
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}",
+            "sha256": "${SHA}",
+            "certificateSha256": "${CERT_SHA256}",
+            "sizeBytes": ${SIZE},
+            "notesRu": "Чернограм 0.52.0 build 75: надёжная очередь сообщений и сигналов звонка, повторная доставка invite/offer/answer/ICE, защита WebRTC от параллельных переговоров, автоматическое восстановление соединения, WebSocket плюс HTTP-polling fallback, фоновая Android-служба и уведомления о сообщениях и входящих звонках.",
+            "notesEn": "Chernogram 0.52.0 build 75: reliable message and call-signaling queue, invite/offer/answer/ICE retries, serialized WebRTC negotiation, automatic reconnection, WebSocket plus HTTP polling fallback, Android foreground connectivity and incoming message/call notifications."
+          }
+          EOF
+          python3 -m json.tool update-build75.json >/dev/null
+
+      - name: Опубликовать release и online update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" \
+            chernogram.apk \
+            update-build75.json \
+            reliability-sha256-75.txt \
+            reliability-signature75.txt \
+            reliability-badging75.txt \
+            reliability-size75.txt \
+            relay-smoke75.log \
+            --target "$SOURCE_REF" \
+            --title "Чернограм 0.52.0+75 — Надёжные чат и звонки" \
+            --notes "Надёжный сигналинг звонков, фоновая связь Android и резервный HTTP polling."
+
+          gh release delete latest-apk --cleanup-tag -y || true
+          cp update-build75.json update.json
+          gh release create latest-apk \
+            chernogram.apk \
+            update.json \
+            --target "$SOURCE_REF" \
+            --title "Чернограм Android 0.52.0+75" \
+            --notes "Онлайн-обновление поверх 0.51.0+74 для надёжной работы чата и звонков."
+
+      - name: Скачать и проверить опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/chernogram.apk?v=${VERSION_CODE}&run=${GITHUB_RUN_ID}"
+          curl --fail --location --retry 10 --retry-delay 3 \
+            -o published75.apk "$URL"
+          EXPECTED=$(cut -d' ' -f1 reliability-sha256-75.txt)
+          ACTUAL=$(sha256sum published75.apk | cut -d' ' -f1)
+          test "$ACTUAL" = "$EXPECTED"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs published75.apk | tee published-signature75.txt
+          "$AAPT" dump badging published75.apk | tee published-badging75.txt
+          grep -q "package: name='com.example.chernogram'" published-badging75.txt
+          grep -q "versionCode='75'" published-badging75.txt
+          grep -q "versionName='0.52.0'" published-badging75.txt
+
+      - name: Включить build 75 в main/update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git worktree add ../chernogram-main origin/main
+          cp update-build75.json ../chernogram-main/update.json
+          cd ../chernogram-main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Включить Чернограм 0.52.0+75 для надёжного чата и звонков'
+            git push origin HEAD:main
+          fi
+
+      - name: Финально проверить оба update-канала
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          curl --fail --location --retry 10 --retry-delay 3 \
+            -o main-update75.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json?t=${GITHUB_RUN_ID}"
+          curl --fail --location --retry 10 --retry-delay 3 \
+            -o release-update75.json \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest-apk/update.json?t=${GITHUB_RUN_ID}"
+          python3 - <<'PY'
+          import json
+          for path in ('main-update75.json', 'release-update75.json'):
+              data = json.load(open(path, encoding='utf-8'))
+              assert data['versionName'] == '0.52.0', (path, data)
+              assert int(data['versionCode']) == 75, (path, data)
+              assert data['apkUrl'].endswith('chernogram.apk?v=75'), (path, data)
+          PY
+          EXPECTED=$(cut -d' ' -f1 reliability-sha256-75.txt)
+          test "$(python3 -c "import json; print(json.load(open('main-update75.json'))['sha256'])")" = "$EXPECTED"
+          test "$(python3 -c "import json; print(json.load(open('release-update75.json'))['sha256'])")" = "$EXPECTED"
+
+      - name: Сохранить доказательства build 75
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-reliability-0.52.0-build75
+          path: |
+            chernogram.apk
+            update-build75.json
+            reliability-sha256-75.txt
+            reliability-signature75.txt
+            reliability-badging75.txt
+            reliability-size75.txt
+            reliability-analyze75.log
+            reliability-tests75.log
+            reliability-build75.log
+            relay-smoke75.log
+            published-signature75.txt
+            published-badging75.txt
+            main-update75.json
+            release-update75.json
+          if-no-files-found: warn
+          retention-days: 14
