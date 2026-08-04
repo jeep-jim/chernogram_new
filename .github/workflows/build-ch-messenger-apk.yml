@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -41,10 +41,22 @@ jobs:
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-debug.apk C-H-Messenger.apk
 
-      - name: Upload APK
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: C-H-Messenger-APK
           path: C-H-Messenger.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish APK release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ch-messenger-apk
+          name: C-H Messenger APK
+          body: C-H Messenger Android APK test build.
+          artifacts: C-H-Messenger.apk
+          allowUpdates: true
+          replacesArtifacts: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
