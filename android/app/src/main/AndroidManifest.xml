@@ -22,7 +22,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
-        android:label="Чернограм"
+        android:label="C-H Messenger"
         android:name="${applicationName}"
         android:icon="@drawable/chernogram_launcher_icon"
         android:roundIcon="@drawable/chernogram_launcher_icon"
@@ -57,7 +57,6 @@
                     android:pathPrefix="/jeep-jim/chernogram_new/main/docs/index.html" />
             </intent-filter>
         </activity>
-
 
         <service
             android:name="com.ryanheise.audioservice.AudioService"
