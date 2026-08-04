@@ -1,7 +1,7 @@
 name: chernogram
-description: Chernogram — encrypted internet tunnels, files, calls and local agents
+description: C-H Messenger — encrypted chats, files, voice messages and calls
 publish_to: 'none'
-version: 0.16.3+34
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -49,10 +49,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/branding/
-    - assets/audio/chernogram_incoming.mp3
-    - assets/audio/incoming_call.part1
-    - assets/audio/incoming_call.part2
-    - assets/audio/incoming_call.part3
-    - assets/audio/incoming_call.part4
-    - assets/audio/incoming_call.part5
-    - assets/audio/incoming_call.part6
