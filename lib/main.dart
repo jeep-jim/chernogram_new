@@ -14,7 +14,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.example.chernogram.audio',
-    androidNotificationChannelName: 'Музыка Чернограма',
+    androidNotificationChannelName: 'Музыка C-H Messenger',
     androidNotificationOngoing: true,
   );
   SystemChrome.setSystemUIOverlayStyle(
@@ -125,7 +125,7 @@ class _ChernogramAppState extends State<ChernogramApp> {
     return MaterialApp(
       navigatorKey: chernogramNavigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Чернограм',
+      title: 'C-H Messenger',
       theme: chernogramLightTheme(),
       darkTheme: chernogramTheme(),
       themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
