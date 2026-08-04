@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ch-messenger-apk-build-20260804
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -50,6 +53,7 @@ jobs:
           retention-days: 7
 
       - name: Publish APK release
+        if: github.event_name == 'push'
         uses: ncipollo/release-action@v1
         with:
           tag: ch-messenger-apk
