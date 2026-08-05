@@ -78,30 +78,23 @@ jobs:
             xz-utils \
             yasm
 
-      - name: Установить SWIG 4.3.1
+      - name: Установить официальный SWIG 4.3.1
         shell: bash
         run: |
           set -euo pipefail
-          CURRENT=$(swig -version 2>/dev/null | awk '/SWIG Version/{print $3}' || true)
-          echo "system SWIG: ${CURRENT:-missing}"
-          if ! python3 - "${CURRENT:-0}" "$SWIG_VERSION" <<'PY'
-          import sys
-          from packaging.version import Version
-          raise SystemExit(0 if Version(sys.argv[1]) >= Version(sys.argv[2]) else 1)
-          PY
-          then
-            curl --fail --location --retry 5 \
-              "https://github.com/swig/swig/archive/refs/tags/v${SWIG_VERSION}.tar.gz" \
-              -o swig.tar.gz
-            tar -xzf swig.tar.gz
-            cd "swig-${SWIG_VERSION}"
-            ./autogen.sh
-            ./configure --prefix=/usr/local
-            make -j2
-            sudo make install
-          fi
-          swig -version | tee "$GITHUB_WORKSPACE/jami-swig-version.txt"
-          swig -version | grep -E 'SWIG Version (4\.[2-9]|[5-9]\.)'
+          curl --fail --location --retry 8 --retry-delay 3 \
+            "https://prdownloads.sourceforge.net/swig/swig-${SWIG_VERSION}.tar.gz" \
+            -o swig.tar.gz
+          tar -xzf swig.tar.gz
+          cd "swig-${SWIG_VERSION}"
+          test -x ./configure
+          ./configure --prefix=/usr/local
+          make -j2
+          sudo make install
+          hash -r
+          /usr/local/bin/swig -version | tee "$GITHUB_WORKSPACE/jami-swig-version.txt"
+          /usr/local/bin/swig -version | grep -F "SWIG Version ${SWIG_VERSION}"
+          echo '/usr/local/bin' >> "$GITHUB_PATH"
 
       - name: Установить точные Android SDK/NDK/CMake
         shell: bash
