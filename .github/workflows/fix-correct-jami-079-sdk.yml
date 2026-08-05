@@ -23,35 +23,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          TARGET=.github/workflows/build-correct-chernogram-jami-079.yml
+          sed -i 's/platforms;android-37/platforms;android-36/g' "$TARGET"
+          sed -i 's/build-tools;37\.0\.0/build-tools;36.1.0/g' "$TARGET"
+          sed -i 's/platforms\/android-37/platforms\/android-36/g' "$TARGET"
+          sed -i 's/build-tools\/37\.0\.0/build-tools\/36.1.0/g' "$TARGET"
           python3 - <<'PY'
           from pathlib import Path
-
           path = Path('.github/workflows/build-correct-chernogram-jami-079.yml')
           text = path.read_text(encoding='utf-8')
-          replacements = {
-              'ANDROID_PLATFORM: platforms;android-37': 'ANDROID_PLATFORM: platforms;android-36',
-              'ANDROID_BUILD_TOOLS: build-tools;37.0.0': 'ANDROID_BUILD_TOOLS: build-tools;36.1.0',
-              '$ANDROID_HOME/platforms/android-37': '$ANDROID_HOME/platforms/android-36',
-              '$ANDROID_HOME/build-tools/37.0.0': '$ANDROID_HOME/build-tools/36.1.0',
-          }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f'Missing workflow marker: {old}')
-              text = text.replace(old, new)
-
           marker = "          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"
-          insertion = """          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)
-          text = text.replace('buildToolsVersion = \"37.0.0\"', 'buildToolsVersion = \"36.1.0\"', 1)
-          text = text.replace('targetSdk = 37', 'targetSdk = 36', 1)
-"""
+          insertion = (
+              "          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)\n"
+              "          text = text.replace('buildToolsVersion = \\\"37.0.0\\\"', 'buildToolsVersion = \\\"36.1.0\\\"', 1)\n"
+              "          text = text.replace('targetSdk = 37', 'targetSdk = 36', 1)\n"
+          )
           if marker not in text:
               raise SystemExit('Missing Jami Gradle patch marker')
-          text = text.replace(marker, insertion + marker, 1)
+          if "text.replace('compileSdk = 37'" not in text:
+              text = text.replace(marker, insertion + marker, 1)
           path.write_text(text, encoding='utf-8')
           PY
+          grep -q 'ANDROID_PLATFORM: platforms;android-36' "$TARGET"
+          grep -q "text.replace('compileSdk = 37'" "$TARGET"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/build-correct-chernogram-jami-079.yml
+          git add "$TARGET"
           git commit -m "Исправить Android SDK для сборки Jami 0.79"
           git push origin HEAD:feature/correct-jami-core-079
