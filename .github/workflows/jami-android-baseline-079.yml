@@ -1,0 +1,268 @@
+name: Jami Android 0.79 — NoPush baseline arm64
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/jami-android-baseline-079.yml
+      - JAMI_BASELINE_079_TRIGGER.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jami-android-baseline-079
+  cancel-in-progress: false
+
+env:
+  JAMI_CLIENT_COMMIT: 8746fd4b186f5a439e7dffc5ad9f484c6ae539a3
+  ANDROID_PLATFORM: platforms;android-36
+  ANDROID_BUILD_TOOLS: build-tools;36.1.0
+  ANDROID_NDK: ndk;29.0.14206865
+  ANDROID_CMAKE: cmake;4.1.2
+  SWIG_VERSION: 4.3.1
+
+jobs:
+  build:
+    name: Собрать и проверить официальный NoPush APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Получить Чернограм
+        uses: actions/checkout@v4
+
+      - name: Освободить место для нативной сборки
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          df -h
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить системные зависимости
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf \
+            automake \
+            autopoint \
+            bison \
+            build-essential \
+            ca-certificates \
+            curl \
+            flex \
+            gawk \
+            gettext \
+            git \
+            jq \
+            libpcre2-dev \
+            libtool-bin \
+            m4 \
+            nasm \
+            ninja-build \
+            pkg-config \
+            python3 \
+            unzip \
+            xz-utils \
+            yasm
+
+      - name: Установить SWIG 4.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT=$(swig -version 2>/dev/null | awk '/SWIG Version/{print $3}' || true)
+          echo "system SWIG: ${CURRENT:-missing}"
+          if ! python3 - "${CURRENT:-0}" "$SWIG_VERSION" <<'PY'
+          import sys
+          from packaging.version import Version
+          raise SystemExit(0 if Version(sys.argv[1]) >= Version(sys.argv[2]) else 1)
+          PY
+          then
+            curl --fail --location --retry 5 \
+              "https://github.com/swig/swig/archive/refs/tags/v${SWIG_VERSION}.tar.gz" \
+              -o swig.tar.gz
+            tar -xzf swig.tar.gz
+            cd "swig-${SWIG_VERSION}"
+            ./autogen.sh
+            ./configure --prefix=/usr/local
+            make -j2
+            sudo make install
+          fi
+          swig -version | tee "$GITHUB_WORKSPACE/jami-swig-version.txt"
+          swig -version | grep -E 'SWIG Version (4\.[2-9]|[5-9]\.)'
+
+      - name: Установить точные Android SDK/NDK/CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "$ANDROID_PLATFORM" \
+            "$ANDROID_BUILD_TOOLS" \
+            "$ANDROID_NDK" \
+            "$ANDROID_CMAKE"
+          "$SDKMANAGER" --list_installed | tee jami-sdk-components.txt
+          test -d "$ANDROID_HOME/ndk/29.0.14206865"
+          test -d "$ANDROID_HOME/cmake/4.1.2"
+
+      - name: Получить зафиксированные официальные исходники Jami
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official
+          git init official/jami-client-android
+          git -C official/jami-client-android remote add origin \
+            https://git.jami.net/savoirfairelinux/jami-client-android.git
+          git -C official/jami-client-android -c http.version=HTTP/1.1 fetch \
+            --depth 1 origin "$JAMI_CLIENT_COMMIT"
+          git -C official/jami-client-android checkout --detach FETCH_HEAD
+          git -C official/jami-client-android submodule sync --recursive
+          git -C official/jami-client-android -c http.version=HTTP/1.1 submodule update \
+            --init --recursive --depth 1 --jobs 4
+
+          ACTUAL=$(git -C official/jami-client-android rev-parse HEAD)
+          test "$ACTUAL" = "$JAMI_CLIENT_COMMIT"
+          git -C official/jami-client-android rev-parse HEAD | tee jami-client-android.sha
+          git -C official/jami-client-android submodule status --recursive \
+            | tee jami-submodules.txt
+          test -d official/jami-client-android/daemon/bin/jni
+          git -C official/jami-client-android/daemon rev-parse HEAD \
+            | tee jami-daemon-submodule.sha
+
+      - name: Зафиксировать нативную конфигурацию
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=official/jami-client-android/jami-android
+          test -x "$ROOT/gradlew"
+          grep -nE 'namespace|compileSdk|buildToolsVersion|ndkVersion|cmake|JAMI_JNI|productFlavors|noPush' \
+            "$ROOT/app/build.gradle.kts" | tee jami-native-config.txt
+          grep -q 'JAMI_JNI=ON' "$ROOT/app/build.gradle.kts"
+          grep -q 'noPush' "$ROOT/app/build.gradle.kts"
+
+      - name: Собрать официальный NoPush Debug APK для arm64
+        shell: bash
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dkotlin.daemon.jvm.options=-Xmx2g -Dfile.encoding=UTF-8
+        run: |
+          set -o pipefail
+          ROOT="$GITHUB_WORKSPACE/official/jami-client-android/jami-android"
+          cd "$ROOT"
+          chmod +x gradlew
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            -Parchs=arm64-v8a \
+            :app:assembleNoPushDebug \
+            2>&1 | tee "$GITHUB_WORKSPACE/jami-build-079.log"
+
+      - name: Найти и проверить APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          find official/jami-client-android/jami-android/app/build/outputs \
+            -type f -name '*.apk' -print | tee jami-apk-files.txt
+          APK=$(find official/jami-client-android/jami-android/app/build/outputs \
+            -type f -name '*noPush*debug*.apk' -print -quit)
+          if [ -z "$APK" ]; then
+            APK=$(find official/jami-client-android/jami-android/app/build/outputs \
+              -type f -name '*.apk' -print -quit)
+          fi
+          test -n "$APK"
+          test -s "$APK"
+          cp "$APK" jami-nopush-baseline-arm64-079.apk
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+          "$APKSIGNER" verify --print-certs jami-nopush-baseline-arm64-079.apk \
+            | tee jami-apk-signature.txt
+          "$AAPT" dump badging jami-nopush-baseline-arm64-079.apk \
+            | tee jami-apk-badging.txt
+          grep -q "package: name='cx.ring'" jami-apk-badging.txt
+          unzip -l jami-nopush-baseline-arm64-079.apk | tee jami-apk-contents.txt
+          unzip -l jami-nopush-baseline-arm64-079.apk | grep -E 'lib/arm64-v8a/.+\.so'
+          if unzip -l jami-nopush-baseline-arm64-079.apk | grep -qE 'lib/(x86|x86_64|armeabi-v7a)/'; then
+            echo 'Unexpected non-arm64 ABI found' >&2
+            exit 1
+          fi
+          stat -c '%s' jami-nopush-baseline-arm64-079.apk | tee jami-apk-size.txt
+          sha256sum jami-nopush-baseline-arm64-079.apk | tee jami-apk-sha256.txt
+
+      - name: Сформировать отчёт baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          badging = Path('jami-apk-badging.txt').read_text(encoding='utf-8', errors='replace')
+          package = re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", badging)
+          label = re.search(r"application-label:'([^']+)'", badging)
+          report = {
+              'experiment': 'jami-android-baseline-079',
+              'publishedToChernogramUpdateChannel': False,
+              'variant': 'noPushDebug',
+              'abi': 'arm64-v8a',
+              'jamiClientCommit': Path('jami-client-android.sha').read_text().strip(),
+              'jamiDaemonCommit': Path('jami-daemon-submodule.sha').read_text().strip(),
+              'packageName': package.group(1) if package else None,
+              'versionCode': package.group(2) if package else None,
+              'versionName': package.group(3) if package else None,
+              'label': label.group(1) if label else None,
+              'sizeBytes': int(Path('jami-apk-size.txt').read_text().strip()),
+              'sha256': Path('jami-apk-sha256.txt').read_text().split()[0],
+              'registrationRequired': False,
+              'commercialServiceConfigured': False,
+              'nextGate': 'Install on two physical Android phones and verify local Jami profile, ID/QR and one real message.',
+          }
+          Path('jami-baseline-079-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2),
+              encoding='utf-8',
+          )
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          PY
+          python3 -m json.tool jami-baseline-079-report.json >/dev/null
+
+      - name: Сохранить APK и доказательства
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-jami-nopush-baseline-arm64-079
+          retention-days: 14
+          if-no-files-found: warn
+          compression-level: 0
+          path: |
+            jami-nopush-baseline-arm64-079.apk
+            jami-baseline-079-report.json
+            jami-client-android.sha
+            jami-daemon-submodule.sha
+            jami-submodules.txt
+            jami-swig-version.txt
+            jami-sdk-components.txt
+            jami-native-config.txt
+            jami-build-079.log
+            jami-apk-files.txt
+            jami-apk-signature.txt
+            jami-apk-badging.txt
+            jami-apk-contents.txt
+            jami-apk-size.txt
+            jami-apk-sha256.txt
