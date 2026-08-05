@@ -1,0 +1,325 @@
+name: Чернограм 0.79 v5 — исправленная сборка с ядром Jami
+
+on:
+  push:
+    branches: [feature/correct-jami-core-079]
+    paths:
+      - .github/workflows/build-correct-chernogram-jami-079-v5.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: chernogram-correct-jami-079-v5
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.44.8
+  JAMI_CLIENT_COMMIT: 8746fd4b186f5a439e7dffc5ad9f484c6ae539a3
+  SWIG_VERSION: 4.3.1
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+  RELEASE_TAG: chernogram-jami-core-0.79-build79
+
+jobs:
+  android:
+    name: Android — Чернограм UI плюс Jami core
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/correct-jami-core-079
+          fetch-depth: 0
+
+      - name: Освободить место
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Установить SWIG и Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential curl git python3 unzip
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 --max-time 300 \
+            "https://downloads.sourceforge.net/project/swig/swig/swig-${SWIG_VERSION}/swig-${SWIG_VERSION}.tar.gz" -o swig.tar.gz
+          tar -xzf swig.tar.gz
+          cd "swig-${SWIG_VERSION}"
+          ./configure --prefix=/usr/local
+          make -j2
+          sudo make install
+          cd ..
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.1.0"
+
+      - name: Применить Jami и исправить совместимость проекта
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tool/apply_jami_079.py
+          python3 tool/finalize_jami_079.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Версия и зависимости, которые реально используются текущим кодом Чернограма.
+          p = Path('pubspec.yaml')
+          s = p.read_text(encoding='utf-8')
+          dependencies = {
+              'flutter_background_service': '^5.1.0',
+              'flutter_foreground_task': '^10.0.0',
+              'local_auth': '^3.0.2',
+              'permission_handler': '^12.0.3',
+              'photo_manager': '^3.11.0',
+          }
+          anchor = '  http: ^1.5.0\n'
+          if anchor not in s:
+              raise SystemExit('pubspec dependency anchor not found')
+          additions = []
+          for name, version in dependencies.items():
+              if not re.search(rf'^  {re.escape(name)}:', s, flags=re.MULTILINE):
+                  additions.append(f'  {name}: {version}\n')
+          if additions:
+              s = s.replace(anchor, ''.join(additions) + anchor, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Существующий фоновый обработчик ожидает listenOnly и reconnectAll.
+          p = Path('lib/internet_core.dart')
+          s = p.read_text(encoding='utf-8')
+          old = "    required List<Map<String, dynamic>> history,\n  }) async {"
+          new = "    required List<Map<String, dynamic>> history,\n    bool listenOnly = false,\n  }) async {"
+          if old in s and 'bool listenOnly = false' not in s:
+              s = s.replace(old, new, 1)
+          marker = '  static Future<void> refreshAll() async {'
+          if 'static void reconnectAll()' not in s:
+              if marker not in s:
+                  raise SystemExit('InternetRelay refreshAll anchor not found')
+              s = s.replace(
+                  marker,
+                  "  static void reconnectAll() {\n"
+                  "    for (final session in _sessions.values) {\n"
+                  "      unawaited(session.connect());\n"
+                  "    }\n"
+                  "  }\n\n" + marker,
+                  1,
+              )
+          p.write_text(s, encoding='utf-8')
+
+          # local_auth на Android должен работать через FragmentActivity.
+          p = Path('android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace(
+              'import io.flutter.embedding.android.FlutterActivity',
+              'import io.flutter.embedding.android.FlutterFragmentActivity',
+              1,
+          )
+          s = s.replace(
+              'class MainActivity : FlutterActivity()',
+              'class MainActivity : FlutterFragmentActivity()',
+              1,
+          )
+          p.write_text(s, encoding='utf-8')
+
+          # Android 14+ требует явного типа и разрешения foreground service.
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text(encoding='utf-8')
+          if 'xmlns:tools=' not in s:
+              s = s.replace(
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">',
+                  1,
+              )
+          permission = '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />\n'
+          if 'android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING' not in s:
+              s = s.replace(
+                  '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n',
+                  '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n' + permission,
+                  1,
+              )
+          services = '''
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="remoteMessaging"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="remoteMessaging"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+'''
+          if 'com.pravera.flutter_foreground_task.service.ForegroundService' not in s:
+              s = s.replace(
+                  '        <meta-data android:name="flutterEmbedding" android:value="2" />',
+                  services + '        <meta-data android:name="flutterEmbedding" android:value="2" />',
+                  1,
+              )
+          p.write_text(s, encoding='utf-8')
+
+          # Совместимость упаковки двух C++ runtime-библиотек.
+          p = Path('android/app/build.gradle.kts')
+          s = p.read_text(encoding='utf-8').replace('minSdk = 24', 'minSdk = 26', 1)
+          marker = 'useLegacyPackaging = true'
+          if marker in s and 'pickFirsts += setOf("**/libc++_shared.so")' not in s:
+              s = s.replace(marker, marker + '\n            pickFirsts += setOf("**/libc++_shared.so")', 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+          dart format lib/main.dart lib/core_models.dart lib/internet_core.dart lib/jami_core.dart \
+            lib/light/light_chat_app.dart lib/app_monitor.dart lib/chat_screen.dart lib/background_service.dart
+
+      - name: Получить Jami SWIG-интерфейсы
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official
+          git init official/jami-client-android
+          git -C official/jami-client-android remote add origin https://git.jami.net/savoirfairelinux/jami-client-android.git
+          git -C official/jami-client-android -c http.version=HTTP/1.1 fetch --depth 1 origin "$JAMI_CLIENT_COMMIT"
+          git -C official/jami-client-android checkout --detach FETCH_HEAD
+          git -C official/jami-client-android submodule update --init --recursive --depth 1 --jobs 4
+          cd official/jami-client-android/daemon/bin/jni
+          chmod +x make-swig.sh
+          PACKAGEDIR="$GITHUB_WORKSPACE/jami-generated" ./make-swig.sh
+          cd "$GITHUB_WORKSPACE"
+          test -f jami-generated/net/jami/daemon/JamiService.java
+          rm -rf android/app/src/main/java/net/jami/daemon
+          mkdir -p android/app/src/main/java/net/jami
+          cp -a jami-generated/net/jami/daemon android/app/src/main/java/net/jami/
+          find android/app/src/main/java/net/jami/daemon -type f | wc -l | tee jami-generated-java-count.txt
+
+      - name: Получить проверенное native-ядро из успешной сборки
+        uses: actions/download-artifact@v4
+        with:
+          name: chernogram-jami-brand-0.80-v3
+          path: old-jami-artifact
+          repository: jeep-jim/chernogram_new
+          run-id: 30989014935
+          github-token: ${{ github.token }}
+
+      - name: Встроить и перепривязать native-ядро к пакету Чернограма
+        shell: bash
+        run: |
+          set -euo pipefail
+          OLD_APK=$(find old-jami-artifact -type f -name '*.apk' -print -quit)
+          test -n "$OLD_APK"
+          rm -rf android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          unzip -j "$OLD_APK" 'lib/arm64-v8a/libjami-core-jni.so' -d android/app/src/main/jniLibs/arm64-v8a
+          unzip -j "$OLD_APK" 'lib/arm64-v8a/libc++_shared.so' -d android/app/src/main/jniLibs/arm64-v8a
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/jniLibs/arm64-v8a/libjami-core-jni.so')
+          data = p.read_bytes()
+          old = b'/data/data/com.example.chernogram.jami/files'
+          new = b'/data/data/com.example.chernogram/files'
+          count = data.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected one old Jami data path, found {count}')
+          data = data.replace(old, new + b'\0' * (len(old) - len(new)), 1)
+          p.write_bytes(data)
+          if old in data or new not in data:
+              raise SystemExit('Native Jami data path patch verification failed')
+          PY
+          ls -lh android/app/src/main/jniLibs/arm64-v8a | tee jami-native-files.txt
+
+      - name: Восстановить постоянную подпись Чернограма
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить код и собрать APK
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+          flutter test
+          set +e
+          flutter build apk --release --target-platform android-arm64 2>&1 | tee chernogram-build.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          tail -n 900 chernogram-build.log > chernogram-build-tail.log
+          test "$STATUS" = "0"
+          test -s build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Подписать и строго проверить правильный Чернограм
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.1.0/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.1.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/36.1.0/aapt"
+          "$ZIPALIGN" -p -f 4 build/app/outputs/flutter-apk/app-release.apk chernogram-aligned.apk
+          "$APKSIGNER" sign --ks "$HOME/.android/debug.keystore" --ks-key-alias androiddebugkey \
+            --ks-pass pass:android --key-pass pass:android \
+            --out chernogram-0.79.0-build79.apk chernogram-aligned.apk
+          "$APKSIGNER" verify --print-certs chernogram-0.79.0-build79.apk | tee apk-signature.txt
+          ACTUAL=$(grep -m1 'SHA-256 digest:' apk-signature.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+          "$AAPT" dump badging chernogram-0.79.0-build79.apk | tee apk-badging.txt
+          grep -q "package: name='com.example.chernogram'" apk-badging.txt
+          grep -q "versionCode='79'" apk-badging.txt
+          grep -q "versionName='0.79.0'" apk-badging.txt
+          grep -q "application-label:'Чернограм'" apk-badging.txt
+          unzip -l chernogram-0.79.0-build79.apk | tee apk-files.txt
+          grep -q 'lib/arm64-v8a/libjami-core-jni.so' apk-files.txt
+          ! grep -q 'cx/ring/client/HomeActivity' apk-files.txt
+          sha256sum chernogram-0.79.0-build79.apk | tee apk-sha256.txt
+          stat -c '%s bytes' chernogram-0.79.0-build79.apk | tee apk-size.txt
+
+      - name: Опубликовать прямую ссылку
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA=$(cut -d' ' -f1 apk-sha256.txt)
+          cat > chernogram-0.79.0-build79.json <<EOF
+          {"versionName":"0.79.0","versionCode":79,"package":"com.example.chernogram","transport":"embedded-jami-core","sha256":"${SHA}","certificateSha256":"${CERT_SHA256}"}
+          EOF
+          gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
+          gh release create "$RELEASE_TAG" chernogram-0.79.0-build79.apk chernogram-0.79.0-build79.json \
+            apk-sha256.txt apk-signature.txt apk-badging.txt \
+            --target feature/correct-jami-core-079 \
+            --title "Чернограм 0.79.0+79 — скрытое ядро Jami" \
+            --notes "Сохранён интерфейс Чернограма. Jami встроен только как скрытое ядро связи." --prerelease
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-correct-jami-0.79-build79-v5
+          path: |
+            chernogram-0.79.0-build79.apk
+            chernogram-0.79.0-build79.json
+            apk-sha256.txt
+            apk-signature.txt
+            apk-badging.txt
+            apk-files.txt
+            apk-size.txt
+            jami-native-files.txt
+            jami-generated-java-count.txt
+            chernogram-build-tail.log
+          if-no-files-found: warn
+          retention-days: 14
