@@ -28,18 +28,22 @@ jobs:
 
           path = Path('.github/workflows/build-correct-chernogram-jami-079.yml')
           text = path.read_text(encoding='utf-8')
-          old = '''          GENERATED="$ROOT/libjamiclient/src/main/java/net/jami/daemon"
-          test -d "$GENERATED"
-          test -f "$GENERATED/JamiService.java"'''
+          start_marker = '          GENERATED="$ROOT/libjamiclient/src/main/java/net/jami/daemon"'
+          end_marker = '          test -f "$GENERATED/JamiService.java"'
+          start = text.find(start_marker)
+          if start < 0:
+              raise SystemExit('Generated API start marker was not found')
+          end = text.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('Generated API end marker was not found')
+          end += len(end_marker)
           new = '''          GENERATED_FILE=$(find "$ROOT" -type f -path '*/net/jami/daemon/JamiService.java' -print -quit)
           test -n "$GENERATED_FILE"
           GENERATED=$(dirname "$GENERATED_FILE")
           test -d "$GENERATED"
           test -f "$GENERATED/JamiService.java"
           echo "Generated Jami API: $GENERATED"'''
-          if old not in text:
-              raise SystemExit('Old generated API path block was not found')
-          text = text.replace(old, new, 1)
+          text = text[:start] + new + text[end:]
           path.write_text(text, encoding='utf-8')
           PY
           grep -q 'GENERATED_FILE=$(find' .github/workflows/build-correct-chernogram-jami-079.yml
