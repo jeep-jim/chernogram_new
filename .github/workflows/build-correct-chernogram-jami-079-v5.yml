@@ -79,7 +79,6 @@ jobs:
           from pathlib import Path
           import re
 
-          # Версия и зависимости, которые реально используются текущим кодом Чернограма.
           p = Path('pubspec.yaml')
           s = p.read_text(encoding='utf-8')
           dependencies = {
@@ -100,7 +99,6 @@ jobs:
               s = s.replace(anchor, ''.join(additions) + anchor, 1)
           p.write_text(s, encoding='utf-8')
 
-          # Существующий фоновый обработчик ожидает listenOnly и reconnectAll.
           p = Path('lib/internet_core.dart')
           s = p.read_text(encoding='utf-8')
           old = "    required List<Map<String, dynamic>> history,\n  }) async {"
@@ -111,18 +109,16 @@ jobs:
           if 'static void reconnectAll()' not in s:
               if marker not in s:
                   raise SystemExit('InternetRelay refreshAll anchor not found')
-              s = s.replace(
-                  marker,
+              addition = (
                   "  static void reconnectAll() {\n"
                   "    for (final session in _sessions.values) {\n"
                   "      unawaited(session.connect());\n"
                   "    }\n"
-                  "  }\n\n" + marker,
-                  1,
+                  "  }\n\n"
               )
+              s = s.replace(marker, addition + marker, 1)
           p.write_text(s, encoding='utf-8')
 
-          # local_auth на Android должен работать через FragmentActivity.
           p = Path('android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt')
           s = p.read_text(encoding='utf-8')
           s = s.replace(
@@ -137,7 +133,6 @@ jobs:
           )
           p.write_text(s, encoding='utf-8')
 
-          # Android 14+ требует явного типа и разрешения foreground service.
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text(encoding='utf-8')
           if 'xmlns:tools=' not in s:
@@ -153,20 +148,18 @@ jobs:
                   '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n' + permission,
                   1,
               )
-          services = '''
-        <service
-            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="remoteMessaging"
-            android:exported="false"
-            tools:replace="android:foregroundServiceType" />
-
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="remoteMessaging"
-            android:exported="false"
-            tools:replace="android:foregroundServiceType" />
-
-'''
+          services = (
+              '\n        <service\n'
+              '            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"\n'
+              '            android:foregroundServiceType="remoteMessaging"\n'
+              '            android:exported="false"\n'
+              '            tools:replace="android:foregroundServiceType" />\n\n'
+              '        <service\n'
+              '            android:name="id.flutter.flutter_background_service.BackgroundService"\n'
+              '            android:foregroundServiceType="remoteMessaging"\n'
+              '            android:exported="false"\n'
+              '            tools:replace="android:foregroundServiceType" />\n\n'
+          )
           if 'com.pravera.flutter_foreground_task.service.ForegroundService' not in s:
               s = s.replace(
                   '        <meta-data android:name="flutterEmbedding" android:value="2" />',
@@ -175,7 +168,6 @@ jobs:
               )
           p.write_text(s, encoding='utf-8')
 
-          # Совместимость упаковки двух C++ runtime-библиотек.
           p = Path('android/app/build.gradle.kts')
           s = p.read_text(encoding='utf-8').replace('minSdk = 24', 'minSdk = 26', 1)
           marker = 'useLegacyPackaging = true'
@@ -296,9 +288,7 @@ jobs:
         run: |
           set -euo pipefail
           SHA=$(cut -d' ' -f1 apk-sha256.txt)
-          cat > chernogram-0.79.0-build79.json <<EOF
-          {"versionName":"0.79.0","versionCode":79,"package":"com.example.chernogram","transport":"embedded-jami-core","sha256":"${SHA}","certificateSha256":"${CERT_SHA256}"}
-          EOF
+          printf '{"versionName":"0.79.0","versionCode":79,"package":"com.example.chernogram","transport":"embedded-jami-core","sha256":"%s","certificateSha256":"%s"}\n' "$SHA" "$CERT_SHA256" > chernogram-0.79.0-build79.json
           gh release delete "$RELEASE_TAG" --cleanup-tag -y || true
           gh release create "$RELEASE_TAG" chernogram-0.79.0-build79.apk chernogram-0.79.0-build79.json \
             apk-sha256.txt apk-signature.txt apk-badging.txt \
