@@ -1,0 +1,168 @@
+name: Исправить сетевые падения сборки Jami v2
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/patch-jami-v2-downloads.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Получить ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/jami-core-078
+          fetch-depth: 0
+
+      - name: Добавить резервные зеркала и повтор Gradle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/build-chernogram-jami-brand-080-v2.yml')
+          text = path.read_text(encoding='utf-8')
+
+          anchor = '      - name: Наложить название, пакет и иконку Чернограма\n'
+          marker = '      - name: Заранее скачать GNU-зависимости с резервных зеркал\n'
+          if marker not in text:
+              if anchor not in text:
+                  raise SystemExit('branding step anchor not found')
+              insert = r'''      - name: Кэшировать архивы зависимостей Jami
+        uses: actions/cache@v4
+        with:
+          path: official/jami-client-android/daemon/contrib/tarballs
+          key: jami-contrib-tarballs-linux-8746fd4b186f5a439e7dffc5ad9f484c6ae539a3-v1
+
+      - name: Заранее скачать GNU-зависимости с резервных зеркал
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALLS="$GITHUB_WORKSPACE/official/jami-client-android/daemon/contrib/tarballs"
+          mkdir -p "$TARBALLS"
+
+          fetch_fallback() {
+            local destination="$1"
+            shift
+            if [ -s "$destination" ]; then
+              echo "Уже есть: $(basename "$destination")"
+              return 0
+            fi
+            rm -f "$destination" "$destination.part"
+            local url
+            for url in "$@"; do
+              echo "Пробую $url"
+              if curl --fail --location --retry 12 --retry-all-errors \
+                --connect-timeout 20 --max-time 900 \
+                "$url" -o "$destination.part"; then
+                test -s "$destination.part"
+                mv "$destination.part" "$destination"
+                return 0
+              fi
+              rm -f "$destination.part"
+            done
+            return 1
+          }
+
+          fetch_fallback "$TARBALLS/libiconv-1.18.tar.gz" \
+            "https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz" \
+            "https://mirrors.kernel.org/gnu/libiconv/libiconv-1.18.tar.gz" \
+            "https://mirrors.ocf.berkeley.edu/gnu/libiconv/libiconv-1.18.tar.gz" \
+            "https://ftpmirror.gnu.org/libiconv/libiconv-1.18.tar.gz"
+
+          fetch_fallback "$TARBALLS/gmp-6.3.0.tar.xz" \
+            "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://mirrors.ocf.berkeley.edu/gnu/gmp/gmp-6.3.0.tar.xz" \
+            "https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz"
+
+          gzip -t "$TARBALLS/libiconv-1.18.tar.gz"
+          xz -t "$TARBALLS/gmp-6.3.0.tar.xz"
+          ls -lh "$TARBALLS/libiconv-1.18.tar.gz" "$TARBALLS/gmp-6.3.0.tar.xz"
+
+'''
+              text = text.replace(anchor, insert + anchor, 1)
+
+          start_marker = '      - name: Собрать официальный NoPush arm64\n'
+          end_marker = '\n      - name: Подписать и проверить брендированный APK\n'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('build step markers not found')
+
+          replacement = r'''      - name: Собрать официальный NoPush arm64 с сетевым повтором
+        shell: bash
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dkotlin.daemon.jvm.options=-Xmx2g -Dfile.encoding=UTF-8
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/official/jami-client-android/jami-android"
+          LOG="$GITHUB_WORKSPACE/chernogram-jami-build-080-v2.log"
+          cd "$ROOT"
+          chmod +x gradlew
+          : > "$LOG"
+
+          for attempt in 1 2 3; do
+            echo "===== Попытка Gradle ${attempt}/3 =====" | tee -a "$LOG"
+            set +e
+            ./gradlew \
+              --no-daemon \
+              --stacktrace \
+              --console=plain \
+              -Parchs=arm64-v8a \
+              :app:assembleNoPushDebug \
+              2>&1 | tee -a "$LOG"
+            status=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+
+            if ! grep -Eqi \
+              'HTTP.*(429|5[0-9]{2})|ERROR (429|5[0-9]{2})|Bad Gateway|Connection timed out|Connection reset|Temporary failure|Could not resolve|Failed to connect|TLS connection' \
+              "$LOG"; then
+              echo "Ошибка не является сетевой — повтор остановлен." >&2
+              exit "$status"
+            fi
+
+            test "$attempt" -lt 3
+            echo "Сетевая ошибка зеркала. Повторяю без потери уже собранных contrib." | tee -a "$LOG"
+            find "$GITHUB_WORKSPACE/official/jami-client-android/daemon/contrib/tarballs" \
+              -type f -size 0 -delete || true
+            rm -rf "$ROOT/app/.cxx"
+            ./gradlew --stop || true
+            sleep $((attempt * 30))
+          done
+          exit 1
+'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check
+          grep -q 'Заранее скачать GNU-зависимости с резервных зеркал' \
+            .github/workflows/build-chernogram-jami-brand-080-v2.yml
+          grep -q 'Попытка Gradle' \
+            .github/workflows/build-chernogram-jami-brand-080-v2.yml
+
+      - name: Сохранить исправление и запустить новую сборку
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .github/workflows/build-chernogram-jami-brand-080-v2.yml
+          if git diff --cached --quiet; then
+            echo "Исправление уже применено."
+            exit 0
+          fi
+          git commit -m "ci: стабилизировать загрузку Jami contrib"
+          git push origin HEAD:experiment/jami-core-078
