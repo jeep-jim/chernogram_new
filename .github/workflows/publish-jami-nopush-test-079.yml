@@ -1,0 +1,110 @@
+name: Опубликовать Jami NoPush test 0.79
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/publish-jami-nopush-test-079.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    name: Создать отдельный тестовый релиз Jami
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      ARTIFACT_ID: '8918191944'
+      TAG: jami-nopush-test-079
+      APK_NAME: jami-nopush-arm64-test-079.apk
+      APK_SHA256: a18a01086cd08dff28bba2daa3ddbc9be7dfbdfc2f839c726f4f577c374aceff
+      DOWNLOAD_URL: https://github.com/jeep-jim/chernogram_new/releases/download/jami-nopush-test-079/jami-nopush-arm64-test-079.apk
+
+    steps:
+      - name: Получить репозиторий
+        uses: actions/checkout@v4
+
+      - name: Установить инструменты
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qrencode unzip
+
+      - name: Скачать проверенный артефакт успешной сборки
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > jami-artifact.zip
+          unzip -q jami-artifact.zip -d jami-artifact
+          find jami-artifact -maxdepth 3 -type f -print
+          SOURCE_APK=$(find jami-artifact -type f -name 'jami-nopush-baseline-arm64-079.apk' -print -quit)
+          test -n "$SOURCE_APK"
+          cp "$SOURCE_APK" "$APK_NAME"
+          echo "${APK_SHA256}  ${APK_NAME}" | sha256sum -c -
+
+          REPORT=$(find jami-artifact -type f -name 'jami-baseline-079-report.json' -print -quit)
+          test -n "$REPORT"
+          cp "$REPORT" jami-nopush-test-079-report.json
+
+      - name: Создать QR-код прямого скачивания
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$DOWNLOAD_URL" > jami-nopush-test-079-link.txt
+          qrencode -o jami-nopush-test-079-qr.png -s 12 -m 3 "$DOWNLOAD_URL"
+          test -s jami-nopush-test-079-qr.png
+
+      - name: Подготовить описание релиза
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'EOF'
+          ## Jami NoPush ARM64 — отдельный сетевой тест
+
+          Это официальный Jami Android NoPush, собранный из зафиксированных исходников для проверки сети на двух физических телефонах.
+
+          - отдельное приложение, пакет `cx.ring`;
+          - не заменяет и не обновляет установленный Чернограм;
+          - архитектура `arm64-v8a`;
+          - без Firebase push-варианта;
+          - регистрация публичного имени не обязательна;
+          - SHA-256 APK: `a18a01086cd08dff28bba2daa3ddbc9be7dfbdfc2f839c726f4f577c374aceff`;
+          - сертификат debug SHA-256: `FD:02:DC:3B:DC:EA:C1:7D:6B:9F:02:6D:D9:1F:71:E5:11:09:16:04:FA:2B:E1:07:0D:6B:2A:7B:BB:EC:2F:38`.
+
+          Для установки на телефоне откройте PNG с QR-кодом в Assets или скачайте APK напрямую.
+          EOF
+
+      - name: Опубликовать отдельный GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'Jami NoPush ARM64 — тест 0.79' \
+            --notes-file release-notes.md \
+            "$APK_NAME#Jami NoPush ARM64 APK" \
+            "jami-nopush-test-079-qr.png#QR-код прямого скачивания APK" \
+            "jami-nopush-test-079-link.txt#Прямая ссылка" \
+            "jami-nopush-test-079-report.json#Отчёт сборки"
+
+      - name: Проверить опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 12 --retry-delay 5 "$DOWNLOAD_URL" -o downloaded.apk
+          echo "${APK_SHA256}  downloaded.apk" | sha256sum -c -
+          stat -c '%s bytes' downloaded.apk
