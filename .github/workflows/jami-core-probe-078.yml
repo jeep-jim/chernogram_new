@@ -1,0 +1,163 @@
+name: Jami core 0.78 — проверка Android/JNI
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/jami-core-probe-078.yml
+      - docs/JAMI_078_PLAN.md
+      - JAMI_PROBE_078_TRIGGER.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jami-core-probe-078
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Проверить официальные исходники и сборочную схему
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Получить Чернограм
+        uses: actions/checkout@v4
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Подготовить инструменты
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git ca-certificates curl unzip jq
+          git --version
+          java -version
+          printf 'ANDROID_HOME=%s\n' "$ANDROID_HOME" | tee jami-environment.txt
+          printf 'ANDROID_NDK_HOME=%s\n' "${ANDROID_NDK_HOME:-}" | tee -a jami-environment.txt
+
+      - name: Получить официальный Android-клиент Jami
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official
+          git -c http.version=HTTP/1.1 clone \
+            --depth 1 \
+            https://git.jami.net/savoirfairelinux/jami-client-android.git \
+            official/jami-client-android
+          git -C official/jami-client-android rev-parse HEAD | tee jami-client-android.sha
+          git -C official/jami-client-android log -1 --format='%H%n%cI%n%s' \
+            | tee jami-client-android.commit.txt
+          git -C official/jami-client-android submodule status --recursive \
+            | tee jami-client-android.submodules.txt || true
+
+      - name: Получить официальный daemon Jami
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -c http.version=HTTP/1.1 clone \
+            --depth 1 \
+            https://git.jami.net/savoirfairelinux/jami-daemon.git \
+            official/jami-daemon
+          git -C official/jami-daemon rev-parse HEAD | tee jami-daemon.sha
+          git -C official/jami-daemon log -1 --format='%H%n%cI%n%s' \
+            | tee jami-daemon.commit.txt
+
+      - name: Найти Android и JNI точки входа
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '=== Gradle wrappers ==='
+            find official/jami-client-android -maxdepth 5 -type f -name gradlew -print
+            echo '=== Settings files ==='
+            find official/jami-client-android -maxdepth 5 -type f \
+              \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print
+            echo '=== Build files ==='
+            find official/jami-client-android -maxdepth 5 -type f \
+              \( -name 'build.gradle' -o -name 'build.gradle.kts' \) -print | head -200
+            echo '=== JNI daemon files ==='
+            find official/jami-daemon/bin/jni -maxdepth 4 -type f -print 2>/dev/null | head -300
+            echo '=== libwrap files ==='
+            find official/jami-daemon -path '*/libwrap/*' -type f -print 2>/dev/null | head -200
+          } | tee jami-source-map.txt
+          test -d official/jami-daemon/bin/jni
+          test -n "$(find official/jami-client-android -maxdepth 5 -type f -name gradlew -print -quit)"
+
+      - name: Проверить Gradle-проект Jami Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLEW=$(find official/jami-client-android -maxdepth 5 -type f -name gradlew -print -quit)
+          test -n "$GRADLEW"
+          ROOT=$(dirname "$GRADLEW")
+          chmod +x "$GRADLEW"
+          echo "$ROOT" | tee jami-gradle-root.txt
+          cd "$ROOT"
+          timeout 15m ./gradlew --no-daemon --stacktrace --version \
+            | tee "$GITHUB_WORKSPACE/jami-gradle-version.txt"
+          timeout 25m ./gradlew --no-daemon --stacktrace projects \
+            | tee "$GITHUB_WORKSPACE/jami-gradle-projects.txt"
+          timeout 30m ./gradlew --no-daemon --stacktrace tasks --all \
+            | tee "$GITHUB_WORKSPACE/jami-gradle-tasks.txt"
+
+      - name: Сформировать машинный отчёт
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def read(name):
+              p = Path(name)
+              return p.read_text(encoding='utf-8', errors='replace').strip() if p.exists() else ''
+
+          tasks = read('jami-gradle-tasks.txt')
+          report = {
+              'probe': 'jami-core-078',
+              'jamiClientAndroidCommit': read('jami-client-android.sha'),
+              'jamiDaemonCommit': read('jami-daemon.sha'),
+              'gradleRoot': read('jami-gradle-root.txt'),
+              'hasJniApi': Path('official/jami-daemon/bin/jni').is_dir(),
+              'taskHints': {
+                  'assemble': [line.strip() for line in tasks.splitlines() if 'assemble' in line.lower()][:100],
+                  'apk': [line.strip() for line in tasks.splitlines() if 'apk' in line.lower()][:100],
+                  'release': [line.strip() for line in tasks.splitlines() if 'release' in line.lower()][:100],
+              },
+          }
+          Path('jami-probe-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2),
+              encoding='utf-8',
+          )
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          PY
+          python3 -m json.tool jami-probe-report.json >/dev/null
+
+      - name: Сохранить результаты
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-jami-core-probe-078
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            jami-probe-report.json
+            jami-environment.txt
+            jami-client-android.sha
+            jami-client-android.commit.txt
+            jami-client-android.submodules.txt
+            jami-daemon.sha
+            jami-daemon.commit.txt
+            jami-source-map.txt
+            jami-gradle-root.txt
+            jami-gradle-version.txt
+            jami-gradle-projects.txt
+            jami-gradle-tasks.txt
