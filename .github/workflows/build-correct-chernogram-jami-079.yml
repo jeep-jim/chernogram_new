@@ -21,15 +21,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SOURCE_REF: feature/correct-jami-core-079
   FLUTTER_VERSION: 3.44.8
-  VERSION_NAME: 0.79.0
-  VERSION_CODE: 79
   JAMI_CLIENT_COMMIT: 8746fd4b186f5a439e7dffc5ad9f484c6ae539a3
-  ANDROID_PLATFORM: platforms;android-37
-  ANDROID_BUILD_TOOLS: build-tools;37.0.0
-  ANDROID_NDK: ndk;29.0.14206865
-  ANDROID_CMAKE: cmake;4.1.2
   SWIG_VERSION: 4.3.1
   CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
   RELEASE_TAG: chernogram-jami-core-0.79-build79
@@ -38,13 +31,13 @@ jobs:
   android:
     name: Android — собрать Чернограм с ядром Jami
     runs-on: ubuntu-22.04
-    timeout-minutes: 210
+    timeout-minutes: 240
 
     steps:
-      - name: Получить исходный интерфейс Чернограма
+      - name: Получить исходники Чернограма
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_REF }}
+          ref: feature/correct-jami-core-079
           fetch-depth: 0
 
       - name: Освободить место
@@ -96,20 +89,24 @@ jobs:
           /usr/local/bin/swig -version | grep -F "SWIG Version ${SWIG_VERSION}"
           echo '/usr/local/bin' >> "$GITHUB_PATH"
 
-      - name: Установить Android SDK, NDK и CMake
+      - name: Установить Android 36, NDK и CMake
         shell: bash
         run: |
           set -euo pipefail
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK" "$ANDROID_CMAKE"
-          test -d "$ANDROID_HOME/platforms/android-37"
-          test -d "$ANDROID_HOME/build-tools/37.0.0"
+          "$SDKMANAGER" \
+            "platforms;android-36" \
+            "build-tools;36.1.0" \
+            "ndk;29.0.14206865" \
+            "cmake;4.1.2"
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -d "$ANDROID_HOME/build-tools/36.1.0"
           test -d "$ANDROID_HOME/ndk/29.0.14206865"
           test -d "$ANDROID_HOME/cmake/4.1.2"
 
-      - name: Применить интеграцию без интерфейса Jami
+      - name: Применить интеграцию к интерфейсу Чернограма
         shell: bash
         run: |
           set -euo pipefail
@@ -120,23 +117,9 @@ jobs:
           path = Path('android/app/build.gradle.kts')
           text = path.read_text(encoding='utf-8')
           text = text.replace('minSdk = 24', 'minSdk = 26', 1)
-          old = '''        jniLibs {
-              useLegacyPackaging = true
-          }'''
-          if old in text:
-              text = text.replace(old, '''        jniLibs {
-              useLegacyPackaging = true
-              pickFirsts += setOf("**/libc++_shared.so")
-          }''', 1)
-          else:
-              old = '''        jniLibs {
-              useLegacyPackaging = true
-          }'''.replace('              ', '            ')
-              if old in text:
-                  text = text.replace(old, '''        jniLibs {
-              useLegacyPackaging = true
-              pickFirsts += setOf("**/libc++_shared.so")
-          }'''.replace('              ', '            '), 1)
+          marker = 'useLegacyPackaging = true'
+          if marker in text and 'pickFirsts += setOf("**/libc++_shared.so")' not in text:
+              text = text.replace(marker, marker + '\n            pickFirsts += setOf("**/libc++_shared.so")', 1)
           path.write_text(text, encoding='utf-8')
           PY
           dart format \
@@ -147,33 +130,11 @@ jobs:
             lib/light/light_chat_app.dart \
             lib/app_monitor.dart \
             lib/chat_screen.dart
-          grep -q "class CgJamiTunnelSession" lib/jami_core.dart
-          grep -q "jamiOwner" lib/core_models.dart
-          grep -q "CgJamiRelay.install" lib/main.dart
-          grep -q "preferredFactory" lib/internet_core.dart
-          grep -q "ChernogramJamiBridge" android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
-          ! grep -R -n -E "jami a GNU package|Создать учетную запись Jami|cx\.ring" lib android/app/src/main/kotlin/com/example/chernogram || true
-
-      - name: Сохранить интеграционный код в рабочей ветке
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            pubspec.yaml \
-            lib/main.dart \
-            lib/core_models.dart \
-            lib/internet_core.dart \
-            lib/jami_core.dart \
-            lib/light/light_chat_app.dart \
-            lib/app_monitor.dart \
-            lib/chat_screen.dart \
-            android/app/build.gradle.kts
-          if ! git diff --cached --quiet; then
-            git commit -m "Подключить ядро Jami под интерфейс Чернограма 0.79 [skip ci]"
-            git push origin HEAD:${SOURCE_REF}
-          fi
+          grep -q 'class CgJamiTunnelSession' lib/jami_core.dart
+          grep -q 'CgJamiRelay.install' lib/main.dart
+          grep -q 'preferredFactory' lib/internet_core.dart
+          grep -q 'jamiOwner' lib/core_models.dart
+          grep -q 'ChernogramJamiBridge' android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
 
       - name: Восстановить постоянную подпись Чернограма
         uses: actions/cache/restore@v4
@@ -182,7 +143,7 @@ jobs:
           key: chernogram-stable-signing-v2
           fail-on-cache-miss: true
 
-      - name: Проверить постоянный сертификат
+      - name: Проверить сертификат подписи
         shell: bash
         run: |
           set -euo pipefail
@@ -228,13 +189,13 @@ jobs:
           test "$(git -C official/jami-client-android rev-parse HEAD)" = "$JAMI_CLIENT_COMMIT"
           test -d official/jami-client-android/daemon/bin/jni
 
-      - name: Кэшировать архивы Jami contrib
+      - name: Кэшировать архивы Jami
         uses: actions/cache@v4
         with:
           path: official/jami-client-android/daemon/contrib/tarballs
-          key: chernogram-jami-contrib-${{ runner.os }}-${{ env.JAMI_CLIENT_COMMIT }}-v4
+          key: chernogram-jami-contrib-${{ runner.os }}-${{ env.JAMI_CLIENT_COMMIT }}-v5
 
-      - name: Заранее скачать проблемные GNU-зависимости
+      - name: Подготовить надёжные зеркала GNU-зависимостей
         shell: bash
         run: |
           set -euo pipefail
@@ -270,7 +231,7 @@ jobs:
           gzip -t "$TARBALLS/libiconv-1.18.tar.gz"
           xz -t "$TARBALLS/gmp-6.3.0.tar.xz"
 
-      - name: Настроить Jami только как внутреннюю библиотеку Чернограма
+      - name: Настроить Jami как внутреннюю библиотеку
         shell: bash
         run: |
           set -euo pipefail
@@ -278,12 +239,16 @@ jobs:
           from pathlib import Path
           path = Path('official/jami-client-android/jami-android/app/build.gradle.kts')
           text = path.read_text(encoding='utf-8')
+          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)
+          text = text.replace('buildToolsVersion = "37.0.0"', 'buildToolsVersion = "36.1.0"', 1)
+          text = text.replace('targetSdk = 37', 'targetSdk = 36', 1)
           old = '-DJAMI_DATADIR=/data/data/$namespace/files'
           new = '-DJAMI_DATADIR=/data/data/com.example.chernogram/files'
           if old not in text:
               raise SystemExit('JAMI_DATADIR marker not found')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
+          grep -q 'compileSdk = 36' official/jami-client-android/jami-android/app/build.gradle.kts
 
       - name: Собрать официальное ядро Jami arm64
         shell: bash
@@ -310,9 +275,9 @@ jobs:
             ./gradlew --stop || true
             sleep $((attempt * 30))
           done
-          tail -n 500 "$LOG" > "$GITHUB_WORKSPACE/jami-core-build-tail.log"
+          tail -n 700 "$LOG" > "$GITHUB_WORKSPACE/jami-core-build-tail.log"
 
-      - name: Встроить ядро Jami в приложение Чернограма
+      - name: Встроить ядро Jami внутрь Чернограма
         shell: bash
         run: |
           set -euo pipefail
@@ -332,16 +297,14 @@ jobs:
           test -s "$JAMI_APK"
           rm -rf android/app/src/main/jniLibs/arm64-v8a
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          unzip -j "$JAMI_APK" 'lib/arm64-v8a/libjami-core-jni.so' \
-            -d android/app/src/main/jniLibs/arm64-v8a
-          unzip -j "$JAMI_APK" 'lib/arm64-v8a/libc++_shared.so' \
-            -d android/app/src/main/jniLibs/arm64-v8a
+          unzip -j "$JAMI_APK" 'lib/arm64-v8a/libjami-core-jni.so' -d android/app/src/main/jniLibs/arm64-v8a
+          unzip -j "$JAMI_APK" 'lib/arm64-v8a/libc++_shared.so' -d android/app/src/main/jniLibs/arm64-v8a
           test -s android/app/src/main/jniLibs/arm64-v8a/libjami-core-jni.so
           test -s android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
           find android/app/src/main/java/net/jami/daemon -type f | wc -l | tee jami-generated-java-count.txt
           ls -lh android/app/src/main/jniLibs/arm64-v8a | tee jami-native-files.txt
 
-      - name: Получить зависимости и проверить интерфейс Чернограма
+      - name: Проверить Flutter-код
         shell: bash
         run: |
           set -euo pipefail
@@ -357,18 +320,18 @@ jobs:
           flutter build apk --release --target-platform android-arm64 2>&1 | tee chernogram-build.log
           STATUS=${PIPESTATUS[0]}
           set -e
-          tail -n 500 chernogram-build.log > chernogram-build-tail.log
+          tail -n 700 chernogram-build.log > chernogram-build-tail.log
           test "$STATUS" = "0"
           test -s build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Подписать и проверить правильный APK
+      - name: Подписать и проверить APK Чернограма
         shell: bash
         run: |
           set -euo pipefail
           SOURCE_APK=build/app/outputs/flutter-apk/app-release.apk
-          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.1.0/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.1.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/36.1.0/aapt"
           "$ZIPALIGN" -p -f 4 "$SOURCE_APK" chernogram-aligned.apk
           "$APKSIGNER" sign \
             --ks "$HOME/.android/debug.keystore" \
@@ -392,26 +355,26 @@ jobs:
           sha256sum chernogram-0.79.0-build79.apk | tee apk-sha256.txt
           stat -c '%s bytes' chernogram-0.79.0-build79.apk | tee apk-size.txt
 
-      - name: Создать технический манифест тестовой версии
+      - name: Создать манифест версии
         shell: bash
         run: |
           set -euo pipefail
           SHA=$(cut -d' ' -f1 apk-sha256.txt)
           cat > chernogram-0.79.0-build79.json <<EOF
           {
-            "versionName": "${VERSION_NAME}",
-            "versionCode": ${VERSION_CODE},
+            "versionName": "0.79.0",
+            "versionCode": 79,
             "package": "com.example.chernogram",
             "transport": "embedded-jami-core",
             "jamiClientCommit": "${JAMI_CLIENT_COMMIT}",
             "sha256": "${SHA}",
             "certificateSha256": "${CERT_SHA256}",
-            "notesRu": "Сохранён интерфейс Чернограма. Официальное ядро Jami встроено внутрь как транспорт; интерфейс и регистрация Jami пользователю не показываются."
+            "notesRu": "Сохранён интерфейс Чернограма. Ядро Jami встроено как скрытый транспорт."
           }
           EOF
           python3 -m json.tool chernogram-0.79.0-build79.json >/dev/null
 
-      - name: Опубликовать отдельную тестовую ссылку
+      - name: Опубликовать тестовую ссылку
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -424,9 +387,9 @@ jobs:
             apk-sha256.txt \
             apk-signature.txt \
             apk-badging.txt \
-            --target "$SOURCE_REF" \
+            --target feature/correct-jami-core-079 \
             --title "Чернограм 0.79.0+79 — скрытое ядро Jami" \
-            --notes "Тестовая Android-сборка с сохранённым интерфейсом Чернограма и встроенным ядром Jami. Не является переименованным приложением Jami." \
+            --notes "Тестовая Android-сборка с интерфейсом Чернограма и встроенным ядром Jami. Интерфейс Jami отсутствует." \
             --prerelease
 
       - name: Сохранить APK и доказательства
