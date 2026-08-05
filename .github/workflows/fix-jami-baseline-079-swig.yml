@@ -1,0 +1,16 @@
+name: Устаревшее исправление Jami baseline 0.79
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notice:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Информация
+        run: |
+          echo "Этот одноразовый workflow отключён."
+          echo "Используйте build-chernogram-jami-brand-080-v2.yml для сборки Чернограм Jami 0.80 v2."

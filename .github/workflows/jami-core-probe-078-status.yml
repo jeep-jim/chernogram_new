@@ -1,0 +1,50 @@
+name: Контроль Jami core 0.78
+
+on:
+  pull_request:
+    branches: [fix/current-ui-working-core-061]
+    paths:
+      - JAMI_PROBE_078_TRIGGER.md
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - name: Найти и дождаться Jami probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID=0
+          for attempt in $(seq 1 60); do
+            RUN_ID=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow jami-core-probe-078.yml \
+              --branch experiment/jami-core-078 \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0')
+            if [ "$RUN_ID" != "0" ]; then break; fi
+            sleep 5
+          done
+          test "$RUN_ID" != "0"
+          echo "JAMI_PROBE_RUN_ID=$RUN_ID"
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          gh run view "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,status,conclusion,url,jobs \
+            | tee jami-probe-status.json
+
+      - name: Сохранить статус
+        uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-jami-core-probe-078-status
+          path: jami-probe-status.json
+          if-no-files-found: error
+          retention-days: 3

@@ -1,0 +1,62 @@
+name: Применить исправление зеркал Jami v2
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/patch-jami-v2-downloads.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Получить ветку
+        uses: actions/checkout@v4
+        with:
+          ref: experiment/jami-core-078
+          fetch-depth: 0
+
+      - name: Изменить основной workflow
+        shell: bash
+        env:
+          INSERT_B64: ICAgICAgLSBuYW1lOiDQl9Cw0YDQsNC90LXQtSDRgdC60LDRh9Cw0YLRjCDQv9GA0L7QsdC70LXQvNC90YvQtSBHTlUt0LfQsNCy0LjRgdC40LzQvtGB0YLQuAogICAgICAgIHNoZWxsOiBiYXNoCiAgICAgICAgcnVuOiB8CiAgICAgICAgICBzZXQgLWV1byBwaXBlZmFpbAogICAgICAgICAgVEFSQkFMTFM9IiRHSVRIVUJfV09SS1NQQUNFL29mZmljaWFsL2phbWktY2xpZW50LWFuZHJvaWQvZGFlbW9uL2NvbnRyaWIvdGFyYmFsbHMiCiAgICAgICAgICBta2RpciAtcCAiJFRBUkJBTExTIgoKICAgICAgICAgIGZldGNoX2ZhbGxiYWNrKCkgewogICAgICAgICAgICBsb2NhbCBkZXN0aW5hdGlvbj0iJDEiCiAgICAgICAgICAgIHNoaWZ0CiAgICAgICAgICAgIGlmIFsgLXMgIiRkZXN0aW5hdGlvbiIgXTsgdGhlbgogICAgICAgICAgICAgIGVjaG8gItCj0LbQtSDQtdGB0YLRjDogJChiYXNlbmFtZSAiJGRlc3RpbmF0aW9uIikiCiAgICAgICAgICAgICAgcmV0dXJuIDAKICAgICAgICAgICAgZmkKICAgICAgICAgICAgcm0gLWYgIiRkZXN0aW5hdGlvbiIgIiRkZXN0aW5hdGlvbi5wYXJ0IgogICAgICAgICAgICBsb2NhbCB1cmwKICAgICAgICAgICAgZm9yIHVybCBpbiAiJEAiOyBkbwogICAgICAgICAgICAgIGVjaG8gItCf0YDQvtCx0YPRjiAkdXJsIgogICAgICAgICAgICAgIGlmIGN1cmwgLS1mYWlsIC0tbG9jYXRpb24gLS1yZXRyeSAxMiAtLXJldHJ5LWFsbC1lcnJvcnMgICAgICAgICAgICAgICAgIC0tY29ubmVjdC10aW1lb3V0IDIwIC0tbWF4LXRpbWUgOTAwICAgICAgICAgICAgICAgICAiJHVybCIgLW8gIiRkZXN0aW5hdGlvbi5wYXJ0IjsgdGhlbgogICAgICAgICAgICAgICAgdGVzdCAtcyAiJGRlc3RpbmF0aW9uLnBhcnQiCiAgICAgICAgICAgICAgICBtdiAiJGRlc3RpbmF0aW9uLnBhcnQiICIkZGVzdGluYXRpb24iCiAgICAgICAgICAgICAgICByZXR1cm4gMAogICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgcm0gLWYgIiRkZXN0aW5hdGlvbi5wYXJ0IgogICAgICAgICAgICBkb25lCiAgICAgICAgICAgIHJldHVybiAxCiAgICAgICAgICB9CgogICAgICAgICAgZmV0Y2hfZmFsbGJhY2sgIiRUQVJCQUxMUy9saWJpY29udi0xLjE4LnRhci5neiIgICAgICAgICAgICAgImh0dHBzOi8vZnRwLmdudS5vcmcvZ251L2xpYmljb252L2xpYmljb252LTEuMTgudGFyLmd6IiAgICAgICAgICAgICAiaHR0cHM6Ly9taXJyb3JzLmtlcm5lbC5vcmcvZ251L2xpYmljb252L2xpYmljb252LTEuMTgudGFyLmd6IiAgICAgICAgICAgICAiaHR0cHM6Ly9taXJyb3JzLm9jZi5iZXJrZWxleS5lZHUvZ251L2xpYmljb252L2xpYmljb252LTEuMTgudGFyLmd6IiAgICAgICAgICAgICAiaHR0cHM6Ly9mdHBtaXJyb3IuZ251Lm9yZy9saWJpY29udi9saWJpY29udi0xLjE4LnRhci5neiIKCiAgICAgICAgICBmZXRjaF9mYWxsYmFjayAiJFRBUkJBTExTL2dtcC02LjMuMC50YXIueHoiICAgICAgICAgICAgICJodHRwczovL2Z0cC5nbnUub3JnL2dudS9nbXAvZ21wLTYuMy4wLnRhci54eiIgICAgICAgICAgICAgImh0dHBzOi8vbWlycm9ycy5rZXJuZWwub3JnL2dudS9nbXAvZ21wLTYuMy4wLnRhci54eiIgICAgICAgICAgICAgImh0dHBzOi8vbWlycm9ycy5vY2YuYmVya2VsZXkuZWR1L2dudS9nbXAvZ21wLTYuMy4wLnRhci54eiIgICAgICAgICAgICAgImh0dHBzOi8vZnRwbWlycm9yLmdudS5vcmcvZ21wL2dtcC02LjMuMC50YXIueHoiCgogICAgICAgICAgZ3ppcCAtdCAiJFRBUkJBTExTL2xpYmljb252LTEuMTgudGFyLmd6IgogICAgICAgICAgeHogLXQgIiRUQVJCQUxMUy9nbXAtNi4zLjAudGFyLnh6IgoK
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          path = Path(".github/workflows/build-chernogram-jami-brand-080-v2.yml")
+          text = path.read_text(encoding="utf-8")
+          marker = "      - name: Заранее скачать проблемные GNU-зависимости\n"
+          anchor = "      - name: Наложить название, пакет и иконку Чернограма\n"
+
+          if marker not in text:
+              if anchor not in text:
+                  raise SystemExit("Не найден шаг брендирования")
+              block = base64.b64decode(os.environ["INSERT_B64"]).decode("utf-8")
+              text = text.replace(anchor, block + anchor, 1)
+              path.write_text(text, encoding="utf-8")
+          PY
+
+          git diff --check
+          grep -q 'Заранее скачать проблемные GNU-зависимости' .github/workflows/build-chernogram-jami-brand-080-v2.yml
+
+      - name: Сохранить исправление и запустить сборку
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .github/workflows/build-chernogram-jami-brand-080-v2.yml
+          if git diff --cached --quiet; then
+            echo "Исправление уже применено."
+            exit 0
+          fi
+          git commit -m "ci: стабилизировать загрузку Jami contrib"
+          git push origin HEAD:experiment/jami-core-078
