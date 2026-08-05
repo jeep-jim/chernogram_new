@@ -16,9 +16,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val channelName = "chernogram/sound"
     private var incomingRingtone: Ringtone? = null
+    private var jamiBridge: ChernogramJamiBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        jamiBridge?.detach()
+        jamiBridge = ChernogramJamiBridge(applicationContext, flutterEngine)
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelName
@@ -115,6 +119,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        jamiBridge?.detach()
+        jamiBridge = null
         stopIncomingCallSound()
         super.onDestroy()
     }
