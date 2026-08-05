@@ -1,0 +1,51 @@
+name: Исправить путь сгенерированного Jami API
+
+on:
+  push:
+    branches: [feature/correct-jami-core-079]
+    paths:
+      - .github/workflows/fix-jami-generated-path.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/correct-jami-core-079
+          fetch-depth: 0
+
+      - name: Искать JamiService.java по фактическому пути сборки
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/build-correct-chernogram-jami-079.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''          GENERATED="$ROOT/libjamiclient/src/main/java/net/jami/daemon"
+          test -d "$GENERATED"
+          test -f "$GENERATED/JamiService.java"'''
+          new = '''          GENERATED_FILE=$(find "$ROOT" -type f -path '*/net/jami/daemon/JamiService.java' -print -quit)
+          test -n "$GENERATED_FILE"
+          GENERATED=$(dirname "$GENERATED_FILE")
+          test -d "$GENERATED"
+          test -f "$GENERATED/JamiService.java"
+          echo "Generated Jami API: $GENERATED"'''
+          if old not in text:
+              raise SystemExit('Old generated API path block was not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          grep -q 'GENERATED_FILE=$(find' .github/workflows/build-correct-chernogram-jami-079.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build-correct-chernogram-jami-079.yml
+          git commit -m "Искать сгенерированный Jami API по фактическому пути"
+          git push origin HEAD:feature/correct-jami-core-079
