@@ -1,0 +1,59 @@
+name: Исправить Android SDK для Чернограм Jami 0.79
+
+on:
+  push:
+    branches: [feature/correct-jami-core-079]
+    paths:
+      - .github/workflows/fix-correct-jami-079-sdk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/correct-jami-core-079
+          fetch-depth: 0
+
+      - name: Перевести сборку на доступный Android 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/build-correct-chernogram-jami-079.yml')
+          text = path.read_text(encoding='utf-8')
+          replacements = {
+              'ANDROID_PLATFORM: platforms;android-37': 'ANDROID_PLATFORM: platforms;android-36',
+              'ANDROID_BUILD_TOOLS: build-tools;37.0.0': 'ANDROID_BUILD_TOOLS: build-tools;36.1.0',
+              '$ANDROID_HOME/platforms/android-37': '$ANDROID_HOME/platforms/android-36',
+              '$ANDROID_HOME/build-tools/37.0.0': '$ANDROID_HOME/build-tools/36.1.0',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Missing workflow marker: {old}')
+              text = text.replace(old, new)
+
+          old = """          text = path.read_text(encoding='utf-8')
+          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"""
+          new = """          text = path.read_text(encoding='utf-8')
+          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)
+          text = text.replace('buildToolsVersion = \"37.0.0\"', 'buildToolsVersion = \"36.1.0\"', 1)
+          text = text.replace('targetSdk = 37', 'targetSdk = 36', 1)
+          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"""
+          if old not in text:
+              raise SystemExit('Missing Jami Gradle patch marker')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build-correct-chernogram-jami-079.yml
+          git commit -m "Исправить Android SDK для сборки Jami 0.79"
+          git push origin HEAD:feature/correct-jami-core-079
