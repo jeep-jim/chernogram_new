@@ -1,97 +1,16 @@
-name: Исправить Jami baseline 0.79 — SWIG
+name: Устаревшее исправление Jami baseline 0.79
 
 on:
-  push:
-    branches: [experiment/jami-core-078]
-    paths:
-      - .github/workflows/fix-jami-baseline-079-swig.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
+  notice:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: experiment/jami-core-078
-          fetch-depth: 0
-
-      - name: Заменить проблемную установку SWIG
-        shell: bash
+      - name: Информация
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/workflows/jami-android-baseline-079.yml')
-          text = path.read_text(encoding='utf-8')
-          old = '''      - name: Установить SWIG 4.3.1
-        shell: bash
-        run: |
-          set -euo pipefail
-          CURRENT=$(swig -version 2>/dev/null | awk '/SWIG Version/{print $3}' || true)
-          echo "system SWIG: ${CURRENT:-missing}"
-          if ! python3 - "${CURRENT:-0}" "$SWIG_VERSION" <<'PY'
-          import sys
-          from packaging.version import Version
-          raise SystemExit(0 if Version(sys.argv[1]) >= Version(sys.argv[2]) else 1)
-          PY
-          then
-            curl --fail --location --retry 5 \\
-              "https://github.com/swig/swig/archive/refs/tags/v${SWIG_VERSION}.tar.gz" \\
-              -o swig.tar.gz
-            tar -xzf swig.tar.gz
-            cd "swig-${SWIG_VERSION}"
-            ./autogen.sh
-            ./configure --prefix=/usr/local
-            make -j2
-            sudo make install
-          fi
-          swig -version | tee "$GITHUB_WORKSPACE/jami-swig-version.txt"
-          swig -version | grep -E 'SWIG Version (4\\.[2-9]|[5-9]\\.)'
-'''
-          new = '''      - name: Установить официальный SWIG 4.3.1
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --location --retry 8 --retry-delay 3 \\
-            "https://prdownloads.sourceforge.net/swig/swig-${SWIG_VERSION}.tar.gz" \\
-            -o swig.tar.gz
-          tar -xzf swig.tar.gz
-          cd "swig-${SWIG_VERSION}"
-          test -x ./configure
-          ./configure --prefix=/usr/local
-          make -j2
-          sudo make install
-          hash -r
-          /usr/local/bin/swig -version | tee "$GITHUB_WORKSPACE/jami-swig-version.txt"
-          /usr/local/bin/swig -version | grep -F "SWIG Version ${SWIG_VERSION}"
-          echo '/usr/local/bin' >> "$GITHUB_PATH"
-'''
-          if old not in text:
-              raise SystemExit('Old SWIG block was not found; refusing an unverified patch')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          status = Path('JAMI_BASELINE_079_STATUS.md')
-          status.write_text(
-              'Контроль отдельной сборки официального Jami NoPush APK для Android arm64 — попытка 2 после исправления SWIG. Основной канал Чернограма не изменяется.\n',
-              encoding='utf-8',
-          )
-          PY
-
-          grep -q 'prdownloads.sourceforge.net/swig' .github/workflows/jami-android-baseline-079.yml
-          ! grep -q 'from packaging.version import Version' .github/workflows/jami-android-baseline-079.yml
-          ! grep -q './autogen.sh' .github/workflows/jami-android-baseline-079.yml
-
-      - name: Зафиксировать и запустить новую сборку
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/jami-android-baseline-079.yml JAMI_BASELINE_079_STATUS.md
-          git commit -m 'Исправить SWIG и повторить Jami NoPush baseline 0.79'
-          git push origin HEAD:experiment/jami-core-078
+          echo "Этот одноразовый workflow отключён."
+          echo "Используйте build-chernogram-jami-brand-080-v2.yml для сборки Чернограм Jami 0.80 v2."
