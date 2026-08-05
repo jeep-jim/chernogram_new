@@ -39,16 +39,14 @@ jobs:
                   raise SystemExit(f'Missing workflow marker: {old}')
               text = text.replace(old, new)
 
-          old = """          text = path.read_text(encoding='utf-8')
-          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"""
-          new = """          text = path.read_text(encoding='utf-8')
-          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)
+          marker = "          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"
+          insertion = """          text = text.replace('compileSdk = 37', 'compileSdk = 36', 1)
           text = text.replace('buildToolsVersion = \"37.0.0\"', 'buildToolsVersion = \"36.1.0\"', 1)
           text = text.replace('targetSdk = 37', 'targetSdk = 36', 1)
-          old = '-DJAMI_DATADIR=/data/data/$namespace/files'"""
-          if old not in text:
+"""
+          if marker not in text:
               raise SystemExit('Missing Jami Gradle patch marker')
-          text = text.replace(old, new, 1)
+          text = text.replace(marker, insertion + marker, 1)
           path.write_text(text, encoding='utf-8')
           PY
 
