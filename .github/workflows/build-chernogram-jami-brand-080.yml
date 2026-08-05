@@ -1,0 +1,357 @@
+name: Чернограм Jami 0.80 — брендированный NoPush Android
+
+on:
+  push:
+    branches: [experiment/jami-core-078]
+    paths:
+      - .github/workflows/build-chernogram-jami-brand-080.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chernogram-jami-brand-080
+  cancel-in-progress: false
+
+env:
+  JAMI_CLIENT_COMMIT: 8746fd4b186f5a439e7dffc5ad9f484c6ae539a3
+  ANDROID_PLATFORM: platforms;android-37
+  ANDROID_BUILD_TOOLS: build-tools;37.0.0
+  ANDROID_NDK: ndk;29.0.14206865
+  ANDROID_CMAKE: cmake;4.1.2
+  SWIG_VERSION: 4.3.1
+  APP_ID: com.example.chernogram.jami
+  APP_LABEL: Чернограм Jami
+  RELEASE_TAG: chernogram-jami-lab-0.80.0
+  APK_NAME: chernogram-jami-lab-0.80.0.apk
+  CERT_SHA256: F4:A2:C8:36:A8:36:71:19:78:10:FA:6E:98:2D:77:F4:C7:31:D0:9B:18:95:15:C0:13:D0:2D:0D:94:2D:9B:BE
+
+jobs:
+  build:
+    name: Собрать и опубликовать Чернограм Jami
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Получить Чернограм
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Освободить место
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean
+          df -h
+
+      - name: Установить Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Установить системные зависимости
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake autopoint bison build-essential ca-certificates \
+            curl flex gawk gettext git jq libpcre2-dev libtool-bin m4 nasm \
+            ninja-build pkg-config python3 qrencode unzip xz-utils yasm
+
+      - name: Установить официальный SWIG 4.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 8 --retry-delay 3 \
+            "https://prdownloads.sourceforge.net/swig/swig-${SWIG_VERSION}.tar.gz" \
+            -o swig.tar.gz
+          tar -xzf swig.tar.gz
+          cd "swig-${SWIG_VERSION}"
+          ./configure --prefix=/usr/local
+          make -j2
+          sudo make install
+          hash -r
+          /usr/local/bin/swig -version | grep -F "SWIG Version ${SWIG_VERSION}"
+          echo '/usr/local/bin' >> "$GITHUB_PATH"
+
+      - name: Установить Android SDK, NDK и CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort | tail -n 1)
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK" "$ANDROID_CMAKE"
+          test -d "$ANDROID_HOME/ndk/29.0.14206865"
+          test -d "$ANDROID_HOME/cmake/4.1.2"
+
+      - name: Восстановить постоянную подпись Чернограма
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chernogram-stable-signing-v2
+          fail-on-cache-miss: true
+
+      - name: Проверить сертификат
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android > chernogram-jami-cert.txt
+          ACTUAL=$(grep -m1 'SHA256:' chernogram-jami-cert.txt | sed 's/.*SHA256: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Получить зафиксированные официальные исходники Jami
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official
+          git init official/jami-client-android
+          git -C official/jami-client-android remote add origin \
+            https://git.jami.net/savoirfairelinux/jami-client-android.git
+          git -C official/jami-client-android -c http.version=HTTP/1.1 fetch \
+            --depth 1 origin "$JAMI_CLIENT_COMMIT"
+          git -C official/jami-client-android checkout --detach FETCH_HEAD
+          git -C official/jami-client-android submodule sync --recursive
+          git -C official/jami-client-android -c http.version=HTTP/1.1 submodule update \
+            --init --recursive --depth 1 --jobs 4
+          test "$(git -C official/jami-client-android rev-parse HEAD)" = "$JAMI_CLIENT_COMMIT"
+          test -d official/jami-client-android/daemon/bin/jni
+
+      - name: Наложить бренд Чернограма
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/official/jami-client-android/jami-android"
+          GRADLE="$ROOT/app/build.gradle.kts"
+          MANIFEST="$ROOT/app/src/main/AndroidManifest.xml"
+          test -f "$GRADLE"
+          test -f "$MANIFEST"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('official/jami-client-android/jami-android')
+          gradle_path = root / 'app/build.gradle.kts'
+          text = gradle_path.read_text(encoding='utf-8')
+
+          marker = '    defaultConfig {'
+          idx = text.find(marker)
+          if idx < 0:
+              raise SystemExit('defaultConfig marker not found')
+          line_end = text.find('\n', idx)
+          insertion = '\n        applicationId = "com.example.chernogram.jami"'
+          if 'applicationId = "com.example.chernogram.jami"' not in text:
+              text = text[:line_end] + insertion + text[line_end:]
+
+          old_data = '-DJAMI_DATADIR=/data/data/$namespace/files'
+          new_data = '-DJAMI_DATADIR=/data/data/com.example.chernogram.jami/files'
+          if old_data not in text:
+              raise SystemExit('JAMI_DATADIR marker not found')
+          text = text.replace(old_data, new_data, 1)
+          gradle_path.write_text(text, encoding='utf-8')
+
+          manifest_path = root / 'app/src/main/AndroidManifest.xml'
+          manifest = manifest_path.read_text(encoding='utf-8')
+          manifest, icon_count = re.subn(
+              r'android:icon="[^"]+"',
+              'android:icon="@mipmap/chernogram_launcher"',
+              manifest,
+              count=1,
+          )
+          if icon_count != 1:
+              raise SystemExit('Application icon attribute not found')
+          manifest = re.sub(
+              r'android:roundIcon="[^"]+"',
+              'android:roundIcon="@mipmap/chernogram_launcher"',
+              manifest,
+              count=1,
+          )
+          manifest_path.write_text(manifest, encoding='utf-8')
+
+          changed = 0
+          for path in (root / 'app/src/main/res').glob('values*/strings.xml'):
+              src = path.read_text(encoding='utf-8')
+              dst, count = re.subn(
+                  r'(<string\s+name="app_name"[^>]*>)(.*?)(</string>)',
+                  r'\1Чернограм Jami\3',
+                  src,
+                  flags=re.S,
+              )
+              if count:
+                  path.write_text(dst, encoding='utf-8')
+                  changed += count
+          if changed == 0:
+              raise SystemExit('app_name resource not found')
+          print(f'Updated app_name resources: {changed}')
+          PY
+
+          git fetch origin ui/install-qr-profile-076
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "$ROOT/app/src/main/res/mipmap-${density}"
+            git show "origin/ui/install-qr-profile-076:android/app/src/main/res/mipmap-${density}/ic_launcher.png" \
+              > "$ROOT/app/src/main/res/mipmap-${density}/chernogram_launcher.png"
+            test -s "$ROOT/app/src/main/res/mipmap-${density}/chernogram_launcher.png"
+          done
+
+          grep -q 'applicationId = "com.example.chernogram.jami"' "$GRADLE"
+          grep -q '/data/data/com.example.chernogram.jami/files' "$GRADLE"
+          grep -q '@mipmap/chernogram_launcher' "$MANIFEST"
+          grep -R -q '>Чернограм Jami<' "$ROOT/app/src/main/res"/values*/strings.xml
+
+      - name: Собрать официальный NoPush arm64
+        shell: bash
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dkotlin.daemon.jvm.options=-Xmx2g -Dfile.encoding=UTF-8
+        run: |
+          set -o pipefail
+          ROOT="$GITHUB_WORKSPACE/official/jami-client-android/jami-android"
+          cd "$ROOT"
+          chmod +x gradlew
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --console=plain \
+            -Parchs=arm64-v8a \
+            :app:assembleNoPushDebug \
+            2>&1 | tee "$GITHUB_WORKSPACE/chernogram-jami-build-080.log"
+
+      - name: Подписать и проверить брендированный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_APK=$(find official/jami-client-android/jami-android/app/build/outputs \
+            -type f -name '*noPush*debug*.apk' -print -quit)
+          if [ -z "$SOURCE_APK" ]; then
+            SOURCE_APK=$(find official/jami-client-android/jami-android/app/build/outputs \
+              -type f -name '*.apk' -print -quit)
+          fi
+          test -n "$SOURCE_APK"
+          test -s "$SOURCE_APK"
+
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
+          "$ZIPALIGN" -p -f 4 "$SOURCE_APK" aligned.apk
+          "$APKSIGNER" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$APK_NAME" \
+            aligned.apk
+          "$APKSIGNER" verify --print-certs "$APK_NAME" | tee chernogram-jami-signature-080.txt
+          "$AAPT" dump badging "$APK_NAME" | tee chernogram-jami-badging-080.txt
+
+          grep -q "package: name='${APP_ID}'" chernogram-jami-badging-080.txt
+          grep -q "application-label:'${APP_LABEL}'" chernogram-jami-badging-080.txt
+          unzip -l "$APK_NAME" | tee chernogram-jami-contents-080.txt
+          unzip -l "$APK_NAME" | grep -E 'lib/arm64-v8a/.+\.so'
+          if unzip -l "$APK_NAME" | grep -qE 'lib/(x86|x86_64|armeabi-v7a)/'; then
+            echo 'Unexpected non-arm64 ABI found' >&2
+            exit 1
+          fi
+
+          ACTUAL=$(grep -m1 'SHA-256 digest:' chernogram-jami-signature-080.txt | sed 's/.*digest: //' | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          EXPECTED=$(printf '%s' "$CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL" = "$EXPECTED"
+
+          stat -c '%s' "$APK_NAME" | tee chernogram-jami-size-080.txt
+          sha256sum "$APK_NAME" | tee chernogram-jami-sha256-080.txt
+
+      - name: Создать QR и отчёт
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_NAME}"
+          qrencode -o chernogram-jami-080-qr.png -s 12 -m 3 "$URL"
+          SHA=$(cut -d' ' -f1 chernogram-jami-sha256-080.txt)
+          SIZE=$(cat chernogram-jami-size-080.txt)
+          cat > chernogram-jami-080-report.json <<EOF
+          {
+            "name": "Чернограм Jami",
+            "version": "0.80.0 lab",
+            "packageName": "${APP_ID}",
+            "label": "${APP_LABEL}",
+            "variant": "noPushDebug arm64-v8a",
+            "jamiClientCommit": "${JAMI_CLIENT_COMMIT}",
+            "sha256": "${SHA}",
+            "sizeBytes": ${SIZE},
+            "certificateSha256": "${CERT_SHA256}",
+            "replacesInstalledChernogram": false,
+            "publishedToMainUpdateChannel": false
+          }
+          EOF
+          python3 -m json.tool chernogram-jami-080-report.json >/dev/null
+
+      - name: Опубликовать отдельный релиз
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'EOF'
+          ## Чернограм Jami 0.80 — отдельная лабораторная сборка
+
+          Это брендированный сетевой тест на официальном ядре Jami NoPush:
+
+          - название и иконка Чернограма;
+          - отдельный пакет `com.example.chernogram.jami`;
+          - устанавливается рядом с обычным Чернограмом;
+          - основной канал обновлений Чернограма не изменяется;
+          - без регистрации на коммерческом сервисе и без платной подписки;
+          - предназначен для проверки сообщений, аудио- и видеозвонков на двух телефонах.
+
+          Интерфейс внутри пока основан на официальном Android-клиенте Jami. Это транспортный лабораторный этап, а не финальный интерфейс Чернограма.
+          EOF
+
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'Чернограм Jami 0.80 — лаборатория связи' \
+            --notes-file release-notes.md \
+            "$APK_NAME#Чернограм Jami APK" \
+            "chernogram-jami-080-qr.png#QR-код установки на второй телефон" \
+            "chernogram-jami-080-report.json#Отчёт сборки" \
+            "chernogram-jami-sha256-080.txt#SHA-256" \
+            "chernogram-jami-signature-080.txt#Сертификат"
+
+      - name: Проверить опубликованный APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${APK_NAME}"
+          curl --fail --location --retry 12 --retry-delay 5 "$URL" -o published.apk
+          EXPECTED=$(cut -d' ' -f1 chernogram-jami-sha256-080.txt)
+          ACTUAL=$(sha256sum published.apk | cut -d' ' -f1)
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Сохранить доказательства
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chernogram-jami-brand-0.80
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: warn
+          path: |
+            chernogram-jami-lab-0.80.0.apk
+            chernogram-jami-080-qr.png
+            chernogram-jami-080-report.json
+            chernogram-jami-sha256-080.txt
+            chernogram-jami-signature-080.txt
+            chernogram-jami-badging-080.txt
+            chernogram-jami-build-080.log
+            chernogram-jami-contents-080.txt
