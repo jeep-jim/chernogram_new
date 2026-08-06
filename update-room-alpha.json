@@ -1,0 +1,9 @@
+{
+  "versionName": "0.81.0",
+  "versionCode": 81,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
+  "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
+  "sha256": "",
+  "notesRu": "Минимальный Чернограм: комнаты, сообщения, аудио- и видеозвонки, файлы, QR-подключение и обновления.",
+  "notesEn": "Minimal Chernogram: rooms, messages, audio and video calls, files, QR joining and updates."
+}
