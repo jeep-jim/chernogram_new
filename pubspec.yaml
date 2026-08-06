@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   desktop_drop: ^0.7.1
-  file_picker: 11.0.2
+  file_picker: 10.3.10
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5
 
