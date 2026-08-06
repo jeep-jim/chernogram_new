@@ -1,0 +1,60 @@
+name: SVET 0.80 Alpha v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/svet-direct-080]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare source
+        run: |
+          python tool/apply_svet_080.py
+          python tool/fix_svet_080.py
+      - run: flutter pub get
+      - run: flutter analyze lib/main.dart lib/svet_core.dart
+      - run: flutter build apk --release
+      - run: cp build/app/outputs/flutter-apk/app-release.apk SVET-Android-0.80.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SVET-Android-0.80-v2
+          path: SVET-Android-0.80.apk
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare source
+        run: |
+          python tool/apply_svet_080.py
+          python tool/fix_svet_080.py
+      - run: flutter pub get
+      - run: flutter config --enable-windows-desktop
+      - run: flutter analyze lib/main.dart lib/svet_core.dart
+      - run: flutter build windows --release
+      - shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath SVET-Windows-0.80.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SVET-Windows-0.80-v2
+          path: SVET-Windows-0.80.zip
