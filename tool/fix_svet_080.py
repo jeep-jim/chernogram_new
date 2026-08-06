@@ -8,10 +8,6 @@ core = core.replace(
     '_native.setMethodCallHandler(null);',
 )
 core = core.replace(
-    'FilePicker.platform.pickFiles(',
-    'FilePicker.pickFiles(',
-)
-core = core.replace(
     "'${base.path}${separator}SVET${separator}${_safeFileName(senderName)}_$stamp'",
     "'${base.path}${separator}SVET$separator${_safeFileName(senderName)}_$stamp'",
 )
