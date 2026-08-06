@@ -14,7 +14,7 @@
         android:allowBackup="true"
         android:usesCleartextTraffic="true">
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.chernogram.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
