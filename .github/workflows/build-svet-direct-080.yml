@@ -1,0 +1,65 @@
+name: Build SVET Direct 0.80
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/svet-direct-080
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter doctor
+        run: flutter doctor -v
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Build APK
+        run: flutter build apk --release
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk SVET-Android-0.80.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SVET-Android-0.80
+          path: SVET-Android-0.80.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows client
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Enable Windows
+        run: flutter config --enable-windows-desktop
+      - name: Build Windows
+        run: flutter build windows --release
+      - name: Package Windows
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath SVET-Windows-0.80.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SVET-Windows-0.80
+          path: SVET-Windows-0.80.zip
+          if-no-files-found: error
