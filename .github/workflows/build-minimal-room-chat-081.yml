@@ -1,0 +1,135 @@
+name: Chernogram Minimal Room 0.81
+
+on:
+  push:
+    branches:
+      - rebuild/minimal-room-chat-081
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Apply minimal room build
+        run: |
+          python tool/apply_minimal_room_081.py
+          python tool/fix_minimal_room_081.py
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Android APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Prepare Android artifact
+        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-room.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-room-android-081
+          path: chernogram-room.apk
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Apply minimal room build
+        shell: pwsh
+        run: |
+          python tool/apply_minimal_room_081.py
+          python tool/fix_minimal_room_081.py
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Windows client
+        run: flutter build windows --release
+
+      - name: Pack Windows client
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-room-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-room-windows-081
+          path: chernogram-room-windows.zip
+          if-no-files-found: error
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: chernogram-room-android-081
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: chernogram-room-windows-081
+          path: dist
+
+      - name: Create online update manifest
+        shell: bash
+        run: |
+          APK_SHA=$(sha256sum dist/chernogram-room.apk | cut -d ' ' -f 1)
+          cat > dist/update.json <<EOF
+          {
+            "versionName": "0.81.0",
+            "versionCode": 81,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
+            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
+            "sha256": "$APK_SHA",
+            "notesRu": "Минимальный Чернограм: комнаты, чат через интернет, аудио- и видеозвонки, файлы, QR и обновления.",
+            "notesEn": "Minimal Chernogram: rooms, internet chat, audio and video calls, files, QR and updates."
+          }
+          EOF
+
+      - name: Publish room alpha channel
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-room-alpha
+          name: Chernogram Room Alpha 0.81
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          body: |
+            Минимальная экспериментальная версия: комнаты, интернет-чат, звонки, файлы, QR-подключение и онлайн-обновления.
+          files: |
+            dist/chernogram-room.apk
+            dist/chernogram-room-windows.zip
+            dist/update.json
