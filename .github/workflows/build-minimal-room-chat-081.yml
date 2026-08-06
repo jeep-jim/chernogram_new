@@ -1,4 +1,4 @@
-name: Chernogram Minimal Room 0.81
+name: Chernogram Minimal Room 0.82
 
 on:
   push:
@@ -33,6 +33,7 @@ jobs:
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
+          python tool/fix_invite_host_082.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -48,7 +49,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-android-081
+          name: chernogram-room-android-082
           path: chernogram-room.apk
           if-no-files-found: error
 
@@ -68,6 +69,7 @@ jobs:
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
+          python tool/fix_invite_host_082.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -89,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-windows-081
+          name: chernogram-room-windows-082
           path: chernogram-room-windows.zip
           if-no-files-found: error
 
@@ -99,12 +101,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-android-081
+          name: chernogram-room-android-082
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-windows-081
+          name: chernogram-room-windows-082
           path: dist
 
       - name: Create online update manifest
@@ -113,13 +115,13 @@ jobs:
           APK_SHA=$(sha256sum dist/chernogram-room.apk | cut -d ' ' -f 1)
           cat > dist/update.json <<EOF
           {
-            "versionName": "0.81.0",
-            "versionCode": 81,
+            "versionName": "0.82.0",
+            "versionCode": 82,
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
             "sha256": "$APK_SHA",
-            "notesRu": "Минимальный Чернограм: комнаты, чат через интернет, аудио- и видеозвонки, файлы, QR и обновления.",
-            "notesEn": "Minimal Chernogram: rooms, internet chat, audio and video calls, files, QR and updates."
+            "notesRu": "Минимальный Чернограм: комнаты, чат через интернет, аудио- и видеозвонки, файлы, QR и рабочие ссылки приглашений.",
+            "notesEn": "Minimal Chernogram: rooms, internet chat, audio and video calls, files, QR and working invite links."
           }
           EOF
 
@@ -127,12 +129,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.81
+          name: Chernogram Room Alpha 0.82
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            Минимальная экспериментальная версия: комнаты, интернет-чат, звонки, файлы, QR-подключение и онлайн-обновления.
+            Минимальная экспериментальная версия: комнаты, интернет-чат, звонки, файлы, QR-подключение, ссылки приглашений и онлайн-обновления.
           files: |
             dist/chernogram-room.apk
             dist/chernogram-room-windows.zip
