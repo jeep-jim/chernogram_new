@@ -48,9 +48,12 @@ class CgPublicMqttRelay {
   bool get connected =>
       _client?.connectionStatus?.state == MqttConnectionState.connected;
 
-  String get _topic => 'chernogram/v81/rooms/$roomKey/events';
+  String get _topicBase => 'chernogram/v81/rooms/$roomKey';
+  String get _liveTopic => '$_topicBase/live';
+  String get _historyTopic => '$_topicBase/history';
+  String get _subscriptionTopic => '$_topicBase/#';
 
-  String get _clientId {
+  String _newClientId() {
     final safe = deviceId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
     final suffix = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     final base = safe.isEmpty ? 'device' : safe;
@@ -69,9 +72,10 @@ class CgPublicMqttRelay {
         if (_closed) return;
         MqttServerClient? candidate;
         try {
+          final clientId = _newClientId();
           candidate = MqttServerClient.withPort(
             endpoint.host,
-            _clientId,
+            clientId,
             endpoint.port,
             maxConnectionAttempts: 1,
           );
@@ -84,7 +88,7 @@ class CgPublicMqttRelay {
           candidate.autoReconnect = false;
           candidate.resubscribeOnAutoReconnect = true;
           candidate.connectionMessage = MqttConnectMessage()
-              .withClientIdentifier(candidate.clientIdentifier)
+              .withClientIdentifier(clientId)
               .startClean()
               .withWillQos(MqttQos.atLeastOnce);
 
@@ -102,7 +106,7 @@ class CgPublicMqttRelay {
           _client = candidate;
           _brokerLabel = endpoint.label;
           candidate.onDisconnected = _onDisconnected;
-          candidate.subscribe(_topic, MqttQos.atLeastOnce);
+          candidate.subscribe(_subscriptionTopic, MqttQos.atLeastOnce);
           _subscription = candidate.updates?.listen(
             _onUpdates,
             onError: (_) => _onDisconnected(),
@@ -146,7 +150,10 @@ class CgPublicMqttRelay {
     }
   }
 
-  Future<bool> publish(Map<String, dynamic> envelope) async {
+  Future<bool> publish(
+    Map<String, dynamic> envelope, {
+    bool retain = false,
+  }) async {
     if (_closed) return false;
     if (!connected) {
       try {
@@ -162,7 +169,12 @@ class CgPublicMqttRelay {
         ..addUTF8String(jsonEncode(envelope));
       final payload = builder.payload;
       if (payload == null) return false;
-      client.publishMessage(_topic, MqttQos.atLeastOnce, payload);
+      client.publishMessage(
+        retain ? _historyTopic : _liveTopic,
+        MqttQos.atLeastOnce,
+        payload,
+        retain: retain,
+      );
       return true;
     } catch (_) {
       _onDisconnected();
