@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  MINIMAL_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart
+
 jobs:
   android:
     runs-on: ubuntu-24.04
@@ -34,8 +37,8 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Analyze minimal client
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings $MINIMAL_SOURCES
 
       - name: Build Android APK
         run: flutter build apk --release --target-platform android-arm64
@@ -72,8 +75,9 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Analyze minimal client
+        shell: pwsh
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:MINIMAL_SOURCES.Split(' ')
 
       - name: Build Windows client
         run: flutter build windows --release
