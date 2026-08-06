@@ -7,5 +7,9 @@ text = text.replace(
     'await _native.setMethodCallHandler(null);',
     '_native.setMethodCallHandler(null);',
 )
+text = text.replace(
+    'FilePicker.platform.pickFiles(',
+    'FilePicker.pickFiles(',
+)
 path.write_text(text, encoding='utf-8')
 print('Patched lib/svet_core.dart')
