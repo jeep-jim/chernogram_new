@@ -71,7 +71,6 @@ jobs:
           python tool/fix_ui_085_compile.py
           python tool/presence_notifications_085.py
           python tool/fix_windows_updater_085.py
-          python tool/fix_windows_updater_085_v2.py
           python tool/signing_085.py
 
       - name: Materialize mask icons and user ringtone
@@ -126,7 +125,6 @@ jobs:
           python tool/fix_ui_085_compile.py
           python tool/presence_notifications_085.py
           python tool/fix_windows_updater_085.py
-          python tool/fix_windows_updater_085_v2.py
 
       - name: Materialize exact Chernogram icons and user ringtone
         shell: pwsh
