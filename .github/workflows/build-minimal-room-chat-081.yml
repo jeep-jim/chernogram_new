@@ -36,6 +36,7 @@ jobs:
           python tool/fix_invite_host_082.py
           python tool/fix_stability_083.py
           python tool/ui_full_084.py
+          python tool/fix_ui_084_compile.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -74,6 +75,7 @@ jobs:
           python tool/fix_invite_host_082.py
           python tool/fix_stability_083.py
           python tool/ui_full_084.py
+          python tool/fix_ui_084_compile.py
 
       - name: Generate exact Chernogram desktop icon
         shell: pwsh
