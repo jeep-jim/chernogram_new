@@ -118,14 +118,12 @@ windows_updater = r"""  static Future<void> _downloadAndInstallWindows(
       if (await stage.exists()) await stage.delete(recursive: true);
       await stage.create(recursive: true);
 
-      // Prepare everything before closing the running app. The detached helper
-      // only copies verified files and restarts Chernogram after this PID exits.
       status.value = ru ? 'Подготавливаем новую версию…' : 'Preparing new version…';
       final expandScript = File('${tempRoot.path}/expand_update.ps1');
       await expandScript.writeAsString('''
-param([string]$ZipPath, [string]$StagePath)
-$ErrorActionPreference = 'Stop'
-Expand-Archive -LiteralPath $ZipPath -DestinationPath $StagePath -Force
+param([string]\$ZipPath, [string]\$StagePath)
+\$ErrorActionPreference = 'Stop'
+Expand-Archive -LiteralPath \$ZipPath -DestinationPath \$StagePath -Force
 ''');
       final expand = await Process.run(
         'powershell.exe',
@@ -164,48 +162,48 @@ Expand-Archive -LiteralPath $ZipPath -DestinationPath $StagePath -Force
           '${Directory.systemTemp.path}${Platform.pathSeparator}chernogram-update.log';
       String quote(String value) => "'${value.replaceAll("'", "''")}'";
       await helper.writeAsString('''
-$ErrorActionPreference = 'Stop'
-$pidToWait = $pid
-$source = ${quote(stage.path)}
-$dest = ${quote(installDir)}
-$exe = ${quote(exeName)}
-$log = ${quote(log)}
-function Log([string]$text) {
-  Add-Content -LiteralPath $log -Value ("[" + (Get-Date -Format s) + "] " + $text)
+\$ErrorActionPreference = 'Stop'
+\$pidToWait = $pid
+\$source = ${quote(stage.path)}
+\$dest = ${quote(installDir)}
+\$exe = ${quote(exeName)}
+\$log = ${quote(log)}
+function Log([string]\$text) {
+  Add-Content -LiteralPath \$log -Value ("[" + (Get-Date -Format s) + "] " + \$text)
 }
 try {
-  Log "Waiting for PID $pidToWait"
-  for ($i = 0; $i -lt 120; $i++) {
-    if (-not (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue)) { break }
+  Log "Waiting for PID \$pidToWait"
+  for (\$i = 0; \$i -lt 120; \$i++) {
+    if (-not (Get-Process -Id \$pidToWait -ErrorAction SilentlyContinue)) { break }
     Start-Sleep -Milliseconds 250
   }
-  if (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
+  if (Get-Process -Id \$pidToWait -ErrorAction SilentlyContinue) {
     throw "Old Chernogram process did not exit"
   }
   Log "Copying prepared update"
-  Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $dest -Recurse -Force
+  Get-ChildItem -LiteralPath \$source -Force | ForEach-Object {
+    Copy-Item -LiteralPath \$_.FullName -Destination \$dest -Recurse -Force
   }
-  $target = Join-Path $dest $exe
-  if (-not (Test-Path -LiteralPath $target)) {
+  \$target = Join-Path \$dest \$exe
+  if (-not (Test-Path -LiteralPath \$target)) {
     throw "Updated executable was not copied"
   }
   Log "Starting updated Chernogram"
-  Start-Process -FilePath $target -WorkingDirectory $dest
+  Start-Process -FilePath \$target -WorkingDirectory \$dest
   Log "Update completed"
 } catch {
-  Log ("ERROR: " + $_.Exception.Message)
+  Log ("ERROR: " + \$_.Exception.Message)
   try {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
-      "Не удалось завершить обновление Чернограма.`n`n" + $_.Exception.Message + "`n`nЖурнал: " + $log,
+      "Не удалось завершить обновление Чернограма.`n`n" + \$_.Exception.Message + "`n`nЖурнал: " + \$log,
       "Чернограм — обновление"
     ) | Out-Null
   } catch {}
 }
 Start-Sleep -Milliseconds 800
 Remove-Item -LiteralPath ${quote(tempRoot.path)} -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath \$PSCommandPath -Force -ErrorAction SilentlyContinue
 ''');
 
       await Process.start(
