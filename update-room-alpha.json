@@ -1,9 +1,10 @@
 {
-  "versionName": "0.84.0",
-  "versionCode": 84,
-  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
-  "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
+  "versionName": "0.86.0",
+  "versionCode": 86,
+  "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.86.apk",
+  "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.86.zip",
   "sha256": "",
-  "notesRu": "Интерфейсный релиз поверх рабочего транспорта 0.83: desktop-навигация и назад, Enter для отправки, локальные файлы и медиа, плеер, шкала памяти, приватность и разрешения, QR установки внутри Поделиться, системные уведомления сообщений и звонков, фирменная Windows-иконка. Маршруты связи не менялись.",
-  "notesEn": "UI release on top of the proven 0.83 transport: desktop navigation/back, Enter-to-send, local files/media, player, storage meter, privacy and permissions, install QR inside Share, system message/call notifications, and the real Windows icon. Transport routes are unchanged."
+  "windowsSha256": "",
+  "notesRu": "Стабилизация встроенных обновлений без изменения рабочих MQTT/WebRTC маршрутов. Android обновляется через закреплённую подпись и системный установщик, Windows — через отдельный нативный updater-helper. Имена файлов релиза содержат номер версии.",
+  "notesEn": "Built-in update stabilization without changing working MQTT/WebRTC routes. Android uses the pinned signing certificate and system package installer; Windows uses a native updater helper. Release filenames include the exact version."
 }
