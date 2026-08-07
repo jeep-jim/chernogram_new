@@ -64,6 +64,7 @@ jobs:
           python tool/ui_full_084.py
           python tool/fix_ui_084_compile.py
           python tool/ui_polish_085.py
+          python tool/fix_ui_085_compile.py
           python tool/signing_085.py
 
       - name: Materialize mask icons and user ringtone
@@ -115,6 +116,7 @@ jobs:
           python tool/ui_full_084.py
           python tool/fix_ui_084_compile.py
           python tool/ui_polish_085.py
+          python tool/fix_ui_085_compile.py
 
       - name: Materialize exact Chernogram icons and user ringtone
         shell: pwsh
