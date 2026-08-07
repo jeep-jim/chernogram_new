@@ -1,4 +1,4 @@
-name: Chernogram UI Room 0.85
+name: Chernogram Stable Updater 0.86
 
 on:
   push:
@@ -19,11 +19,12 @@ env:
   CG_KEYSTORE_PASSWORD: CgRoomAlpha_85_Stable_9yW2pQ7m
   CG_KEY_ALIAS: chernogram
   CG_KEY_PASSWORD: CgRoomAlpha_85_Stable_9yW2pQ7m
+  CG_CERT_SHA256: 764bb1b6135f9203d8eca41dc7fd84ec6cafdd7b4eb3ad6044765de899195749
 
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -37,29 +38,14 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Restore Chernogram signing key
-        id: signing-cache
+      - name: Restore permanent Chernogram signing key
         uses: actions/cache@v4
         with:
           path: ~/.chernogram-signing/release.jks
           key: chernogram-release-signing-v1
+          fail-on-cache-miss: true
 
-      - name: Create Chernogram signing key once
-        if: steps.signing-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.chernogram-signing
-          keytool -genkeypair -v \
-            -keystore "$CG_KEYSTORE_PATH" \
-            -storetype JKS \
-            -storepass "$CG_KEYSTORE_PASSWORD" \
-            -keypass "$CG_KEY_PASSWORD" \
-            -alias "$CG_KEY_ALIAS" \
-            -keyalg RSA \
-            -keysize 4096 \
-            -validity 10000 \
-            -dname "CN=Chernogram, OU=Room, O=Chernogram, L=Internet, C=DE"
-
-      - name: Apply proven transport and UI 0.85
+      - name: Apply proven transport, UI and updater 0.86
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
@@ -73,8 +59,9 @@ jobs:
           python tool/fix_windows_updater_085.py
           python tool/chat_files_notifications_085.py
           python tool/signing_085.py
+          python tool/updater_086.py
 
-      - name: Materialize mask icons and user ringtone
+      - name: Materialize mask icons and ringtone
         run: |
           python -m pip install --disable-pip-version-check pillow
           python tool/materialize_brand_assets_085.py
@@ -82,29 +69,31 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Analyze UI client
+      - name: Analyze client
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $UI_SOURCES
 
       - name: Build Android APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk --release
 
-      - name: Verify Android signature
+      - name: Verify permanent Android signer
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)
-          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+          CERT_INFO=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk)
+          echo "$CERT_INFO"
+          echo "$CERT_INFO" | grep -qi "$CG_CERT_SHA256"
 
-      - name: Prepare Android artifact
-        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-room.apk
+      - name: Prepare versioned Android artifact
+        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.86.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-android-085
-          path: chernogram-room.apk
+          name: chernogram-android-0.86
+          path: chernogram-android-0.86.apk
           if-no-files-found: error
 
   windows:
     runs-on: windows-2025
-    timeout-minutes: 55
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +102,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply proven transport and UI 0.85
+      - name: Apply proven transport, UI and updater 0.86
         shell: pwsh
         run: |
           python tool/apply_minimal_room_081.py
@@ -127,8 +116,9 @@ jobs:
           python tool/presence_notifications_085.py
           python tool/fix_windows_updater_085.py
           python tool/chat_files_notifications_085.py
+          python tool/updater_086.py
 
-      - name: Materialize exact Chernogram icons and user ringtone
+      - name: Materialize mask icons and ringtone
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check pillow
@@ -140,22 +130,31 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Analyze UI client
+      - name: Analyze client
         shell: pwsh
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:UI_SOURCES.Split(' ')
 
       - name: Build Windows client
         run: flutter build windows --release
 
-      - name: Pack Windows client
+      - name: Enable MSVC command line
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build native updater helper
         shell: pwsh
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-room-windows.zip -Force
+          cl.exe /nologo /std:c++17 /EHsc windows\updater\chernogram_updater.cpp /Fe:build\windows\x64\runner\Release\chernogram_updater.exe
+          if (!(Test-Path build\windows\x64\runner\Release\chernogram_updater.exe)) { throw 'chernogram_updater.exe was not built' }
+
+      - name: Pack versioned Windows client
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-windows-0.86.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-windows-085
-          path: chernogram-room-windows.zip
+          name: chernogram-windows-0.86
+          path: chernogram-windows-0.86.zip
           if-no-files-found: error
 
   release:
@@ -164,43 +163,43 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-android-085
+          name: chernogram-android-0.86
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-windows-085
+          name: chernogram-windows-0.86
           path: dist
 
-      - name: Create online update manifest
+      - name: Create exact-version update manifest
         shell: bash
         run: |
-          APK_SHA=$(sha256sum dist/chernogram-room.apk | cut -d ' ' -f 1)
-          WIN_SHA=$(sha256sum dist/chernogram-room-windows.zip | cut -d ' ' -f 1)
+          APK_SHA=$(sha256sum dist/chernogram-android-0.86.apk | cut -d ' ' -f 1)
+          WIN_SHA=$(sha256sum dist/chernogram-windows-0.86.zip | cut -d ' ' -f 1)
           cat > dist/update.json <<EOF
           {
-            "versionName": "0.85.0",
-            "versionCode": 85,
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
-            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
+            "versionName": "0.86.0",
+            "versionCode": 86,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.86.apk",
+            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.86.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Интерфейс и фон без изменения работающих MQTT/WebRTC маршрутов: фото комнаты; профиль вместо логотипа; Windows остаётся в трее; Android держит фоновую службу; карандаш при наборе; явное прочитано; реакции только по удерживанию; QR закрывается после подключения; уведомления не перекрывают открытый чат; нажатие на уведомление открывает нужный чат; все вложения архивируются в системную папку Загрузки/Чернограм; у каждого файла есть Скачать; изображения в чате уменьшаются без обрезки; улучшен Windows updater.",
-            "notesEn": "UI/background release preserving working MQTT/WebRTC routes: room avatar, profile header, Windows tray residency, Android foreground receiver, typing/read state, long-press reactions, invite QR auto-close, active-room notification suppression, notification-to-room navigation, system Downloads/Chernogram archive for attachments, Download action on every attachment, uncropped image previews, and hardened Windows updater."
+            "notesRu": "Стабилизация обновлений без изменения рабочих маршрутов связи. Android скачивает APK внутри Чернограма, проверяет SHA-256 и передаёт его системному установщику; подпись жёстко закреплена и сборка запрещена при потере ключа. Windows распаковывает пакет до закрытия приложения и применяет его отдельным нативным updater-helper с автоматическим перезапуском. Файлы релиза теперь всегда содержат номер версии.",
+            "notesEn": "Updater stabilization without changing working communication routes. Android downloads and verifies the APK inside Chernogram and opens the system package installer with a pinned signing certificate. Windows stages the package before shutdown and applies it with a native updater helper, then restarts automatically. Release filenames always include the version."
           }
           EOF
 
-      - name: Publish online update 0.85
+      - name: Publish 0.86 with versioned filenames
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.85
+          name: Chernogram Room Alpha 0.86
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Это интерфейс, локальные файлы, фоновые уведомления, typing/read, QR-подключение, фирменные иконки/звук и надёжность встроенного обновления.
+            0.86 фиксирует механизм обновлений. MQTT/WebRTC маршруты не изменяются.
           files: |
-            dist/chernogram-room.apk
-            dist/chernogram-room-windows.zip
+            dist/chernogram-android-0.86.apk
+            dist/chernogram-windows-0.86.zip
             dist/update.json
