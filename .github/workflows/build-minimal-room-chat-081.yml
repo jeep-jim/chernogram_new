@@ -9,8 +9,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: chernogram-room-alpha-build
+  cancel-in-progress: true
+
 env:
-  UI_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/light/light_theme.dart lib/core_models.dart lib/chat_media.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart lib/client_settings.dart lib/device_product_panels.dart lib/legacy_v16_features.dart lib/push_service.dart lib/app_monitor.dart lib/background_runtime.dart lib/desktop_runtime.dart lib/sound_service.dart
+  UI_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/light/light_invite_qr.dart lib/light/light_theme.dart lib/core_models.dart lib/chat_media.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart lib/client_settings.dart lib/device_product_panels.dart lib/legacy_v16_features.dart lib/push_service.dart lib/app_monitor.dart lib/background_runtime.dart lib/desktop_runtime.dart lib/ui_presence.dart lib/sound_service.dart
   CG_KEYSTORE_PATH: /home/runner/.chernogram-signing/release.jks
   CG_KEYSTORE_PASSWORD: CgRoomAlpha_85_Stable_9yW2pQ7m
   CG_KEY_ALIAS: chernogram
@@ -33,14 +37,14 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Restore permanent Chernogram signing key
+      - name: Restore Chernogram signing key
         id: signing-cache
         uses: actions/cache@v4
         with:
           path: ~/.chernogram-signing/release.jks
           key: chernogram-release-signing-v1
 
-      - name: Create permanent Chernogram signing key once
+      - name: Create Chernogram signing key once
         if: steps.signing-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.chernogram-signing
@@ -65,6 +69,9 @@ jobs:
           python tool/fix_ui_084_compile.py
           python tool/ui_polish_085.py
           python tool/fix_ui_085_compile.py
+          python tool/presence_notifications_085.py
+          python tool/fix_windows_updater_085.py
+          python tool/fix_windows_updater_085_v2.py
           python tool/signing_085.py
 
       - name: Materialize mask icons and user ringtone
@@ -117,6 +124,9 @@ jobs:
           python tool/fix_ui_084_compile.py
           python tool/ui_polish_085.py
           python tool/fix_ui_085_compile.py
+          python tool/presence_notifications_085.py
+          python tool/fix_windows_updater_085.py
+          python tool/fix_windows_updater_085_v2.py
 
       - name: Materialize exact Chernogram icons and user ringtone
         shell: pwsh
@@ -175,8 +185,8 @@ jobs:
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Интерфейс и фон без изменения работающих маршрутов: фото комнаты, профиль вместо логотипа и без нижней панели, фирменная мелодия звонка, единая маска-иконка, Windows работает в трее после закрытия окна, Android держит фоновую службу, индикатор набора с карандашом, явное прочитано, реакции только по удерживанию.",
-            "notesEn": "UI/background release preserving working routes: room avatar, profile in the header with no bottom bar, branded ringtone, unified mask icon, Windows tray residency, Android foreground receiver, typing pencil, explicit read state, and reactions only on long press."
+            "notesRu": "Интерфейс и фон без изменения работающих MQTT/WebRTC маршрутов: фото комнаты; профиль вместо логотипа и без нижней панели; фирменная мелодия звонка; единая маска-иконка; Windows остаётся в трее после закрытия окна; Android держит фоновую службу; карандаш при наборе; явное прочитано; реакции только по удерживанию; QR приглашения закрывается после подключения; уведомление не перекрывает открытый чат и показывается при другом чате, свёрнутом или закрытом приложении; улучшен Windows updater.",
+            "notesEn": "UI/background release preserving the working MQTT/WebRTC routes: room avatar, profile in the header with no bottom bar, branded ringtone, unified mask icon, Windows tray residency, Android foreground receiver, typing pencil, explicit read state, reactions on long press, invite QR auto-closes after peer joins, notifications stay out of the open room and return when minimized/hidden, and the Windows updater is hardened."
           }
           EOF
 
@@ -189,7 +199,7 @@ jobs:
           make_latest: false
           overwrite_files: true
           body: |
-            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Добавлены фото комнаты, новый header без нижней навигации, фирменная мелодия входящего звонка, одна маска на Android/Windows, Windows close-to-tray, Android foreground receiver, typing/read UI и реакции только через удерживание. Начиная с этой Android-сборки используется постоянная подпись для следующих OTA-обновлений.
+            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Это интерфейс, локальные медиа, фоновые уведомления, typing/read, QR-подключение, фирменные иконки/звук и надёжность встроенного обновления.
           files: |
             dist/chernogram-room.apk
             dist/chernogram-room-windows.zip
