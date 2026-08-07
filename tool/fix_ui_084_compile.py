@@ -9,6 +9,14 @@ def replace_once(path: str, old: str, new: str) -> None:
     file.write_text(text.replace(old, new, 1), encoding='utf-8')
 
 
+# Restored settings import background_runtime.dart. Keep its Android foreground
+# service dependency available even though Windows itself never starts it.
+replace_once(
+    'pubspec.yaml',
+    '  permission_handler: ^12.0.1\n',
+    '  permission_handler: ^12.0.1\n  flutter_background_service: ^5.1.0\n',
+)
+
 # Named record type for Windows disk stats.
 replace_once(
     'lib/chat_media.dart',
