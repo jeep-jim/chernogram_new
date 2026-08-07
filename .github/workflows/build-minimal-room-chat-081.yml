@@ -71,7 +71,7 @@ jobs:
           python tool/fix_ui_085_compile.py
           python tool/presence_notifications_085.py
           python tool/fix_windows_updater_085.py
-          python tool/fix_windows_updater_dollar_085.py
+          python tool/chat_files_notifications_085.py
           python tool/signing_085.py
 
       - name: Materialize mask icons and user ringtone
@@ -126,7 +126,7 @@ jobs:
           python tool/fix_ui_085_compile.py
           python tool/presence_notifications_085.py
           python tool/fix_windows_updater_085.py
-          python tool/fix_windows_updater_dollar_085.py
+          python tool/chat_files_notifications_085.py
 
       - name: Materialize exact Chernogram icons and user ringtone
         shell: pwsh
@@ -185,8 +185,8 @@ jobs:
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Интерфейс и фон без изменения работающих MQTT/WebRTC маршрутов: фото комнаты; профиль вместо логотипа и без нижней панели; фирменная мелодия звонка; единая маска-иконка; Windows остаётся в трее после закрытия окна; Android держит фоновую службу; карандаш при наборе; явное прочитано; реакции только по удерживанию; QR приглашения закрывается после подключения; уведомление не перекрывает открытый чат и показывается при другом чате, свёрнутом или закрытом приложении; улучшен Windows updater.",
-            "notesEn": "UI/background release preserving the working MQTT/WebRTC routes: room avatar, profile in the header with no bottom bar, branded ringtone, unified mask icon, Windows tray residency, Android foreground receiver, typing pencil, explicit read state, reactions on long press, invite QR auto-closes after peer joins, notifications stay out of the open room and return when minimized/hidden, and the Windows updater is hardened."
+            "notesRu": "Интерфейс и фон без изменения работающих MQTT/WebRTC маршрутов: фото комнаты; профиль вместо логотипа; Windows остаётся в трее; Android держит фоновую службу; карандаш при наборе; явное прочитано; реакции только по удерживанию; QR закрывается после подключения; уведомления не перекрывают открытый чат; нажатие на уведомление открывает нужный чат; все вложения архивируются в системную папку Загрузки/Чернограм; у каждого файла есть Скачать; изображения в чате уменьшаются без обрезки; улучшен Windows updater.",
+            "notesEn": "UI/background release preserving working MQTT/WebRTC routes: room avatar, profile header, Windows tray residency, Android foreground receiver, typing/read state, long-press reactions, invite QR auto-close, active-room notification suppression, notification-to-room navigation, system Downloads/Chernogram archive for attachments, Download action on every attachment, uncropped image previews, and hardened Windows updater."
           }
           EOF
 
@@ -199,7 +199,7 @@ jobs:
           make_latest: false
           overwrite_files: true
           body: |
-            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Это интерфейс, локальные медиа, фоновые уведомления, typing/read, QR-подключение, фирменные иконки/звук и надёжность встроенного обновления.
+            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Это интерфейс, локальные файлы, фоновые уведомления, typing/read, QR-подключение, фирменные иконки/звук и надёжность встроенного обновления.
           files: |
             dist/chernogram-room.apk
             dist/chernogram-room-windows.zip
