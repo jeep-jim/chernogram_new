@@ -60,6 +60,7 @@ jobs:
           python tool/chat_files_notifications_085.py
           python tool/signing_085.py
           python tool/updater_086.py
+          python tool/fix_updater_086_compile.py
 
       - name: Materialize mask icons and ringtone
         run: |
@@ -117,6 +118,7 @@ jobs:
           python tool/fix_windows_updater_085.py
           python tool/chat_files_notifications_085.py
           python tool/updater_086.py
+          python tool/fix_updater_086_compile.py
 
       - name: Materialize mask icons and ringtone
         shell: pwsh
