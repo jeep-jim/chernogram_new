@@ -1,4 +1,4 @@
-name: Chernogram Minimal Room 0.82
+name: Chernogram Stable Room 0.83
 
 on:
   push:
@@ -10,12 +10,12 @@ permissions:
   contents: write
 
 env:
-  MINIMAL_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart
+  MINIMAL_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/core_models.dart lib/chat_media.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart
 
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -29,16 +29,17 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply minimal room build
+      - name: Apply stable room build
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
           python tool/fix_invite_host_082.py
+          python tool/fix_stability_083.py
 
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Analyze minimal client
+      - name: Analyze stable client
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $MINIMAL_SOURCES
 
       - name: Build Android APK
@@ -49,13 +50,13 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-android-082
+          name: chernogram-room-android-083
           path: chernogram-room.apk
           if-no-files-found: error
 
   windows:
     runs-on: windows-2025
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -64,12 +65,13 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply minimal room build
+      - name: Apply stable room build
         shell: pwsh
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
           python tool/fix_invite_host_082.py
+          python tool/fix_stability_083.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -77,7 +79,7 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Analyze minimal client
+      - name: Analyze stable client
         shell: pwsh
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:MINIMAL_SOURCES.Split(' ')
 
@@ -91,7 +93,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-windows-082
+          name: chernogram-room-windows-083
           path: chernogram-room-windows.zip
           if-no-files-found: error
 
@@ -101,40 +103,42 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-android-082
+          name: chernogram-room-android-083
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-windows-082
+          name: chernogram-room-windows-083
           path: dist
 
       - name: Create online update manifest
         shell: bash
         run: |
           APK_SHA=$(sha256sum dist/chernogram-room.apk | cut -d ' ' -f 1)
+          WIN_SHA=$(sha256sum dist/chernogram-room-windows.zip | cut -d ' ' -f 1)
           cat > dist/update.json <<EOF
           {
-            "versionName": "0.82.0",
-            "versionCode": 82,
+            "versionName": "0.83.0",
+            "versionCode": 83,
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
             "sha256": "$APK_SHA",
-            "notesRu": "Минимальный Чернограм: комнаты, чат через интернет, аудио- и видеозвонки, файлы, QR и рабочие ссылки приглашений.",
-            "notesEn": "Minimal Chernogram: rooms, internet chat, audio and video calls, files, QR and working invite links."
+            "windowsSha256": "$WIN_SHA",
+            "notesRu": "Исправлено зависание при отправке: тяжёлые вложения вынесены из настроек на диск, отправка больше не ждёт сетевой reconnect. MQTT переведён на WSS-first. Файлы читаются и передаются частями. Windows 0.83 и новее обновляется внутри приложения с автоматическим перезапуском.",
+            "notesEn": "Fixed send freezes: large attachments are kept on disk, sending no longer waits for network reconnect, MQTT is WSS-first, and files are streamed in chunks. Windows 0.83+ self-updates in app and restarts automatically."
           }
           EOF
 
-      - name: Publish room alpha channel
+      - name: Publish stable room channel
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.82
+          name: Chernogram Room Alpha 0.83
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            Минимальная экспериментальная версия: комнаты, интернет-чат, звонки, файлы, QR-подключение, ссылки приглашений и онлайн-обновления.
+            0.83 — стабилизация отправки и online updater. Вложения больше не сериализуются целиком в SharedPreferences, сеть не блокирует отправку, транспорт сначала использует WSS. Android обновляется через OTA. Windows начиная с 0.83 скачивает ZIP, заменяет файлы и перезапускается самостоятельно.
           files: |
             dist/chernogram-room.apk
             dist/chernogram-room-windows.zip

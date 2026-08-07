@@ -5,25 +5,49 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 
 class _PublicBrokerEndpoint {
-  final String host;
+  final String server;
   final int port;
-  final bool secure;
+  final bool webSocket;
+  final bool secureTcp;
 
-  const _PublicBrokerEndpoint(this.host, this.port, {required this.secure});
+  const _PublicBrokerEndpoint(
+    this.server,
+    this.port, {
+    this.webSocket = false,
+    this.secureTcp = false,
+  });
 
-  String get label => '$host:$port';
+  String get label => '$server:$port';
 }
 
-/// Lightweight internet relay used when the project has no private Impulse
-/// backend configured. Room contents are already AES-GCM encrypted by
-/// InternetTunnelSession before they reach this transport.
+/// Lightweight encrypted room relay.
+///
+/// WSS is preferred because it behaves better across mobile networks and
+/// desktop firewalls than raw MQTT ports. Message contents are AES-GCM
+/// encrypted by InternetTunnelSession before they reach this transport.
 class CgPublicMqttRelay {
   static const List<_PublicBrokerEndpoint> _endpoints =
       <_PublicBrokerEndpoint>[
-        _PublicBrokerEndpoint('broker.emqx.io', 8883, secure: true),
-        _PublicBrokerEndpoint('test.mosquitto.org', 8886, secure: true),
-        _PublicBrokerEndpoint('broker.emqx.io', 1883, secure: false),
-        _PublicBrokerEndpoint('test.mosquitto.org', 1883, secure: false),
+        _PublicBrokerEndpoint(
+          'wss://broker.emqx.io/mqtt',
+          8084,
+          webSocket: true,
+        ),
+        _PublicBrokerEndpoint(
+          'wss://test.mosquitto.org/mqtt',
+          8081,
+          webSocket: true,
+        ),
+        _PublicBrokerEndpoint(
+          'broker.emqx.io',
+          8883,
+          secureTcp: true,
+        ),
+        _PublicBrokerEndpoint(
+          'test.mosquitto.org',
+          8886,
+          secureTcp: true,
+        ),
       ];
 
   final String roomKey;
@@ -36,7 +60,7 @@ class CgPublicMqttRelay {
 
   MqttServerClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _subscription;
-  bool _connecting = false;
+  Completer<void>? _connectCompleter;
   bool _closed = false;
   String? _brokerLabel;
 
@@ -48,6 +72,8 @@ class CgPublicMqttRelay {
   bool get connected =>
       _client?.connectionStatus?.state == MqttConnectionState.connected;
 
+  // Keep the 0.81 topic namespace during the 0.82 -> 0.83 upgrade so rooms
+  // remain compatible while devices update at different times.
   String get _topicBase => 'chernogram/v81/rooms/$roomKey';
   String get _liveTopic => '$_topicBase/live';
   String get _historyTopic => '$_topicBase/history';
@@ -57,74 +83,100 @@ class CgPublicMqttRelay {
     final safe = deviceId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
     final suffix = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     final base = safe.isEmpty ? 'device' : safe;
-    final take = base.length < 18 ? base.length : 18;
-    return 'cg81_${base.substring(0, take)}_$suffix';
+    final take = base.length < 16 ? base.length : 16;
+    return 'cg83_${base.substring(0, take)}_$suffix';
   }
 
-  Future<void> connect() async {
-    if (_closed || connected || _connecting) return;
-    _connecting = true;
+  Future<void> connect() {
+    if (_closed || connected) return Future<void>.value();
+    final current = _connectCompleter;
+    if (current != null) return current.future;
+
+    final completer = Completer<void>();
+    _connectCompleter = completer;
+    unawaited(() async {
+      try {
+        await _connectImpl();
+        if (!completer.isCompleted) completer.complete();
+      } catch (error, stackTrace) {
+        if (!completer.isCompleted) completer.completeError(error, stackTrace);
+      } finally {
+        if (identical(_connectCompleter, completer)) {
+          _connectCompleter = null;
+        }
+      }
+    }());
+    return completer.future;
+  }
+
+  Future<void> _connectImpl() async {
+    if (_closed || connected) return;
     _emitStatus('connecting');
     Object? lastError;
 
-    try {
-      for (final endpoint in _endpoints) {
-        if (_closed) return;
-        MqttServerClient? candidate;
-        try {
-          final clientId = _newClientId();
-          candidate = MqttServerClient.withPort(
-            endpoint.host,
-            clientId,
-            endpoint.port,
-            maxConnectionAttempts: 1,
-          );
-          candidate.logging(on: false);
-          candidate.setProtocolV311();
-          candidate.secure = endpoint.secure;
-          candidate.keepAlivePeriod = 20;
-          candidate.connectTimeoutPeriod = 6500;
-          candidate.disconnectOnNoResponsePeriod = 12;
-          candidate.autoReconnect = false;
-          candidate.resubscribeOnAutoReconnect = true;
-          candidate.connectionMessage = MqttConnectMessage()
-              .withClientIdentifier(clientId)
-              .startClean()
-              .withWillQos(MqttQos.atLeastOnce);
-
-          final status = await candidate.connect().timeout(
-            const Duration(seconds: 8),
-          );
-          if (status?.state != MqttConnectionState.connected) {
-            throw StateError(
-              'MQTT ${endpoint.label}: ${status?.returnCode ?? 'not connected'}',
-            );
-          }
-
-          await _subscription?.cancel();
-          _client?.disconnect();
-          _client = candidate;
-          _brokerLabel = endpoint.label;
-          candidate.onDisconnected = _onDisconnected;
-          candidate.subscribe(_subscriptionTopic, MqttQos.atLeastOnce);
-          _subscription = candidate.updates?.listen(
-            _onUpdates,
-            onError: (_) => _onDisconnected(),
-            cancelOnError: false,
-          );
-          _emitStatus('connected');
-          return;
-        } catch (error) {
-          lastError = error;
-          try {
-            candidate?.disconnect();
-          } catch (_) {}
+    for (final endpoint in _endpoints) {
+      if (_closed) return;
+      MqttServerClient? candidate;
+      try {
+        final clientId = _newClientId();
+        candidate = MqttServerClient.withPort(
+          endpoint.server,
+          clientId,
+          endpoint.port,
+          maxConnectionAttempts: 1,
+        );
+        candidate.logging(on: false, logPayloads: false);
+        candidate.setProtocolV311();
+        candidate.keepAlivePeriod = 20;
+        candidate.connectTimeoutPeriod = 4500;
+        candidate.disconnectOnNoResponsePeriod = 10;
+        candidate.autoReconnect = false;
+        candidate.resubscribeOnAutoReconnect = true;
+        candidate.useWebSocket = endpoint.webSocket;
+        if (endpoint.webSocket) {
+          candidate.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
+          candidate.secure = false;
+        } else {
+          candidate.secure = endpoint.secureTcp;
         }
+        candidate.connectionMessage = MqttConnectMessage()
+            .withClientIdentifier(clientId)
+            .startClean();
+
+        final status = await candidate.connect().timeout(
+          const Duration(seconds: 6),
+        );
+        if (status?.state != MqttConnectionState.connected) {
+          throw StateError(
+            'MQTT ${endpoint.label}: ${status?.returnCode ?? 'not connected'}',
+          );
+        }
+
+        await _subscription?.cancel();
+        try {
+          _client?.disconnect();
+        } catch (_) {}
+        _client = candidate;
+        _brokerLabel = endpoint.label;
+        candidate.onDisconnected = _onDisconnected;
+        candidate.subscribe(_subscriptionTopic, MqttQos.atLeastOnce);
+        _subscription = candidate.updates?.listen(
+          _onUpdates,
+          onError: (_) => _onDisconnected(),
+          cancelOnError: false,
+        );
+        _emitStatus('connected');
+        return;
+      } catch (error) {
+        lastError = error;
+        try {
+          candidate?.disconnect();
+        } catch (_) {}
       }
-      throw lastError ?? StateError('No public MQTT broker is reachable');
-    } finally {
-      _connecting = false;
     }
+
+    _emitStatus('queued');
+    throw lastError ?? StateError('No public MQTT broker is reachable');
   }
 
   void _onUpdates(List<MqttReceivedMessage<MqttMessage>> messages) {
@@ -154,24 +206,21 @@ class CgPublicMqttRelay {
     Map<String, dynamic> envelope, {
     bool retain = false,
   }) async {
-    if (_closed) return false;
-    if (!connected) {
-      try {
-        await connect();
-      } catch (_) {
-        return false;
-      }
-    }
+    if (_closed || !connected) return false;
     final client = _client;
-    if (client == null || !connected) return false;
+    if (client == null) return false;
     try {
       final builder = MqttClientPayloadBuilder()
         ..addUTF8String(jsonEncode(envelope));
       final payload = builder.payload;
       if (payload == null) return false;
+      final kind = envelope['kind']?.toString() ?? '';
+      final qos = kind == 'presence' || kind == 'signal'
+          ? MqttQos.atMostOnce
+          : MqttQos.atLeastOnce;
       client.publishMessage(
         retain ? _historyTopic : _liveTopic,
-        MqttQos.atLeastOnce,
+        qos,
         payload,
         retain: retain,
       );

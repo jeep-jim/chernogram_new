@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class RemoteUpdate {
   final String versionName;
@@ -14,6 +14,7 @@ class RemoteUpdate {
   final String apkUrl;
   final String windowsUrl;
   final String sha256;
+  final String windowsSha256;
   final String notesRu;
   final String notesEn;
 
@@ -23,6 +24,7 @@ class RemoteUpdate {
     required this.apkUrl,
     required this.windowsUrl,
     required this.sha256,
+    required this.windowsSha256,
     required this.notesRu,
     required this.notesEn,
   });
@@ -33,6 +35,7 @@ class RemoteUpdate {
         apkUrl: json['apkUrl']?.toString() ?? '',
         windowsUrl: json['windowsUrl']?.toString() ?? '',
         sha256: json['sha256']?.toString() ?? '',
+        windowsSha256: json['windowsSha256']?.toString() ?? '',
         notesRu: json['notesRu']?.toString() ?? '',
         notesEn: json['notesEn']?.toString() ?? '',
       );
@@ -44,9 +47,9 @@ class ChernogramUpdater {
     'https://raw.githubusercontent.com/jeep-jim/chernogram_new/rebuild/minimal-room-chat-081/update-room-alpha.json',
   ];
 
-  static bool _automaticCheckDone = false;
   static bool _checking = false;
   static bool _installing = false;
+  static DateTime? _lastAutomaticCheck;
 
   static bool get _supported => Platform.isAndroid || Platform.isWindows;
 
@@ -74,7 +77,7 @@ class ChernogramUpdater {
                 'Accept': 'application/json',
               },
             )
-            .timeout(const Duration(seconds: 15));
+            .timeout(const Duration(seconds: 12));
         if (response.statusCode != 200) {
           throw HttpException('Update server returned ${response.statusCode}');
         }
@@ -113,8 +116,14 @@ class ChernogramUpdater {
     bool manual = false,
   }) async {
     if (!_supported || _checking || _installing) return;
-    if (!manual && _automaticCheckDone) return;
-    if (!manual) _automaticCheckDone = true;
+    if (!manual) {
+      final last = _lastAutomaticCheck;
+      if (last != null &&
+          DateTime.now().difference(last) < const Duration(minutes: 8)) {
+        return;
+      }
+      _lastAutomaticCheck = DateTime.now();
+    }
     _checking = true;
 
     try {
@@ -168,18 +177,19 @@ class ChernogramUpdater {
       );
       if (install != true || !context.mounted) return;
       if (Platform.isWindows) {
-        final uri = Uri.tryParse(update.windowsUrl);
-        if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-          throw const HttpException('Could not open Windows update');
-        }
+        await _downloadAndInstallWindows(context, update, ru: ru);
         return;
       }
       await _downloadAndInstallAndroid(context, update, ru: ru);
     } on TimeoutException {
       if (manual && context.mounted) {
-        _showError(context, ru, ru
-            ? 'Сервер обновлений не ответил.'
-            : 'The update server did not respond.');
+        _showError(
+          context,
+          ru,
+          ru
+              ? 'Сервер обновлений не ответил.'
+              : 'The update server did not respond.',
+        );
       }
     } catch (error) {
       if (manual && context.mounted) {
@@ -286,33 +296,193 @@ class ChernogramUpdater {
           }
           if (name.contains('ERROR')) {
             closeDialog();
-            message(ru
-                ? 'Не удалось установить обновление ($name).'
-                : 'The update could not be installed ($name).');
+            message(
+              ru
+                  ? 'Не удалось установить обновление ($name).'
+                  : 'The update could not be installed ($name).',
+            );
             if (!completed.isCompleted) completed.complete();
           }
         },
         onError: (Object error) {
           closeDialog();
-          message(ru
-              ? 'Ошибка скачивания обновления: $error'
-              : 'Update download failed: $error');
+          message(
+            ru
+                ? 'Ошибка скачивания обновления: $error'
+                : 'Update download failed: $error',
+          );
           if (!completed.isCompleted) completed.complete();
         },
         onDone: () {
           if (!completed.isCompleted) completed.complete();
         },
       );
-      await completed.future.timeout(const Duration(minutes: 5));
+      await completed.future.timeout(const Duration(minutes: 8));
     } catch (error) {
       closeDialog();
-      message(ru
-          ? 'Не удалось запустить обновление: $error'
-          : 'Could not start the update: $error');
+      message(
+        ru
+            ? 'Не удалось запустить обновление: $error'
+            : 'Could not start the update: $error',
+      );
     } finally {
       await subscription?.cancel();
       progress.dispose();
       status.dispose();
+      _installing = false;
+    }
+  }
+
+  static Future<void> _downloadAndInstallWindows(
+    BuildContext context,
+    RemoteUpdate update, {
+    required bool ru,
+  }) async {
+    if (_installing) return;
+    _installing = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final progress = ValueNotifier<double>(0);
+    var dialogOpen = true;
+
+    void closeDialog() {
+      if (!dialogOpen) return;
+      dialogOpen = false;
+      if (navigator.canPop()) navigator.pop();
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: Text(ru ? 'Обновление Чернограма' : 'Updating Chernogram'),
+            content: ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, __) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  LinearProgressIndicator(value: value <= 0 ? null : value / 100),
+                  const SizedBox(height: 12),
+                  Text(
+                    ru
+                        ? 'Скачиваем и установим автоматически. Чернограм сам перезапустится.'
+                        : 'Downloading and installing automatically. Chernogram will restart itself.',
+                  ),
+                  if (value > 0) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text('${value.toStringAsFixed(0)}%'),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final tempRoot = await Directory.systemTemp.createTemp('chernogram_update_');
+      final zip = File('${tempRoot.path}/chernogram-room-windows.zip');
+      final request = http.Request('GET', Uri.parse(update.windowsUrl));
+      request.headers['Cache-Control'] = 'no-cache';
+      final client = http.Client();
+      try {
+        final response = await client.send(request).timeout(
+          const Duration(seconds: 20),
+        );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw HttpException('Windows update HTTP ${response.statusCode}');
+        }
+        final length = response.contentLength ?? -1;
+        var received = 0;
+        final sink = zip.openWrite();
+        try {
+          await for (final chunk in response.stream) {
+            sink.add(chunk);
+            received += chunk.length;
+            if (length > 0) {
+              progress.value = (received * 100 / length).clamp(0, 100).toDouble();
+            }
+          }
+          await sink.flush();
+        } finally {
+          await sink.close();
+        }
+      } finally {
+        client.close();
+      }
+
+      if (update.windowsSha256.isNotEmpty) {
+        final digest = await crypto.sha256.bind(zip.openRead()).first;
+        if (digest.toString().toLowerCase() !=
+            update.windowsSha256.toLowerCase()) {
+          throw const FormatException('Windows update checksum mismatch');
+        }
+      }
+
+      final executable = File(Platform.resolvedExecutable);
+      final installDir = executable.parent.path;
+      final exeName = executable.uri.pathSegments.isEmpty
+          ? 'chernogram.exe'
+          : executable.uri.pathSegments.last;
+      final stage = '${tempRoot.path}/stage';
+      final script = File('${tempRoot.path}/apply_update.ps1');
+      String quote(String value) => "'${value.replaceAll("'", "''")}'";
+      await script.writeAsString('''
+\$ErrorActionPreference = 'Stop'
+\$pidToWait = $pid
+while (Get-Process -Id \$pidToWait -ErrorAction SilentlyContinue) {
+  Start-Sleep -Milliseconds 300
+}
+\$zip = ${quote(zip.path)}
+\$stage = ${quote(stage)}
+\$dest = ${quote(installDir)}
+\$exe = ${quote(exeName)}
+if (Test-Path -LiteralPath \$stage) {
+  Remove-Item -LiteralPath \$stage -Recurse -Force
+}
+New-Item -ItemType Directory -Path \$stage -Force | Out-Null
+Expand-Archive -LiteralPath \$zip -DestinationPath \$stage -Force
+Get-ChildItem -LiteralPath \$stage -Force | ForEach-Object {
+  Copy-Item -LiteralPath \$_.FullName -Destination \$dest -Recurse -Force
+}
+Start-Process -FilePath (Join-Path \$dest \$exe)
+Start-Sleep -Seconds 1
+Remove-Item -LiteralPath ${quote(tempRoot.path)} -Recurse -Force -ErrorAction SilentlyContinue
+''');
+
+      await Process.start(
+        'powershell.exe',
+        <String>[
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+        ],
+        mode: ProcessStartMode.detached,
+      );
+      closeDialog();
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      exit(0);
+    } catch (error) {
+      closeDialog();
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 12),
+          content: Text(
+            ru
+                ? 'Не удалось установить обновление: $error'
+                : 'Could not install the update: $error',
+          ),
+        ),
+      );
+    } finally {
+      progress.dispose();
       _installing = false;
     }
   }
