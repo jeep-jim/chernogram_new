@@ -1,9 +1,9 @@
 {
-  "versionName": "0.82.0",
-  "versionCode": 82,
+  "versionName": "0.84.0",
+  "versionCode": 84,
   "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
   "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
   "sha256": "",
-  "notesRu": "Минимальный Чернограм: комнаты, чат через интернет, звонки, файлы, QR и рабочие ссылки приглашений.",
-  "notesEn": "Minimal Chernogram: rooms, internet chat, calls, files, QR and working invite links."
+  "notesRu": "Интерфейсный релиз поверх рабочего транспорта 0.83: desktop-навигация и назад, Enter для отправки, локальные файлы и медиа, плеер, шкала памяти, приватность и разрешения, QR установки внутри Поделиться, системные уведомления сообщений и звонков, фирменная Windows-иконка. Маршруты связи не менялись.",
+  "notesEn": "UI release on top of the proven 0.83 transport: desktop navigation/back, Enter-to-send, local files/media, player, storage meter, privacy and permissions, install QR inside Share, system message/call notifications, and the real Windows icon. Transport routes are unchanged."
 }
