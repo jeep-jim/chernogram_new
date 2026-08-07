@@ -1,4 +1,4 @@
-name: Chernogram UI Room 0.84
+name: Chernogram UI Room 0.85
 
 on:
   push:
@@ -10,12 +10,16 @@ permissions:
   contents: write
 
 env:
-  UI_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/light/light_theme.dart lib/core_models.dart lib/chat_media.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart lib/client_settings.dart lib/device_product_panels.dart lib/legacy_v16_features.dart lib/push_service.dart lib/app_monitor.dart
+  UI_SOURCES: lib/main.dart lib/light/light_chat_app.dart lib/light/light_theme.dart lib/core_models.dart lib/chat_media.dart lib/chat_screen.dart lib/call_service.dart lib/internet_core.dart lib/public_mqtt_transport.dart lib/update_service.dart lib/client_settings.dart lib/device_product_panels.dart lib/legacy_v16_features.dart lib/push_service.dart lib/app_monitor.dart lib/background_runtime.dart lib/desktop_runtime.dart lib/sound_service.dart
+  CG_KEYSTORE_PATH: /home/runner/.chernogram-signing/release.jks
+  CG_KEYSTORE_PASSWORD: CgRoomAlpha_85_Stable_9yW2pQ7m
+  CG_KEY_ALIAS: chernogram
+  CG_KEY_PASSWORD: CgRoomAlpha_85_Stable_9yW2pQ7m
 
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +33,29 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply proven transport and UI 0.84
+      - name: Restore permanent Chernogram signing key
+        id: signing-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.chernogram-signing/release.jks
+          key: chernogram-release-signing-v1
+
+      - name: Create permanent Chernogram signing key once
+        if: steps.signing-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.chernogram-signing
+          keytool -genkeypair -v \
+            -keystore "$CG_KEYSTORE_PATH" \
+            -storetype JKS \
+            -storepass "$CG_KEYSTORE_PASSWORD" \
+            -keypass "$CG_KEY_PASSWORD" \
+            -alias "$CG_KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -dname "CN=Chernogram, OU=Room, O=Chernogram, L=Internet, C=DE"
+
+      - name: Apply proven transport and UI 0.85
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
@@ -37,6 +63,13 @@ jobs:
           python tool/fix_stability_083.py
           python tool/ui_full_084.py
           python tool/fix_ui_084_compile.py
+          python tool/ui_polish_085.py
+          python tool/signing_085.py
+
+      - name: Materialize mask icons and user ringtone
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python tool/materialize_brand_assets_085.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -47,18 +80,23 @@ jobs:
       - name: Build Android APK
         run: flutter build apk --release --target-platform android-arm64
 
+      - name: Verify Android signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n1)
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk
+
       - name: Prepare Android artifact
         run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-room.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-android-084
+          name: chernogram-room-android-085
           path: chernogram-room.apk
           if-no-files-found: error
 
   windows:
     runs-on: windows-2025
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -67,7 +105,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply proven transport and UI 0.84
+      - name: Apply proven transport and UI 0.85
         shell: pwsh
         run: |
           python tool/apply_minimal_room_081.py
@@ -76,12 +114,13 @@ jobs:
           python tool/fix_stability_083.py
           python tool/ui_full_084.py
           python tool/fix_ui_084_compile.py
+          python tool/ui_polish_085.py
 
-      - name: Generate exact Chernogram desktop icon
+      - name: Materialize exact Chernogram icons and user ringtone
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check pillow
-          python tool/generate_windows_icon_084.py
+          python tool/materialize_brand_assets_085.py
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -103,7 +142,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-room-windows-084
+          name: chernogram-room-windows-085
           path: chernogram-room-windows.zip
           if-no-files-found: error
 
@@ -113,12 +152,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-android-084
+          name: chernogram-room-android-085
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-room-windows-084
+          name: chernogram-room-windows-085
           path: dist
 
       - name: Create online update manifest
@@ -128,27 +167,27 @@ jobs:
           WIN_SHA=$(sha256sum dist/chernogram-room-windows.zip | cut -d ' ' -f 1)
           cat > dist/update.json <<EOF
           {
-            "versionName": "0.84.0",
-            "versionCode": 84,
+            "versionName": "0.85.0",
+            "versionCode": 85,
             "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room.apk",
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-room-windows.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Интерфейсный релиз без изменения работающих маршрутов связи: нормальная навигация Windows и кнопка назад, отправка текста по Enter, файлы и медиа с локальным хранением и плеером, шкала памяти устройства, приватность и разрешения, QR установки спрятан в Поделиться, системные уведомления о сообщениях и звонках, фирменная иконка Чернограма на Windows.",
-            "notesEn": "UI-only release preserving the working routes: proper Windows navigation/back button, Enter-to-send, local files/media and player, device storage meter, privacy and permissions, install QR moved into Share, system message/call notifications, and the real Chernogram Windows icon."
+            "notesRu": "Интерфейс и фон без изменения работающих маршрутов: фото комнаты, профиль вместо логотипа и без нижней панели, фирменная мелодия звонка, единая маска-иконка, Windows работает в трее после закрытия окна, Android держит фоновую службу, индикатор набора с карандашом, явное прочитано, реакции только по удерживанию.",
+            "notesEn": "UI/background release preserving working routes: room avatar, profile in the header with no bottom bar, branded ringtone, unified mask icon, Windows tray residency, Android foreground receiver, typing pencil, explicit read state, and reactions only on long press."
           }
           EOF
 
-      - name: Publish online update 0.84
+      - name: Publish online update 0.85
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.84
+          name: Chernogram Room Alpha 0.85
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            0.84 меняет интерфейс и локальные возможности поверх работающего транспорта 0.83. Маршруты MQTT/WebRTC не менялись. Добавлены полноценная desktop-навигация, Enter для отправки, локальные медиа и плеер, память устройства, настройки приватности/разрешений, уведомления и правильная Windows-иконка. Обновление устанавливается из самого приложения.
+            0.85 не меняет рабочие MQTT/WebRTC маршруты 0.83. Добавлены фото комнаты, новый header без нижней навигации, фирменная мелодия входящего звонка, одна маска на Android/Windows, Windows close-to-tray, Android foreground receiver, typing/read UI и реакции только через удерживание. Начиная с этой Android-сборки используется постоянная подпись для следующих OTA-обновлений.
           files: |
             dist/chernogram-room.apk
             dist/chernogram-room-windows.zip
