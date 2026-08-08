@@ -43,18 +43,7 @@ def render_mask(size: int, *, scale_factor: float = 1.0) -> Image.Image:
 
 
 def android_legacy(size: int) -> Image.Image:
-    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    margin = max(1, round(size * 0.04))
-    radius = round(size * 0.23)
-    draw.rounded_rectangle(
-        (margin, margin, size - margin - 1, size - margin - 1),
-        radius=radius,
-        fill=(255, 255, 255, 255),
-    )
-    mask = render_mask(size, scale_factor=0.76)
-    image.alpha_composite(mask)
-    return image
+    return render_mask(size, scale_factor=1.0)
 
 
 # User-supplied ringtone, compactly stored as base64 so GitHub's text-only
