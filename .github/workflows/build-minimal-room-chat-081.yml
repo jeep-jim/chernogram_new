@@ -90,10 +90,10 @@ jobs:
         run: |
           APKANALYZER=$(find "$ANDROID_HOME" -name apkanalyzer -type f | head -n1)
           "$APKANALYZER" manifest print build/app/outputs/flutter-apk/app-release.apk > /tmp/chernogram-manifest.xml
-          grep -Ei 'FOREGROUND_SERVICE_REMOTE_MESSAGING|BackgroundService|remoteMessaging|foregroundServiceType' /tmp/chernogram-manifest.xml || true
+          grep -Ei 'FOREGROUND_SERVICE_REMOTE_MESSAGING|BackgroundService|remoteMessaging|foregroundServiceType|0x200' /tmp/chernogram-manifest.xml || true
           grep -q 'FOREGROUND_SERVICE_REMOTE_MESSAGING' /tmp/chernogram-manifest.xml
           grep -q 'id.flutter.flutter_background_service.BackgroundService' /tmp/chernogram-manifest.xml
-          grep -qi 'remoteMessaging' /tmp/chernogram-manifest.xml
+          grep -Eqi 'remoteMessaging|0x200' /tmp/chernogram-manifest.xml
 
       - name: Prepare versioned Android artifact
         run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.88.apk
@@ -201,8 +201,8 @@ jobs:
             "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.88.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Исправлен Android foreground service для Android 14+: объявлен тип remoteMessaging и соответствующее разрешение. На чистой установке фон больше не стартует до первого экрана, поэтому служба не может закрыть приложение при запуске. В настройках 'Всегда на связи' служба запускается уже с корректным типом. MQTT/WebRTC маршруты не изменены.",
-            "notesEn": "Android foreground-service fix for Android 14+: remoteMessaging type and permission are declared. Background service no longer auto-starts on a fresh install before the first screen, preventing it from killing startup. 'Always connected' starts the service with the proper type. MQTT/WebRTC routes are unchanged."
+            "notesRu": "Исправлен Android foreground service для Android 14+: объявлен тип remoteMessaging и соответствующее разрешение. На старте приложения фоновая служба теперь вообще не конфигурируется и не запускается; она включается только явно через 'Всегда на связи'. Это исключает её из критического пути запуска. MQTT/WebRTC маршруты не изменены.",
+            "notesEn": "Android foreground-service fix for Android 14+: remoteMessaging type and permission are declared. The background service is no longer configured or started during normal app startup; it starts only when Always Connected is explicitly enabled. This removes it from the critical startup path. MQTT/WebRTC routes are unchanged."
           }
           EOF
 
