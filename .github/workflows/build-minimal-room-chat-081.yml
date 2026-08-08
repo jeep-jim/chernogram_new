@@ -181,11 +181,11 @@ jobs:
       - name: Verify 0.91 Windows features
         shell: pwsh
         run: |
-          if (!(Select-String -Path pubspec.yaml -Pattern 'version: 0.91.0+91' -Quiet)) { throw '0.91 version missing' }
-          if (!(Select-String -Path pubspec.yaml -Pattern 'desktop_drop: \^0.7.1' -Quiet)) { throw 'desktop_drop missing' }
-          if (!(Select-String -Path lib\chat_screen.dart -Pattern 'DropTarget\(' -Quiet)) { throw 'drop target missing' }
-          if (!(Select-String -Path lib\chat_media.dart -Pattern 'class _CgInlineVideoPreview' -Quiet)) { throw 'video preview missing' }
-          if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.91.apk' -Quiet)) { throw '0.91 QR URL missing' }
+          if (!(Select-String -Path pubspec.yaml -Pattern 'version: 0.91.0+91' -SimpleMatch -Quiet)) { throw '0.91 version missing' }
+          if (!(Select-String -Path pubspec.yaml -Pattern 'desktop_drop: ^0.7.1' -SimpleMatch -Quiet)) { throw 'desktop_drop missing' }
+          if (!(Select-String -Path lib\chat_screen.dart -Pattern 'DropTarget(' -SimpleMatch -Quiet)) { throw 'drop target missing' }
+          if (!(Select-String -Path lib\chat_media.dart -Pattern 'class _CgInlineVideoPreview' -SimpleMatch -Quiet)) { throw 'video preview missing' }
+          if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.91.apk' -SimpleMatch -Quiet)) { throw '0.91 QR URL missing' }
 
       - name: Build Windows client
         run: flutter build windows --release
