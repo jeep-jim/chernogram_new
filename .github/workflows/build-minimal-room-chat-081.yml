@@ -61,6 +61,7 @@ jobs:
           python tool/signing_085.py
           python tool/updater_086.py
           python tool/fix_updater_086_compile.py
+          python tool/prepare_android_startup_087.py
           python tool/android_startup_087.py
 
       - name: Materialize mask icons and ringtone
@@ -120,6 +121,7 @@ jobs:
           python tool/chat_files_notifications_085.py
           python tool/updater_086.py
           python tool/fix_updater_086_compile.py
+          python tool/prepare_android_startup_087.py
           python tool/android_startup_087.py
 
       - name: Materialize mask icons and ringtone
