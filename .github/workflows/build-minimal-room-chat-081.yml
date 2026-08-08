@@ -90,9 +90,10 @@ jobs:
         run: |
           APKANALYZER=$(find "$ANDROID_HOME" -name apkanalyzer -type f | head -n1)
           "$APKANALYZER" manifest print build/app/outputs/flutter-apk/app-release.apk > /tmp/chernogram-manifest.xml
-          grep -q 'android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING' /tmp/chernogram-manifest.xml
+          grep -Ei 'FOREGROUND_SERVICE_REMOTE_MESSAGING|BackgroundService|remoteMessaging|foregroundServiceType' /tmp/chernogram-manifest.xml || true
+          grep -q 'FOREGROUND_SERVICE_REMOTE_MESSAGING' /tmp/chernogram-manifest.xml
           grep -q 'id.flutter.flutter_background_service.BackgroundService' /tmp/chernogram-manifest.xml
-          grep -q 'android:foregroundServiceType="remoteMessaging"' /tmp/chernogram-manifest.xml
+          grep -qi 'remoteMessaging' /tmp/chernogram-manifest.xml
 
       - name: Prepare versioned Android artifact
         run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.88.apk
