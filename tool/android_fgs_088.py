@@ -54,9 +54,12 @@ if 'android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING' not in text:
         1,
     )
 
+# flutter_background_service_android already declares this service as exported=true.
+# Match that value and only add the Android 14+ foregroundServiceType so the
+# manifest merger stays deterministic.
 service_decl = '''        <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="remoteMessaging" />
 
 '''
