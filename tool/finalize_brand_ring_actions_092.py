@@ -187,6 +187,8 @@ class CgVideoPlayerScreen extends StatefulWidget {'''
 
 
 def media(source: str) -> str:
+    if "package:flutter/gestures.dart" not in source:
+        source = source.replace("import 'package:flutter/material.dart';\n", "import 'package:flutter/gestures.dart';\nimport 'package:flutter/material.dart';\n", 1)
     if "package:file_picker/file_picker.dart" not in source:
         source = source.replace("import 'package:camera/camera.dart';\n", "import 'package:camera/camera.dart';\nimport 'package:file_picker/file_picker.dart';\n", 1)
     return re.sub(
