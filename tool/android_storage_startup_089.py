@@ -56,9 +56,11 @@ replace_once(
 ''',
 )
 
-# Serialize automatic archiving of newly arriving/sent attachments. There is no
+# Serialize automatic archiving of NEW incoming/sent attachments. There is no
 # artificial size cap; each file is copied as a stream and only one archive copy
-# runs at a time.
+# runs at a time. The existing archiveTunnels method is deliberately left
+# untouched so nearby media widgets/voice-recorder declarations cannot be
+# damaged by a broad text replacement. Startup simply no longer calls it.
 replace_block(
     'lib/chat_media.dart',
     '  static Future<void> archiveMessage(CgMessage message) async {',
@@ -82,19 +84,6 @@ replace_block(
   }
 
 ''',
-)
-
-# Keep the public method for compatibility but intentionally do not backfill old
-# history at launch. Existing files stay available through the explicit Download
-# button; new files are archived automatically as they arrive.
-replace_block(
-    'lib/chat_media.dart',
-    '  static Future<void> archiveTunnels(List<CgTunnel> tunnels) async {',
-    "}\n\nclass CgInlineAttachment",
-    '''  static Future<void> archiveTunnels(List<CgTunnel> tunnels) async {
-    // Deliberately no startup backfill. See 0.89 Android startup fix.
-  }
-}\n\nclass CgInlineAttachment''',
 )
 
 # Restore a complete but inert-at-startup MainActivity. saveToDownloads accepts
