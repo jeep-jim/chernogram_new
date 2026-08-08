@@ -65,7 +65,6 @@ jobs:
           python tool/android_startup_087.py
           python tool/android_fgs_088.py
           python tool/android_storage_startup_089.py
-          python tool/fix_android_storage_089_compile.py
 
       - name: Materialize mask icons and ringtone
         run: |
