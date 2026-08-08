@@ -33,16 +33,55 @@ new = '''        autoStart: false,
 if old not in text:
     raise SystemExit('Android background configuration block not found')
 text = text.replace(old, new, 1)
-# Do not auto-start the foreground service on a fresh install. This guarantees
-# that optional background delivery can never kill the first app launch on an
-# OEM that has stricter foreground-service policy. The user can enable
-# "Always connected" after the UI is up; that path now has the proper service type.
+
+# Never start the foreground service merely because initialize() is called.
+# It starts only from the explicit setEnabled(true) path after the app UI is
+# already alive. This also neutralizes an old saved "always connected=true"
+# value from 0.85/0.87 during the first launch of 0.88.
+text = text.replace(
+    "    if (await isEnabled()) await _service.startService();\n",
+    "    // Explicitly started only by setEnabled(true).\n",
+    1,
+)
 text = text.replace(
     "    return prefs.getBool(_backgroundEnabledKey) ?? true;\n",
     "    return prefs.getBool(_backgroundEnabledKey) ?? false;\n",
     1,
 )
+text = text.replace(
+    "  static void setAppVisible(bool visible) {\n    if (!Platform.isAndroid) return;\n    _service.invoke('appState', <String, dynamic>{'visible': visible});\n  }\n",
+    "  static void setAppVisible(bool visible) {\n    if (!Platform.isAndroid || !_configured) return;\n    _service.invoke('appState', <String, dynamic>{'visible': visible});\n  }\n",
+    1,
+)
 background.write_text(text, encoding='utf-8')
+
+# Do not even configure the Android background-service plugin during normal
+# app startup. It will be initialized on demand when the user enables
+# "Always connected". Push initialization remains independent.
+main = Path('lib/main.dart')
+text = main.read_text(encoding='utf-8')
+old_main = '''  unawaited(() async {
+    if (Platform.isAndroid) {
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 900));
+        await CgBackgroundRuntime.initialize();
+        CgBackgroundRuntime.setAppVisible(true);
+      } catch (_) {}
+    }
+    try {
+      await CgPushService.initialize();
+    } catch (_) {}
+  }());
+'''
+new_main = '''  unawaited(() async {
+    try {
+      await CgPushService.initialize();
+    } catch (_) {}
+  }());
+'''
+if old_main not in text:
+    raise SystemExit('Android delayed background startup block not found')
+main.write_text(text.replace(old_main, new_main, 1), encoding='utf-8')
 
 manifest = Path('android/app/src/main/AndroidManifest.xml')
 text = manifest.read_text(encoding='utf-8')
