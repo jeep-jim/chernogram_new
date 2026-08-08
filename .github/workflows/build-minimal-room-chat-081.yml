@@ -1,4 +1,4 @@
-name: Chernogram Android Stability 0.88
+name: Chernogram Android Recovery 0.89
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: chernogram-room-alpha-build
+  group: chernogram-android-recovery-089
   cancel-in-progress: true
 
 env:
@@ -45,7 +45,7 @@ jobs:
           key: chernogram-release-signing-v1
           fail-on-cache-miss: true
 
-      - name: Apply proven transport, UI and Android stability 0.88
+      - name: Apply proven transport, UI and Android recovery 0.89
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
@@ -64,6 +64,7 @@ jobs:
           python tool/prepare_android_startup_087.py
           python tool/android_startup_087.py
           python tool/android_fgs_088.py
+          python tool/android_storage_startup_089.py
 
       - name: Materialize mask icons and ringtone
         run: |
@@ -76,6 +77,14 @@ jobs:
       - name: Analyze client
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $UI_SOURCES
 
+      - name: Verify startup and file-streaming guards in source
+        run: |
+          ! grep -q 'archiveTunnels(_chats)' lib/light/light_chat_app.dart
+          ! grep -A12 -B4 "'saveToDownloads'" lib/chat_media.dart | grep -q 'readAsBytes'
+          grep -q "'sourcePath': source.path" lib/chat_media.dart
+          grep -q 'source.inputStream().buffered()' android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
+          grep -q 'version: 0.89.0+89' pubspec.yaml
+
       - name: Build Android APK
         run: flutter build apk --release
 
@@ -86,137 +95,41 @@ jobs:
           echo "$CERT_INFO"
           echo "$CERT_INFO" | grep -qi "$CG_CERT_SHA256"
 
-      - name: Verify Android foreground-service manifest
+      - name: Verify merged Android manifest
         run: |
           APKANALYZER=$(find "$ANDROID_HOME" -name apkanalyzer -type f | head -n1)
           "$APKANALYZER" manifest print build/app/outputs/flutter-apk/app-release.apk > /tmp/chernogram-manifest.xml
-          grep -Ei 'FOREGROUND_SERVICE_REMOTE_MESSAGING|BackgroundService|remoteMessaging|foregroundServiceType|0x200' /tmp/chernogram-manifest.xml || true
           grep -q 'FOREGROUND_SERVICE_REMOTE_MESSAGING' /tmp/chernogram-manifest.xml
           grep -q 'id.flutter.flutter_background_service.BackgroundService' /tmp/chernogram-manifest.xml
-          grep -Eqi 'remoteMessaging|0x200' /tmp/chernogram-manifest.xml
+          grep -Eqi 'foregroundServiceType="0x200"|remoteMessaging' /tmp/chernogram-manifest.xml
 
       - name: Prepare versioned Android artifact
-        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.88.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.89.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-android-0.88
-          path: chernogram-android-0.88.apk
-          if-no-files-found: error
-
-  windows:
-    runs-on: windows-2025
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Apply proven transport, UI and updater 0.88
-        shell: pwsh
-        run: |
-          python tool/apply_minimal_room_081.py
-          python tool/fix_minimal_room_081.py
-          python tool/fix_invite_host_082.py
-          python tool/fix_stability_083.py
-          python tool/ui_full_084.py
-          python tool/fix_ui_084_compile.py
-          python tool/ui_polish_085.py
-          python tool/fix_ui_085_compile.py
-          python tool/presence_notifications_085.py
-          python tool/fix_windows_updater_085.py
-          python tool/chat_files_notifications_085.py
-          python tool/updater_086.py
-          python tool/fix_updater_086_compile.py
-          python tool/prepare_android_startup_087.py
-          python tool/android_startup_087.py
-          python tool/android_fgs_088.py
-
-      - name: Materialize mask icons and ringtone
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check pillow
-          python tool/materialize_brand_assets_085.py
-
-      - name: Resolve dependencies
-        run: flutter pub get
-
-      - name: Enable Windows desktop
-        run: flutter config --enable-windows-desktop
-
-      - name: Analyze client
-        shell: pwsh
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:UI_SOURCES.Split(' ')
-
-      - name: Build Windows client
-        run: flutter build windows --release
-
-      - name: Enable MSVC command line
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build native updater helper
-        shell: pwsh
-        run: |
-          cl.exe /nologo /std:c++17 /EHsc windows\updater\chernogram_updater.cpp /Fe:build\windows\x64\runner\Release\chernogram_updater.exe
-          if (!(Test-Path build\windows\x64\runner\Release\chernogram_updater.exe)) { throw 'chernogram_updater.exe was not built' }
-
-      - name: Pack versioned Windows client
-        shell: pwsh
-        run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-windows-0.88.zip -Force
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: chernogram-windows-0.88
-          path: chernogram-windows-0.88.zip
+          name: chernogram-android-0.89
+          path: chernogram-android-0.89.apk
           if-no-files-found: error
 
   release:
-    needs: [android, windows]
+    needs: android
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-android-0.88
+          name: chernogram-android-0.89
           path: dist
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: chernogram-windows-0.88
-          path: dist
-
-      - name: Create exact-version update manifest
-        shell: bash
-        run: |
-          APK_SHA=$(sha256sum dist/chernogram-android-0.88.apk | cut -d ' ' -f 1)
-          WIN_SHA=$(sha256sum dist/chernogram-windows-0.88.zip | cut -d ' ' -f 1)
-          cat > dist/update.json <<EOF
-          {
-            "versionName": "0.88.0",
-            "versionCode": 88,
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.88.apk",
-            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.88.zip",
-            "sha256": "$APK_SHA",
-            "windowsSha256": "$WIN_SHA",
-            "notesRu": "Исправлен Android foreground service для Android 14+: объявлен тип remoteMessaging и соответствующее разрешение. На старте приложения фоновая служба теперь вообще не конфигурируется и не запускается; она включается только явно через 'Всегда на связи'. Это исключает её из критического пути запуска. MQTT/WebRTC маршруты не изменены.",
-            "notesEn": "Android foreground-service fix for Android 14+: remoteMessaging type and permission are declared. The background service is no longer configured or started during normal app startup; it starts only when Always Connected is explicitly enabled. This removes it from the critical startup path. MQTT/WebRTC routes are unchanged."
-          }
-          EOF
-
-      - name: Publish 0.88
+      - name: Publish Android recovery 0.89 without replacing OTA manifest
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.88
+          name: Chernogram Room Alpha 0.89 Android Recovery
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            0.88 исправляет Android foreground-service crash. MQTT/WebRTC маршруты не изменяются.
+            Android recovery 0.89. Убран массовый экспорт всей истории файлов при старте; системное сохранение файлов теперь потоковое и не загружает весь файл в память. MQTT/WebRTC маршруты не изменены. update.json намеренно пока не заменяется, чтобы рабочий Windows 0.88 не получил ложное обновление.
           files: |
-            dist/chernogram-android-0.88.apk
-            dist/chernogram-windows-0.88.zip
-            dist/update.json
+            dist/chernogram-android-0.89.apk
