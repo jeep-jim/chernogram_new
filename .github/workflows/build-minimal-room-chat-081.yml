@@ -1,4 +1,4 @@
-name: Chernogram Android Recovery 0.89
+name: Chernogram Distribution 0.90
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: chernogram-android-recovery-089
+  group: chernogram-room-alpha-build
   cancel-in-progress: true
 
 env:
@@ -45,7 +45,7 @@ jobs:
           key: chernogram-release-signing-v1
           fail-on-cache-miss: true
 
-      - name: Apply proven transport, UI and Android recovery 0.89
+      - name: Apply proven transport, UI and distribution 0.90
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
@@ -65,6 +65,7 @@ jobs:
           python tool/android_startup_087.py
           python tool/android_fgs_088.py
           python tool/android_storage_startup_089.py
+          python tool/install_update_090.py
 
       - name: Materialize mask icons and ringtone
         run: |
@@ -77,13 +78,15 @@ jobs:
       - name: Analyze client
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $UI_SOURCES
 
-      - name: Verify startup and file-streaming guards in source
+      - name: Verify Android startup, file streaming and install QR
         run: |
           ! grep -q 'archiveTunnels(_chats)' lib/light/light_chat_app.dart
           ! grep -A12 -B4 "'saveToDownloads'" lib/chat_media.dart | grep -q 'readAsBytes'
           grep -q "'sourcePath': source.path" lib/chat_media.dart
           grep -q 'source.inputStream().buffered()' android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
-          grep -q 'version: 0.89.0+89' pubspec.yaml
+          grep -q 'version: 0.90.0+90' pubspec.yaml
+          grep -q 'chernogram-android-0.90.apk' lib/client_settings.dart
+          ! grep -q 'chernogram-room.apk' lib/client_settings.dart
 
       - name: Build Android APK
         run: flutter build apk --release
@@ -103,33 +106,136 @@ jobs:
           grep -q 'id.flutter.flutter_background_service.BackgroundService' /tmp/chernogram-manifest.xml
           grep -Eqi 'foregroundServiceType="0x200"|remoteMessaging' /tmp/chernogram-manifest.xml
 
-      - name: Prepare versioned Android artifact
-        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.89.apk
+      - name: Prepare Android artifact
+        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.90.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-android-0.89
-          path: chernogram-android-0.89.apk
+          name: chernogram-android-0.90
+          path: chernogram-android-0.90.apk
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Apply proven transport, UI and distribution 0.90
+        shell: pwsh
+        run: |
+          python tool/apply_minimal_room_081.py
+          python tool/fix_minimal_room_081.py
+          python tool/fix_invite_host_082.py
+          python tool/fix_stability_083.py
+          python tool/ui_full_084.py
+          python tool/fix_ui_084_compile.py
+          python tool/ui_polish_085.py
+          python tool/fix_ui_085_compile.py
+          python tool/presence_notifications_085.py
+          python tool/fix_windows_updater_085.py
+          python tool/chat_files_notifications_085.py
+          python tool/updater_086.py
+          python tool/fix_updater_086_compile.py
+          python tool/prepare_android_startup_087.py
+          python tool/android_startup_087.py
+          python tool/android_fgs_088.py
+          python tool/android_storage_startup_089.py
+          python tool/install_update_090.py
+
+      - name: Materialize mask icons and ringtone
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python tool/materialize_brand_assets_085.py
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Analyze client
+        shell: pwsh
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:UI_SOURCES.Split(' ')
+
+      - name: Verify versioned install share URL
+        shell: pwsh
+        run: |
+          if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.90.apk' -Quiet)) { throw 'Install QR is not pinned to Android 0.90' }
+          if (Select-String -Path lib\client_settings.dart -Pattern 'chernogram-room.apk' -Quiet) { throw 'Obsolete APK alias remains in install share' }
+
+      - name: Build Windows client
+        run: flutter build windows --release
+
+      - name: Enable MSVC command line
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build native updater helper
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc windows\updater\chernogram_updater.cpp /Fe:build\windows\x64\runner\Release\chernogram_updater.exe
+          if (!(Test-Path build\windows\x64\runner\Release\chernogram_updater.exe)) { throw 'chernogram_updater.exe was not built' }
+
+      - name: Pack Windows client
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-windows-0.90.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chernogram-windows-0.90
+          path: chernogram-windows-0.90.zip
           if-no-files-found: error
 
   release:
-    needs: android
+    needs: [android, windows]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-android-0.89
+          name: chernogram-android-0.90
           path: dist
 
-      - name: Publish Android recovery 0.89 without replacing OTA manifest
+      - uses: actions/download-artifact@v4
+        with:
+          name: chernogram-windows-0.90
+          path: dist
+
+      - name: Create online update manifest
+        shell: bash
+        run: |
+          APK_SHA=$(sha256sum dist/chernogram-android-0.90.apk | cut -d ' ' -f 1)
+          WIN_SHA=$(sha256sum dist/chernogram-windows-0.90.zip | cut -d ' ' -f 1)
+          cat > dist/update.json <<EOF
+          {
+            "versionName": "0.90.0",
+            "versionCode": 90,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.90.apk",
+            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.90.zip",
+            "sha256": "$APK_SHA",
+            "windowsSha256": "$WIN_SHA",
+            "notesRu": "Исправлена раздача установки: QR, Копировать и Отправить теперь ведут на точный актуальный APK 0.90, а не на старый chernogram-room.apk. Восстановлен единый online-update manifest для Android и Windows. Android сохраняет исправление запуска 0.89 и потоковое копирование файлов. MQTT/WebRTC маршруты не изменены.",
+            "notesEn": "Install sharing fixed: QR, Copy and Share now point to the exact current Android 0.90 APK instead of the obsolete chernogram-room.apk alias. Unified online update manifest restored for Android and Windows. Android keeps the 0.89 startup/file-streaming fix. MQTT/WebRTC routes are unchanged."
+          }
+          EOF
+
+      - name: Publish 0.90
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.89 Android Recovery
+          name: Chernogram Room Alpha 0.90
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            Android recovery 0.89. Убран массовый экспорт всей истории файлов при старте; системное сохранение файлов теперь потоковое и не загружает весь файл в память. MQTT/WebRTC маршруты не изменены. update.json намеренно пока не заменяется, чтобы рабочий Windows 0.88 не получил ложное обновление.
+            0.90 исправляет QR/ссылку установки и возвращает единое онлайн-обновление Android + Windows. Ссылка установки внутри приложения теперь версионная и проверяется в CI.
           files: |
-            dist/chernogram-android-0.89.apk
+            dist/chernogram-android-0.90.apk
+            dist/chernogram-windows-0.90.zip
+            dist/update.json
