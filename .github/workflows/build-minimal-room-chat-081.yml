@@ -1,4 +1,4 @@
-name: Chernogram Distribution 0.90
+name: Chernogram Media and Presence 0.91
 
 on:
   push:
@@ -24,7 +24,7 @@ env:
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +45,7 @@ jobs:
           key: chernogram-release-signing-v1
           fail-on-cache-miss: true
 
-      - name: Apply proven transport, UI and distribution 0.90
+      - name: Apply proven transport, UI and 0.91 features
         run: |
           python tool/apply_minimal_room_081.py
           python tool/fix_minimal_room_081.py
@@ -66,6 +66,9 @@ jobs:
           python tool/android_fgs_088.py
           python tool/android_storage_startup_089.py
           python tool/install_update_090.py
+          python tool/media_presence_091.py
+          python tool/install_update_091.py
+          python tool/fix_media_presence_091_compile.py
 
       - name: Materialize mask icons and ringtone
         run: |
@@ -78,15 +81,22 @@ jobs:
       - name: Analyze client
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $UI_SOURCES
 
-      - name: Verify Android startup, file streaming and install QR
+      - name: Verify 0.91 Android features
         run: |
+          grep -q 'version: 0.91.0+91' pubspec.yaml
+          grep -q 'desktop_drop: ^0.7.1' pubspec.yaml
+          grep -q 'chernogram-android-0.91.apk' lib/client_settings.dart
+          grep -q 'class _CgInlineVideoPreview' lib/chat_media.dart
+          grep -q 'class _CgInlineCircle' lib/chat_media.dart
+          grep -q 'DropTarget(' lib/chat_screen.dart
+          grep -q 'chernogram_messages_v2' lib/background_runtime.dart
+          grep -q 'chernogram_calls_v3' lib/background_runtime.dart
+          grep -q 'additionalFlags: Int32List.fromList' lib/background_runtime.dart
+          grep -q 'for (final tunnel in recent)' lib/background_runtime.dart
+          ! grep -q 'recent.take(12)' lib/background_runtime.dart
           ! grep -q 'archiveTunnels(_chats)' lib/light/light_chat_app.dart
-          ! grep -A12 -B4 "'saveToDownloads'" lib/chat_media.dart | grep -q 'readAsBytes'
           grep -q "'sourcePath': source.path" lib/chat_media.dart
           grep -q 'source.inputStream().buffered()' android/app/src/main/kotlin/com/example/chernogram/MainActivity.kt
-          grep -q 'version: 0.90.0+90' pubspec.yaml
-          grep -q 'chernogram-android-0.90.apk' lib/client_settings.dart
-          ! grep -q 'chernogram-room.apk' lib/client_settings.dart
 
       - name: Build Android APK
         run: flutter build apk --release
@@ -104,20 +114,21 @@ jobs:
           "$APKANALYZER" manifest print build/app/outputs/flutter-apk/app-release.apk > /tmp/chernogram-manifest.xml
           grep -q 'FOREGROUND_SERVICE_REMOTE_MESSAGING' /tmp/chernogram-manifest.xml
           grep -q 'id.flutter.flutter_background_service.BackgroundService' /tmp/chernogram-manifest.xml
+          grep -q 'android.permission.WAKE_LOCK' /tmp/chernogram-manifest.xml
           grep -Eqi 'foregroundServiceType="0x200"|remoteMessaging' /tmp/chernogram-manifest.xml
 
       - name: Prepare Android artifact
-        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.90.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk chernogram-android-0.91.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-android-0.90
-          path: chernogram-android-0.90.apk
+          name: chernogram-android-0.91
+          path: chernogram-android-0.91.apk
           if-no-files-found: error
 
   windows:
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
 
@@ -126,7 +137,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Apply proven transport, UI and distribution 0.90
+      - name: Apply proven transport, UI and 0.91 features
         shell: pwsh
         run: |
           python tool/apply_minimal_room_081.py
@@ -147,6 +158,9 @@ jobs:
           python tool/android_fgs_088.py
           python tool/android_storage_startup_089.py
           python tool/install_update_090.py
+          python tool/media_presence_091.py
+          python tool/install_update_091.py
+          python tool/fix_media_presence_091_compile.py
 
       - name: Materialize mask icons and ringtone
         shell: pwsh
@@ -164,11 +178,14 @@ jobs:
         shell: pwsh
         run: flutter analyze --no-fatal-infos --no-fatal-warnings $env:UI_SOURCES.Split(' ')
 
-      - name: Verify versioned install share URL
+      - name: Verify 0.91 Windows features
         shell: pwsh
         run: |
-          if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.90.apk' -Quiet)) { throw 'Install QR is not pinned to Android 0.90' }
-          if (Select-String -Path lib\client_settings.dart -Pattern 'chernogram-room.apk' -Quiet) { throw 'Obsolete APK alias remains in install share' }
+          if (!(Select-String -Path pubspec.yaml -Pattern 'version: 0.91.0+91' -Quiet)) { throw '0.91 version missing' }
+          if (!(Select-String -Path pubspec.yaml -Pattern 'desktop_drop: \^0.7.1' -Quiet)) { throw 'desktop_drop missing' }
+          if (!(Select-String -Path lib\chat_screen.dart -Pattern 'DropTarget\(' -Quiet)) { throw 'drop target missing' }
+          if (!(Select-String -Path lib\chat_media.dart -Pattern 'class _CgInlineVideoPreview' -Quiet)) { throw 'video preview missing' }
+          if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.91.apk' -Quiet)) { throw '0.91 QR URL missing' }
 
       - name: Build Windows client
         run: flutter build windows --release
@@ -185,12 +202,12 @@ jobs:
       - name: Pack Windows client
         shell: pwsh
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-windows-0.90.zip -Force
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath chernogram-windows-0.91.zip -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: chernogram-windows-0.90
-          path: chernogram-windows-0.90.zip
+          name: chernogram-windows-0.91
+          path: chernogram-windows-0.91.zip
           if-no-files-found: error
 
   release:
@@ -199,43 +216,43 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-android-0.90
+          name: chernogram-android-0.91
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: chernogram-windows-0.90
+          name: chernogram-windows-0.91
           path: dist
 
       - name: Create online update manifest
         shell: bash
         run: |
-          APK_SHA=$(sha256sum dist/chernogram-android-0.90.apk | cut -d ' ' -f 1)
-          WIN_SHA=$(sha256sum dist/chernogram-windows-0.90.zip | cut -d ' ' -f 1)
+          APK_SHA=$(sha256sum dist/chernogram-android-0.91.apk | cut -d ' ' -f 1)
+          WIN_SHA=$(sha256sum dist/chernogram-windows-0.91.zip | cut -d ' ' -f 1)
           cat > dist/update.json <<EOF
           {
-            "versionName": "0.90.0",
-            "versionCode": 90,
-            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.90.apk",
-            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.90.zip",
+            "versionName": "0.91.0",
+            "versionCode": 91,
+            "apkUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-android-0.91.apk",
+            "windowsUrl": "https://github.com/jeep-jim/chernogram_new/releases/download/latest-room-alpha/chernogram-windows-0.91.zip",
             "sha256": "$APK_SHA",
             "windowsSha256": "$WIN_SHA",
-            "notesRu": "Исправлена раздача установки: QR, Копировать и Отправить теперь ведут на точный актуальный APK 0.90, а не на старый chernogram-room.apk. Восстановлен единый online-update manifest для Android и Windows. Android сохраняет исправление запуска 0.89 и потоковое копирование файлов. MQTT/WebRTC маршруты не изменены.",
-            "notesEn": "Install sharing fixed: QR, Copy and Share now point to the exact current Android 0.90 APK instead of the obsolete chernogram-room.apk alias. Unified online update manifest restored for Android and Windows. Android keeps the 0.89 startup/file-streaming fix. MQTT/WebRTC routes are unchanged."
+            "notesRu": "Медиа 0.91: удалён чёрный зависающий кружок у получателя; фото/GIF/видео всегда показывают превью и открываются на весь экран; Windows принимает файлы перетаскиванием прямо в чат; в медиатеке появились реальные превью. Android снова держит безопасную фоновую связь после запуска и показывает сообщения на заблокированном экране. Звонок использует повторяющуюся полную мелодию. На главной показан @никнейм, фото профиля можно удалить. QR установки ведёт на APK 0.91.",
+            "notesEn": "Media 0.91: remote circles recover after transfer; photo/GIF/video always show previews and open full screen; Windows accepts files by drag-and-drop; media library has real previews. Android background delivery is re-enabled after safe delayed startup and lock-screen messages are visible. Incoming-call sound repeats until the call notification ends. Home shows @nickname and profile photo can be removed. Install QR points to Android 0.91."
           }
           EOF
 
-      - name: Publish 0.90
+      - name: Publish 0.91
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-room-alpha
-          name: Chernogram Room Alpha 0.90
+          name: Chernogram Room Alpha 0.91
           prerelease: true
           make_latest: false
           overwrite_files: true
           body: |
-            0.90 исправляет QR/ссылку установки и возвращает единое онлайн-обновление Android + Windows. Ссылка установки внутри приложения теперь версионная и проверяется в CI.
+            0.91 — медиа-превью, исправление кружков, drag-and-drop Windows, фоновые Android-уведомления, полный рингтон и правки профиля. Онлайн-обновление Android + Windows сохраняется.
           files: |
-            dist/chernogram-android-0.90.apk
-            dist/chernogram-windows-0.90.zip
+            dist/chernogram-android-0.91.apk
+            dist/chernogram-windows-0.91.zip
             dist/update.json
