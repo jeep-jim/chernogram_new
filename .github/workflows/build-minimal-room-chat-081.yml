@@ -87,10 +87,10 @@ jobs:
       - name: Verify 0.94 Android features
         run: |
           grep -q 'version: 0.94.0+94' pubspec.yaml
-          grep -q 'clipboard: ^3.0.14' pubspec.yaml
+          grep -q 'pasteboard: ^0.5.0' pubspec.yaml
           grep -q 'desktop_drop: ^0.7.1' pubspec.yaml
           grep -q 'chernogram-android-0.94.apk' lib/client_settings.dart
-          grep -q 'FlutterClipboard.pasteImage' lib/chat_screen.dart
+          grep -q 'Pasteboard.image' lib/chat_screen.dart
           grep -q 'contextMenuBuilder: _composerContextMenu' lib/chat_screen.dart
           grep -q 'LogicalKeyboardKey.keyV' lib/chat_screen.dart
           grep -q 'class _CgInlineVideoPreview' lib/chat_media.dart
@@ -187,16 +187,6 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Fix clipboard Windows warning promoted to error
-        shell: pwsh
-        run: |
-          $source = Join-Path $env:PUB_CACHE 'hosted\pub.dev\clipboard-3.0.14\windows\clipboard_plugin.cpp'
-          if (!(Test-Path $source)) { throw 'clipboard Windows source missing' }
-          $content = Get-Content -Path $source -Raw
-          $content = $content -replace '(?m)^\s*DWORD headerSize = \(dibFormat == CF_DIBV5\).*\r?\n', ''
-          Set-Content -Path $source -Value $content -NoNewline
-          if (Select-String -Path $source -Pattern 'DWORD headerSize' -SimpleMatch -Quiet) { throw 'clipboard warning patch failed' }
-
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
@@ -208,12 +198,12 @@ jobs:
         shell: pwsh
         run: |
           if (!(Select-String -Path pubspec.yaml -Pattern 'version: 0.94.0+94' -SimpleMatch -Quiet)) { throw '0.94 version missing' }
-          if (!(Select-String -Path pubspec.yaml -Pattern 'clipboard: ^3.0.14' -SimpleMatch -Quiet)) { throw 'clipboard plugin missing' }
+          if (!(Select-String -Path pubspec.yaml -Pattern 'pasteboard: ^0.5.0' -SimpleMatch -Quiet)) { throw 'pasteboard plugin missing' }
           if (!(Select-String -Path pubspec.yaml -Pattern 'desktop_drop: ^0.7.1' -SimpleMatch -Quiet)) { throw 'desktop_drop missing' }
           if (!(Select-String -Path lib\chat_screen.dart -Pattern 'DropTarget(' -SimpleMatch -Quiet)) { throw 'drop target missing' }
           if (!(Select-String -Path lib\chat_media.dart -Pattern 'class _CgInlineVideoPreview' -SimpleMatch -Quiet)) { throw 'video preview missing' }
           if (!(Select-String -Path lib\client_settings.dart -Pattern 'chernogram-android-0.94.apk' -SimpleMatch -Quiet)) { throw '0.94 QR URL missing' }
-          if (!(Select-String -Path lib\chat_screen.dart -Pattern 'FlutterClipboard.pasteImage' -SimpleMatch -Quiet)) { throw 'clipboard image paste missing' }
+          if (!(Select-String -Path lib\chat_screen.dart -Pattern 'Pasteboard.image' -SimpleMatch -Quiet)) { throw 'clipboard image paste missing' }
           if (!(Select-String -Path lib\chat_screen.dart -Pattern 'contextMenuBuilder: _composerContextMenu' -SimpleMatch -Quiet)) { throw 'composer context menu missing' }
           if (!(Select-String -Path lib\chat_screen.dart -Pattern 'LogicalKeyboardKey.keyV' -SimpleMatch -Quiet)) { throw 'Ctrl+V shortcut missing' }
           if (!(Select-String -Path lib\internet_core.dart -Pattern "'action': 'file_request'" -SimpleMatch -Quiet)) { throw 'file retry missing' }

@@ -15,7 +15,7 @@ def patch(path: str, transform) -> None:
 def pubspec(source: str) -> str:
     source = source.replace(
         '  camera: ^0.12.0+2\n',
-        '  camera: ^0.12.0+2\n  clipboard: ^3.0.14\n',
+        '  camera: ^0.12.0+2\n  pasteboard: ^0.5.0\n',
         1,
     )
     return re.sub(r'^version: .*$', 'version: 0.94.0+94', source, count=1, flags=re.M)
@@ -24,7 +24,7 @@ def pubspec(source: str) -> str:
 def chat(source: str) -> str:
     source = source.replace(
         "import 'package:cross_file/cross_file.dart';\n",
-        "import 'package:cross_file/cross_file.dart';\nimport 'package:clipboard/clipboard.dart';\n",
+        "import 'package:cross_file/cross_file.dart';\nimport 'package:pasteboard/pasteboard.dart';\n",
         1,
     )
 
@@ -45,7 +45,7 @@ def chat(source: str) -> str:
   Future<void> _pasteClipboard() async {
     if (_sendingFile) return;
     try {
-      final bytes = await FlutterClipboard.pasteImage();
+      final bytes = await Pasteboard.image;
       if (bytes != null && bytes.isNotEmpty) {
         await _sendClipboardImage(bytes);
         return;
@@ -182,6 +182,38 @@ def settings(source: str) -> str:
     )
 
 
+def manifest(source: str) -> str:
+    anchor = '''        <provider
+            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
+'''
+    provider = '''        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+'''
+    if anchor not in source:
+        raise RuntimeError('Android provider anchor missing')
+    return source.replace(anchor, provider + anchor, 1)
+
+
 patch('pubspec.yaml', pubspec)
 patch('lib/chat_screen.dart', chat)
 patch('lib/client_settings.dart', settings)
+patch('android/app/src/main/AndroidManifest.xml', manifest)
+
+provider_paths = Path('android/app/src/main/res/xml/provider_paths.xml')
+provider_paths.write_text(
+    '''<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="external_files" path="." />
+</paths>
+''',
+    encoding='utf-8',
+)
+print(f'Created 0.94: {provider_paths}')
