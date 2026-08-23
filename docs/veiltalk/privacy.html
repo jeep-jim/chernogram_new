@@ -7,8 +7,7 @@
   <title>VeilTalk Privacy Policy</title>
   <style>
     :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#182033;background:#f5f7fb}
-    body{margin:0;line-height:1.65}main{max-width:860px;margin:0 auto;padding:48px 24px 72px}
-    article{background:rgba(255,255,255,.92);border:1px solid #e4e8f0;border-radius:24px;padding:34px;box-shadow:0 18px 60px rgba(28,39,70,.08)}
+    body{margin:0;line-height:1.65}main{max-width:860px;margin:0 auto;padding:48px 24px 72px}article{background:rgba(255,255,255,.92);border:1px solid #e4e8f0;border-radius:24px;padding:34px;box-shadow:0 18px 60px rgba(28,39,70,.08)}
     h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2{margin-top:30px;font-size:20px}p,li{font-size:15px}.muted{color:#657086}code{background:#eef1f6;padding:2px 6px;border-radius:6px}a{color:#4f5bd5}
     @media(prefers-color-scheme:dark){:root{color:#eef2ff;background:#0f1420}article{background:rgba(23,29,45,.94);border-color:#293149;box-shadow:none}.muted{color:#aab2c5}code{background:#232b3e}a{color:#9ba7ff}}
   </style>
@@ -16,30 +15,30 @@
 <body><main><article>
   <h1>VeilTalk Privacy Policy</h1>
   <p class="muted">Last updated: August 23, 2026</p>
-  <p>VeilTalk is a Chrome extension for private one-to-one text messaging, peer-to-peer file transfer, and browser-based voice and video calls. This policy explains what information the extension processes, why it is needed, and where it is stored.</p>
+  <p>VeilTalk is a free Chrome extension for private one-to-one text messaging, peer-to-peer file transfer, and browser-based voice and video calls. This policy explains what information the extension processes, why it is needed, and where it is stored.</p>
 
   <h2>1. Data VeilTalk processes</h2>
   <ul>
     <li><strong>Profile information:</strong> the display name, avatar, and local profile identifier that you choose or that the extension creates.</li>
     <li><strong>Personal communications:</strong> text messages, files you explicitly send, invitation information, and technical signaling required to establish file transfers and calls.</li>
-    <li><strong>Local application data:</strong> contacts, conversation history, downloaded files, settings, connection state, and free-call usage counters.</li>
+    <li><strong>Local application data:</strong> contacts, conversation history, downloaded files, settings, and connection state.</li>
     <li><strong>Microphone, camera, and screen input:</strong> only after you use the corresponding calling feature and grant Chrome permission.</li>
   </ul>
 
   <h2>2. Local storage</h2>
-  <p>VeilTalk keeps its profile, contacts, conversation history, settings, and usage counters locally in your Chrome profile. Files that you send or receive may be stored locally in IndexedDB or the browser's Origin Private File System so they can be downloaded again. VeilTalk does not operate its own central account database.</p>
+  <p>VeilTalk keeps its profile, contacts, conversation history, settings, and transferred files locally in your Chrome profile. Files may be stored in IndexedDB or the browser's Origin Private File System so they can be downloaded again. VeilTalk does not operate its own central account database.</p>
 
   <h2>3. Message relay and signaling</h2>
-  <p>VeilTalk uses the third-party relay service <code>ntfy.sh</code> to deliver messages and exchange WebRTC signaling. Message content, file metadata, and signaling payloads are encrypted by the extension before relay transmission. File contents are transferred over WebRTC and are not uploaded to <code>ntfy.sh</code>.</p>
+  <p>VeilTalk uses the third-party relay service <code>ntfy.sh</code> to deliver messages and exchange WebRTC signaling. Message content, file metadata, and signaling payloads are encrypted before relay transmission. File contents are transferred over WebRTC and are not uploaded to <code>ntfy.sh</code>.</p>
   <p>Because <code>ntfy.sh</code> is independent, network metadata such as IP addresses may be processed according to its own terms and privacy practices.</p>
 
   <h2>4. Voice, video, and file transfers</h2>
-  <p>Voice calls, video calls, screen sharing, and file transfers use WebRTC. Data is sent directly between participants whenever network conditions allow. If a direct connection cannot be established, VeilTalk may use third-party STUN or TURN infrastructure, including Metered Open Relay, to establish or relay the encrypted WebRTC connection.</p>
+  <p>Voice calls, video calls, screen sharing, and file transfers use WebRTC. Data is sent directly whenever network conditions allow. If a direct connection cannot be established, VeilTalk may use third-party STUN or TURN infrastructure, including Metered Open Relay, to establish or relay the encrypted connection.</p>
   <p>VeilTalk does not record calls and does not use call or file content for advertising, profiling, or analytics. WebRTC infrastructure may process IP addresses and other network metadata required to establish or relay a connection.</p>
 
   <h2>5. Chrome permissions</h2>
   <ul>
-    <li><strong>storage:</strong> saves the local profile, contacts, history, settings, and usage counters.</li>
+    <li><strong>storage:</strong> saves the local profile, contacts, history, and settings.</li>
     <li><strong>unlimitedStorage:</strong> allows larger user-selected files to be kept in local browser storage.</li>
     <li><strong>notifications:</strong> shows notifications for incoming messages, files, and calls.</li>
     <li><strong>sidePanel:</strong> provides the main interface inside Chrome.</li>
@@ -48,31 +47,21 @@
     <li><strong>Microphone/camera/screen:</strong> requested only for voice, video, or screen sharing.</li>
   </ul>
 
-  <h2>6. Payments</h2>
-  <p>When Pro billing is enabled, checkout and subscription management are hosted by the configured payment provider through Monetize.software. VeilTalk does not request or store payment-card numbers. The provider may process account, payment, and network information under its own privacy policy. VeilTalk may store the minimum entitlement state needed to enable Pro features.</p>
-
-  <h2>7. What VeilTalk does not do</h2>
+  <h2>6. What VeilTalk does not do</h2>
   <ul>
     <li>VeilTalk does not sell personal data or use communications for advertising.</li>
     <li>VeilTalk does not collect browsing history or read websites you visit.</li>
-    <li>VeilTalk does not collect location, medical, credit, or banking information.</li>
+    <li>VeilTalk does not collect location, medical, credit, banking, or payment-card information.</li>
     <li>VeilTalk does not use personal data for creditworthiness or lending.</li>
   </ul>
 
-  <h2>8. Data retention and deletion</h2>
+  <h2>7. Data retention and deletion</h2>
   <p>Local data remains in your Chrome profile until you delete a chat, clear extension storage, or uninstall the extension. Deleting a chat removes its locally stored messages and files from that browser profile. Third-party relay data may be subject to that provider's retention rules.</p>
 
-  <h2>9. International use</h2>
-  <p>Communication may cross national borders depending on the locations of participants and third-party network infrastructure.</p>
-
-  <h2>10. Children</h2>
-  <p>VeilTalk is not specifically directed to children. Users should follow the age requirements for their Google/Chrome account and local law.</p>
-
-  <h2>11. Changes to this policy</h2>
-  <p>If VeilTalk materially changes how it processes data, this policy will be updated before or together with the relevant product update.</p>
-
-  <h2>12. Contact</h2>
-  <p>For privacy or support questions, use the <a href="https://github.com/jeep-jim/chernogram_new/issues">project's GitHub issue tracker</a>.</p>
+  <h2>8. International use</h2><p>Communication may cross national borders depending on the locations of participants and third-party network infrastructure.</p>
+  <h2>9. Children</h2><p>VeilTalk is not specifically directed to children. Users should follow the age requirements for their Google/Chrome account and local law.</p>
+  <h2>10. Changes to this policy</h2><p>If VeilTalk materially changes how it processes data, this policy will be updated before or together with the relevant product update.</p>
+  <h2>11. Contact</h2><p>For privacy or support questions, use the <a href="https://github.com/jeep-jim/chernogram_new/issues">project's GitHub issue tracker</a>.</p>
   <p class="muted">Do not post passwords, private message content, payment information, or other sensitive personal information in a public GitHub issue.</p>
 </article></main></body>
 </html>

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "version": "0.2.0",
-  "version_name": "0.2.0 Production Candidate",
+  "version_name": "0.2.0 Free Release",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "120",
   "permissions": [

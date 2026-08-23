@@ -8,13 +8,13 @@ export async function ensureState() {
     next.contacts ||= {};
     next.messages ||= {};
     next.signals ||= {};
-    next.quota ||= {};
-    next.pro ||= { active: false, checkedAt: 0 };
+    delete next.quota;
+    delete next.pro;
     next.ui ||= {};
     next.ui.theme ||= 'dark';
     next.ui.activeRoomId ||= '';
     next.ui.privacyLens = next.ui.privacyLens === true;
-    next.schemaVersion = 2;
+    next.schemaVersion = 3;
     if (JSON.stringify(next) !== JSON.stringify(vtState)) await chrome.storage.local.set({ vtState: next });
     return next;
   }
@@ -23,10 +23,8 @@ export async function ensureState() {
     contacts: {},
     messages: {},
     signals: {},
-    quota: {},
-    pro: { active: false, licenseKey: '', instanceId: '', checkedAt: 0 },
     ui: { activeRoomId: '', privacyLens: false, theme: 'dark', languagePolicyVersion: 'english-default-v1' },
-    schemaVersion: 2
+    schemaVersion: 3
   };
   await chrome.storage.local.set({ vtState: state });
   return state;
@@ -47,8 +45,4 @@ export async function mutateState(mutator) {
   await mutator(next);
   await saveState(next);
   return next;
-}
-
-export function todayKey() {
-  return new Date().toISOString().slice(0, 10);
 }

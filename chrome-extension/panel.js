@@ -1,9 +1,8 @@
 import { CONFIG } from './config.js';
 import { LANGS, tr } from './i18n.js';
-import { loadState, mutateState, todayKey } from './storage.js';
+import { loadState, mutateState } from './storage.js';
 import { randomId, encodeInvite, decodeInvite } from './crypto.js';
 import { sendEnvelope } from './transport.js';
-import { activateLicense, validateLicense } from './billing.js';
 import { createPeerConnection, addIceOrQueue, flushIce } from './rtc.js';
 import { putFile, getFile, deleteRoomFiles, createIncomingFile, commitIncomingFile, abortIncomingFile } from './file_store.js';
 
@@ -101,7 +100,6 @@ async function init() {
     refreshState(false);
     processSignals();
   }, 900);
-  await validateLicense().catch(() => false);
   await refreshState(false);
   render();
 }
@@ -246,18 +244,7 @@ function messageBubble(message) {
   return `<div class="bubble ${message.from === 'me' ? 'me' : ''}">${esc(message.text || '')}<span class="time">${time}</span></div>`;
 }
 
-function quotaUsed() {
-  return Number(state.quota?.[todayKey()] || 0);
-}
-
-function quotaRemaining() {
-  return Math.max(0, CONFIG.freeCallSecondsPerDay - quotaUsed());
-}
-
 function renderSettings() {
-  const pro = state.pro?.active === true;
-  const remaining = Math.ceil(quotaRemaining() / 60);
-  const percent = Math.min(100, (quotaUsed() / CONFIG.freeCallSecondsPerDay) * 100);
   return `<section class="profileHero glass">
       <div class="profileAvatarWrap">${avatarHtml(state.profile.name, state.profile.avatar || 'icons/mask.svg', 'profileAvatar maskAvatar')}<button class="avatarEdit" data-action="pickAvatar" title="${esc(t('changeAvatar'))}">✎</button></div>
       <h1>${esc(state.profile.name)}</h1><div class="profileId">ID ${esc(state.profile.id)}</div>
@@ -274,8 +261,7 @@ function renderSettings() {
     <div class="sectionTitle">${t('privacy')}</div>
     <div class="card glass switchRow"><div class="switchCopy"><b>${t('privacyMask')}</b><span>${t('privacyMaskHelp')}</span></div><button class="toggle ${privacyOn() ? 'on' : ''}" data-action="togglePrivacy"></button></div>
     <div class="sectionTitle">${t('plan')}</div>
-    <div class="card glass"><div class="row"><h3 class="grow">${pro ? t('pro') : t('free')}</h3><span class="badge">${pro ? t('licenseValid') : t('free')}</span></div><p>${pro ? t('proPlan') : t('freePlan')}</p>${pro ? '' : `<div class="quota"><div style="width:${percent}%"></div></div><p>${t('remaining')}: <b>${remaining} ${t('minutes')}</b></p>`}</div>
-    ${pro ? `<button class="btn" style="width:100%" data-action="manageSubscription">${t('manageSubscription')}</button>` : `<button class="btn primary" style="width:100%" data-action="upgrade">${t('upgrade')}</button>`}
+    <div class="card glass"><div class="row"><h3 class="grow">${t('free')}</h3><span class="badge">${t('free')}</span></div><p>${t('freePlan')}</p></div>
     <div class="sectionTitle">${t('network')}</div>
     <div class="card glass"><h3>${t('directP2P')}</h3><p>${t('relayNote')}</p><p class="networkGood">${t('turnReady')}</p></div>
     <div class="sectionTitle">${t('about')}</div>
@@ -301,7 +287,6 @@ function renderModal(value) {
   if (value.type === 'chatMenu') return `<div class="modalback"><div class="modal glass"><h2>${t('chatActions')}</h2><div class="stack"><button class="btn" data-action="confirmClear">${t('clearHistory')}</button><button class="btn danger" data-action="confirmDelete">${t('deleteChat')}</button><button class="btn ghost" data-action="closeModal">${t('cancel')}</button></div></div></div>`;
   if (value.type === 'confirmClear') return confirmModal(t('clearHistory'), t('clearHistoryConfirm'), 'clearHistory');
   if (value.type === 'confirmDelete') return confirmModal(t('deleteChat'), t('deleteChatConfirm'), 'deleteChat');
-  if (value.type === 'license') return `<div class="modalback"><div class="modal glass"><h2>${t('subscription')}</h2><input class="field" id="licenseInput" placeholder="${esc(t('licenseKey'))}"/><div class="actions"><button class="btn primary" data-action="activateLicense">${t('activate')}</button><button class="btn" data-action="closeModal">${t('cancel')}</button></div><p>${CONFIG.billing.enabled ? 'Monetize.software' : t('billingSoon')}</p></div></div>`;
   if (value.type === 'incoming') {
     const contact = state.contacts[value.roomId] || {};
     return `<div class="modalback"><div class="modal glass incomingModal">${avatarHtml(contact.name, contact.avatar, 'modalAvatar')}<h2>${t('incomingCall')}</h2><p>${esc(safeName(contact.name || value.name))} · ${value.video ? t('video') : t('call')}</p><div class="actions"><button class="btn good" data-action="answerCall">${t('answer')}</button><button class="btn danger" data-action="declineCall">${t('decline')}</button></div></div></div>`;
@@ -401,10 +386,6 @@ async function handleAction(action) {
   }
   if (action === 'togglePrivacy') return togglePrivacy();
   if (action === 'toggleTheme') return toggleTheme();
-  if (action === 'upgrade') return upgrade();
-  if (action === 'manageSubscription') return manageSubscription();
-  if (action === 'license') { modal = { type:'license' }; return render(); }
-  if (action === 'activateLicense') return doActivateLicense();
   if (action === 'answerCall') return answerIncoming();
   if (action === 'declineCall') return declineIncoming();
   if (action === 'hangup') return hangup();
@@ -491,7 +472,6 @@ function insertEmoji(emoji) {
 }
 
 async function createInvite() {
-  if (!state.pro.active && Object.keys(state.contacts).length >= CONFIG.freeContacts) return showAlert(t('contactLimit'));
   const roomId = randomId(12);
   const secret = randomId(32);
   await mutateState(s => {
@@ -630,41 +610,6 @@ async function saveProfile() {
   render();
 }
 
-async function upgrade() {
-  if (!CONFIG.billing.enabled || !CONFIG.billing.checkoutUrl) return showAlert(t('billingSetupRequired'));
-  chrome.tabs.create({ url:CONFIG.billing.checkoutUrl });
-}
-
-async function manageSubscription() {
-  if (!CONFIG.billing.enabled || !CONFIG.billing.customerPortalUrl) return showAlert(t('billingSetupRequired'));
-  chrome.tabs.create({ url:CONFIG.billing.customerPortalUrl });
-}
-
-async function doActivateLicense() {
-  const key = document.querySelector('#licenseInput')?.value.trim();
-  if (!key) return;
-  try {
-    await activateLicense(key);
-    state = await loadState();
-    modal = { type:'alert', text:t('licenseValid') };
-    render();
-  } catch (error) {
-    showAlert(error.message === 'BILLING_DISABLED' ? t('billingSetupRequired') : t('licenseInvalid'));
-  }
-}
-
-async function canCall() {
-  return state.pro.active || quotaRemaining() > 0;
-}
-
-async function addQuota(seconds) {
-  if (state.pro.active || seconds <= 0) return;
-  state = await mutateState(s => {
-    const key = todayKey();
-    s.quota[key] = Number(s.quota[key] || 0) + seconds;
-  });
-}
-
 async function sendRtc(contact, purpose, action, sessionIdValue, extra = {}) {
   return sendEnvelope(contact.remoteInboxId, contact.roomId, contact.secret, {
     type:'rtc',
@@ -681,7 +626,6 @@ async function sendRtc(contact, purpose, action, sessionIdValue, extra = {}) {
 async function startCall(roomId, video) {
   const contact = state.contacts[roomId];
   if (!contact?.remoteInboxId) return showAlert(t('notReady'));
-  if (!(await canCall())) return showAlert(t('callLimit'));
   if (call) return;
   try {
     const local = await navigator.mediaDevices.getUserMedia({
@@ -736,7 +680,6 @@ function setupCallPeer(contact) {
     if (pc.connectionState === 'connected') {
       session.connectedAt ||= Date.now();
       clearTimeout(session.disconnectTimer);
-      session.quotaTimer ||= setInterval(() => enforceCallQuota(session), 5000);
       render();
     }
     if (pc.connectionState === 'disconnected') {
@@ -749,15 +692,6 @@ function setupCallPeer(contact) {
       failActiveCall(session);
     }
   };
-}
-
-async function enforceCallQuota(session) {
-  if (call !== session || state.pro.active || !session.connectedAt) return;
-  const currentSeconds = Math.floor((Date.now() - session.connectedAt) / 1000);
-  if (quotaRemaining() <= currentSeconds) {
-    await hangup(true);
-    showAlert(t('callLimit'));
-  }
 }
 
 async function failActiveCall(session) {
@@ -814,10 +748,6 @@ async function answerIncoming() {
   const sessionIdValue = modal?.sessionId;
   const contact = state.contacts[roomId];
   if (!contact) return;
-  if (!(await canCall())) {
-    modal = null;
-    return showAlert(t('callLimit'));
-  }
   state = await loadState();
   const offer = [...(state.signals[roomId] || [])].reverse().find(signal => signal.type === 'rtc' && signal.purpose === 'call' && signal.action === 'offer' && signal.sessionId === sessionIdValue);
   if (!offer) return showAlert(t('reconnecting'));
@@ -872,10 +802,7 @@ async function hangup(notify = true) {
   if (!call) return;
   const old = call;
   call = null;
-  clearInterval(old.quotaTimer);
   clearTimeout(old.disconnectTimer);
-  const seconds = old.connectedAt ? Math.max(0, Math.round((Date.now() - old.connectedAt) / 1000)) : 0;
-  await addQuota(seconds);
   old.local?.getTracks().forEach(track => track.stop());
   old.remote?.getTracks().forEach(track => track.stop());
   try { old.pc?.close(); } catch (_) {}
@@ -910,7 +837,6 @@ function toggleCam() {
 
 async function shareScreen() {
   if (!call?.video) return;
-  if (!state.pro.active) return showAlert(t('proPlan'));
   try {
     const display = await navigator.mediaDevices.getDisplayMedia({ video:true, audio:false });
     const track = display.getVideoTracks()[0];
@@ -937,7 +863,7 @@ async function sendFile(file) {
   if (transfer) return showAlert(t('fileTransferBusy'));
   const contact = state.contacts[activeRoom];
   if (!contact?.remoteInboxId) return showAlert(t('notReady'));
-  const limit = state.pro.active ? CONFIG.proFileBytes : CONFIG.freeFileBytes;
+  const limit = CONFIG.fileBytes;
   if (file.size > limit) return showAlert(t('fileTooLarge'));
   const id = randomId(12);
   const sessionIdValue = randomId(12);
@@ -1134,7 +1060,7 @@ async function processFileSignals() {
 async function acceptFileOffer(roomId, offer) {
   const contact = state.contacts[roomId];
   if (!contact?.remoteInboxId || !offer.file) return;
-  const limit = state.pro.active ? CONFIG.proFileBytes : CONFIG.freeFileBytes;
+  const limit = CONFIG.fileBytes;
   if (offer.file.size > limit) {
     await sendRtc(contact, 'file', 'hangup', offer.sessionId, { reason:'too-large' }).catch(() => {});
     return;
