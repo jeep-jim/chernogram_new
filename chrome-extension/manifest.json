@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_appName__",
+  "version": "0.2.0",
+  "version_name": "0.2.0 Free Release",
+  "description": "__MSG_appDesc__",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "notifications",
+    "sidePanel",
+    "alarms",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "https://ntfy.sh/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open VeilTalk"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://ntfy.sh wss://ntfy.sh; media-src 'self' blob: mediastream:; img-src 'self' data: blob:"
+  },
+  "default_locale": "en"
+}
