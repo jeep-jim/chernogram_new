@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="220 120 650 820">
+  <defs>
+    <linearGradient id="maskGradient" x1="300" y1="200" x2="800" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B9A8FF"/>
+      <stop offset="0.48" stop-color="#7B5CFF"/>
+      <stop offset="1" stop-color="#20C7FF"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#maskGradient)" stroke-width="16" stroke-linecap="round">
+    <path d="M300 430V630"/><path d="M335 350V704"/>
+    <path d="M370 300V410M370 495V760"/><path d="M405 260V410M405 495V805"/>
+    <path d="M440 230V410M440 495V838"/><path d="M475 210V410M475 495V858"/>
+    <path d="M510 198V868"/><path d="M545 192V875"/><path d="M580 198V868"/>
+    <path d="M615 210V410M615 495V858"/><path d="M650 230V410M650 495V838"/>
+    <path d="M685 260V410M685 495V805"/><path d="M720 300V410M720 495V760"/>
+    <path d="M755 350V704"/><path d="M790 430V630"/>
+  </g>
+</svg>
