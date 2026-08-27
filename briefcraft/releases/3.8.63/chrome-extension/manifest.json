@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_appName__",
+  "short_name": "OSMINOG",
+  "version": "3.8.63",
+  "description": "__MSG_appDescription__",
+  "default_locale": "en",
+  "minimum_chrome_version": "148",
+  "action": {
+    "default_title": "Open OSMINOG",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "contextMenus",
+    "unlimitedStorage",
+    "scripting",
+    "storage",
+    "tabs",
+    "identity",
+    "clipboardRead",
+    "nativeMessaging"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstI7PnHbheHLtFKZ+3khPxma+9VesIOBxZc8mu7VuJE8ahUos0draXfHzjy3F1j/42qXKTl+UgagUEO0sj4MYlKyGPpmD6gLBMKyrItP4Qd6PeowtMcyopOVDUUjZNkCa07B9JQ45xwCd3RaDiS1H+io4uOFEAkKrYdbcyUa8ytbJ1EKS4oMiRvyqJjn3T9GuHA7arMpFRwbyBuE/CNchDQ/hjW7LajfOkzS837twTybFGUp+tQHLbHKH3BMjwDmMKOis09DmAVTy2WH5OINqdq9WC+cgJxV2SQQdCZUK1bZ79/RaQzIsAIFN1w0AF0cme1DYF5+xQY8WHWpMGPXfQIDAQAB"
+}
