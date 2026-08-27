@@ -1,0 +1,41 @@
+{
+  "product": "OSMINOG",
+  "version": "3.8.63",
+  "baseVersion": "3.8.62",
+  "kind": "patch-fileset",
+  "fileset": {
+    "path": "chrome-extension/fileset.json",
+    "sha256": "f8fc8547e22c0cb04a4e21eb7d859ec95d6af43334d6e0c7c0522b0e3df72858",
+    "size": 58303,
+    "patchCount": 8
+  },
+  "reservePackage": {
+    "name": "OSMINOG-Chrome-3.8.63-ROOT.zip",
+    "sha256": "3c4fc65a8b77ee0d6de019cfd2034febe58402c76bab41206768912663d2aa53",
+    "size": 239075,
+    "distribution": "ChatGPT artifact; not required by the patch updater"
+  },
+  "changes": [
+    "Google AI chat uses the supplied OSMINOG dark-indigo/purple visual design.",
+    "Google AI request IDs, busy lock, and rendered-turn deduplication prevent duplicate UI messages.",
+    "Google AI uses a dedicated inactive authenticated service tab rather than writing prompts into the user-visible Google AI conversation.",
+    "DeepSeek direct authenticated web-session transport is preserved.",
+    "Ctrl+V accepts clipboard images and falls back to briefCraftLastCachedImage when the clipboard has no image payload.",
+    "The obsolete INSTALL_BRIEFCRAFT_DEV.cmd instruction is removed from the updater error copy."
+  ],
+  "checks": {
+    "javascriptSyntax": true,
+    "jsonParse": true,
+    "htmlDuplicateIds": 0,
+    "zipIntegrity": true,
+    "fixedManifestKeyPreserved": true,
+    "patchReplayByteIdentical": true
+  },
+  "runtimeVerified": false,
+  "runtimePending": [
+    "3.8.62 to 3.8.63 update-button test on the owner Windows/Chrome installation",
+    "Google AI authenticated service-tab send/receive test",
+    "Ctrl+V clipboard and cached-screenshot attachment test"
+  ],
+  "publishedAt": "2026-08-27T18:36:25Z"
+}

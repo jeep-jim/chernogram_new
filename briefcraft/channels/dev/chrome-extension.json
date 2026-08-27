@@ -1,19 +1,36 @@
 {
   "schema": "briefcraft-update-feed/v1",
-  "product": "BriefCraft",
+  "product": "OSMINOG",
   "channel": "dev",
-  "generatedAt": "2026-08-27T10:48:40Z",
+  "generatedAt": "2026-08-27T18:36:25Z",
   "latest": {
-    "version": "3.8.60",
+    "version": "3.8.63",
     "platform": "chrome-extension-dev",
     "kind": "fileset",
-    "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.60/chrome-extension/fileset.json",
-    "sha256": "cbdb36a8ec2de53dae97928ffea83ff7b93aa02475d2b056a956c77ca263cc46",
-    "size": 4803,
-    "notes": "Russian empty-canvas welcome updates immediately when RU is selected; other supported languages remain synchronized.",
-    "publishedAt": "2026-08-27T10:48:40Z"
+    "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.63/chrome-extension/fileset.json",
+    "sha256": "f8fc8547e22c0cb04a4e21eb7d859ec95d6af43334d6e0c7c0522b0e3df72858",
+    "size": 58303,
+    "notes": "Google AI chat rebuilt in OSMINOG style with request deduplication and an isolated service-tab transport; Ctrl+V falls back to the cached screenshot; obsolete installer hint removed.",
+    "publishedAt": "2026-08-27T18:36:25Z"
   },
   "history": [
+    {
+      "version": "3.8.62",
+      "platform": "chrome-extension-dev",
+      "kind": "manual-baseline",
+      "notes": "OSMINOG rebrand baseline with red circle and initial canvas/widget bridge; manually installed for the next update test.",
+      "publishedAt": "2026-08-27T17:00:00Z"
+    },
+    {
+      "version": "3.8.60",
+      "platform": "chrome-extension-dev",
+      "kind": "fileset",
+      "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.60/chrome-extension/fileset.json",
+      "sha256": "cbdb36a8ec2de53dae97928ffea83ff7b93aa02475d2b056a956c77ca263cc46",
+      "size": 4803,
+      "notes": "Russian empty-canvas welcome updates immediately when RU is selected; other supported languages remain synchronized.",
+      "publishedAt": "2026-08-27T10:48:40Z"
+    },
     {
       "version": "3.8.59",
       "platform": "chrome-extension-dev",
