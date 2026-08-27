@@ -1,0 +1,137 @@
+name: Reconstruct OSMINOG 3.8.62 source
+
+on:
+  push:
+    branches: [briefcraft-releases]
+    paths:
+      - '.github/workflows/reconstruct-osminog-3.8.62.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: briefcraft-releases
+          fetch-depth: 0
+
+      - name: Reconstruct and verify 3.8.62
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, glob, hashlib, json, shutil, urllib.request, zipfile, subprocess
+
+          root = Path.cwd()
+          work = root / '.tmp-osminog-3.8.62'
+          if work.exists(): shutil.rmtree(work)
+          work.mkdir()
+
+          def decode_parts(pattern: str) -> bytes:
+              parts = sorted(glob.glob(pattern))
+              if not parts:
+                  raise RuntimeError(f'No parts for {pattern}')
+              text = ''.join(Path(p).read_text(encoding='utf-8').strip() for p in parts)
+              text = ''.join(text.split())
+              text += '=' * (-len(text) % 4)
+              return base64.b64decode(text, validate=True)
+
+          zip_bytes = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
+          base_zip = work / 'osminog-3.8.61.zip'
+          base_zip.write_bytes(zip_bytes)
+          print('BASE_ZIP_BYTES', len(zip_bytes))
+          print('BASE_ZIP_SHA256', hashlib.sha256(zip_bytes).hexdigest())
+          with zipfile.ZipFile(base_zip) as z:
+              bad = z.testzip()
+              if bad: raise RuntimeError(f'Bad ZIP member: {bad}')
+              print('BASE_ZIP_ENTRIES', len(z.infolist()))
+              z.extractall(work / 'source')
+
+          source = work / 'source'
+          manifest_path = source / 'manifest.json'
+          if not manifest_path.exists(): raise RuntimeError('3.8.61 root manifest missing')
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if manifest.get('version') != '3.8.61':
+              raise RuntimeError(f"Unexpected base version {manifest.get('version')}")
+
+          fs_bytes = decode_parts(str(root / 'bootstrap/osminog-3.8.62-fileset.part*'))
+          fileset = json.loads(fs_bytes.decode('utf-8'))
+          if fileset.get('version') != '3.8.62': raise RuntimeError('Bad fileset version')
+          print('FILESET_BYTES', len(fs_bytes))
+          print('FILESET_FILES', len(fileset.get('files', [])))
+          print('FILESET_PATCHES', len(fileset.get('patches', [])))
+
+          def sha256(data: bytes) -> str:
+              return hashlib.sha256(data).hexdigest()
+
+          for item in fileset.get('files', []):
+              dest = source / item['path']
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              with urllib.request.urlopen(item['url']) as response:
+                  data = response.read()
+              if sha256(data) != item['sha256']:
+                  raise RuntimeError(f"SHA mismatch for full file {item['path']}")
+              dest.write_bytes(data)
+
+          for patch in fileset.get('patches', []):
+              path = source / patch['path']
+              before = path.read_bytes()
+              if patch.get('beforeSha256') and sha256(before) != patch['beforeSha256']:
+                  raise RuntimeError(f"Before SHA mismatch for {patch['path']}: {sha256(before)}")
+              text = before.decode('utf-8')
+              count = text.count(patch['search'])
+              if count != 1:
+                  raise RuntimeError(f"Search count {count} for {patch['path']}")
+              text = text.replace(patch['search'], patch['replace'], 1)
+              after = text.encode('utf-8')
+              if patch.get('afterSha256') and sha256(after) != patch['afterSha256']:
+                  raise RuntimeError(f"After SHA mismatch for {patch['path']}: {sha256(after)}")
+              path.write_bytes(after)
+
+          for rel in fileset.get('delete', []):
+              path = source / rel
+              if path.exists(): path.unlink()
+
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if manifest.get('version') != '3.8.62':
+              raise RuntimeError(f"Result version is {manifest.get('version')}")
+
+          for js in source.rglob('*.js'):
+              subprocess.run(['node', '--check', str(js)], check=True)
+          for jf in source.rglob('*.json'):
+              json.loads(jf.read_text(encoding='utf-8'))
+
+          snapshot = root / 'briefcraft/snapshots/3.8.62/chrome-extension'
+          if snapshot.exists(): shutil.rmtree(snapshot)
+          snapshot.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copytree(source, snapshot)
+
+          meta = {
+              'product': 'OSMINOG',
+              'version': '3.8.62',
+              'baseVersion': '3.8.61',
+              'sourceFileCount': sum(1 for p in source.rglob('*') if p.is_file()),
+              'baseZipSha256': sha256(zip_bytes),
+              'filesetSha256': sha256(fs_bytes),
+              'checks': {'zipIntegrity': True, 'javascriptSyntax': True, 'jsonParse': True}
+          }
+          (snapshot.parent / 'snapshot.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(meta, ensure_ascii=False))
+          PY
+
+      - name: Commit canonical snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .tmp-osminog-3.8.62
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add briefcraft/snapshots/3.8.62
+          git commit -m 'Store canonical OSMINOG Chrome 3.8.62 source snapshot'
+          git push origin HEAD:briefcraft-releases
