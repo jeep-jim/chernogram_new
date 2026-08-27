@@ -1,0 +1,66 @@
+name: Retry complete OSMINOG 3.8.62 materialization
+
+on:
+  push:
+    branches: [briefcraft-releases]
+    paths:
+      - '.github/workflows/retry-osminog-3.8.62-materialize.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osminog-chrome-dev-release
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: briefcraft-releases
+          fetch-depth: 0
+
+      - name: Extract fixed publisher script and execute it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workflowPath = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/publish-osminog-3.8.62-final.yml'
+          $lines = Get-Content $workflowPath
+          $stepStart = -1
+          $runStart = -1
+          $stepEnd = $lines.Count
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($stepStart -lt 0 -and $lines[$i] -eq '      - name: Reconstruct 3.8.61 and build 3.8.62') { $stepStart = $i; continue }
+            if ($stepStart -ge 0 -and $runStart -lt 0 -and $lines[$i] -eq '        run: |') { $runStart = $i; continue }
+            if ($runStart -ge 0 -and $i -gt $runStart -and $lines[$i] -match '^      - name: ') { $stepEnd = $i; break }
+          }
+          if ($stepStart -lt 0 -or $runStart -lt 0) { throw 'Publisher script block was not found.' }
+          $body = New-Object System.Collections.Generic.List[string]
+          for ($i = $runStart + 1; $i -lt $stepEnd; $i++) {
+            $line = $lines[$i]
+            if ($line.StartsWith('          ')) { $line = $line.Substring(10) }
+            $body.Add($line)
+          }
+          $script = ($body -join "`r`n").Replace('$blobSha:', '${blobSha}:')
+          $scriptPath = Join-Path $env:RUNNER_TEMP 'publish-osminog-3.8.62-fixed.ps1'
+          [IO.File]::WriteAllText($scriptPath, $script, [Text.UTF8Encoding]::new($false))
+          & $scriptPath
+          if ($LASTEXITCODE -ne 0) { throw "Fixed publisher failed with exit code $LASTEXITCODE" }
+
+      - name: Commit complete release and feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add briefcraft/releases/3.8.62 briefcraft/channels/dev/chrome-extension.json
+          if (git diff --cached --quiet) { throw 'The fixed publisher produced no release changes.' }
+          git commit -m 'Materialize complete OSMINOG Chrome 3.8.62 release'
+          git push origin HEAD:briefcraft-releases
