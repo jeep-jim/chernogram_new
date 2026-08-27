@@ -1,0 +1,23 @@
+name: Test OSMINOG Drive download
+
+on:
+  push:
+    branches:
+      - briefcraft-releases
+    paths:
+      - '.github/workflows/test-osminog-drive-download.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download candidate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          url='https://drive.usercontent.google.com/download?id=1tnvolK0sg_yuRFjcNvhkfRTtM7flF9w8&export=download&confirm=t'
+          curl -L --fail --retry 2 --output /tmp/osminog.tar.xz "$url"
+          file /tmp/osminog.tar.xz
+          wc -c /tmp/osminog.tar.xz
+          sha256sum /tmp/osminog.tar.xz
+          test "$(sha256sum /tmp/osminog.tar.xz | awk '{print $1}')" = '9b14ed4e964442b2bdadc67eb0f899e417cf65b9e964115616de86502bc4cd61'
