@@ -1,0 +1,194 @@
+name: Publish OSMINOG 3.8.63
+
+on:
+  push:
+    branches:
+      - briefcraft-releases
+    paths:
+      - 'bootstrap/osminog-3.8.63-fileset.gz.b64.part00'
+      - 'bootstrap/osminog-3.8.63-fileset.gz.b64.part01'
+      - '.github/workflows/publish-osminog-3.8.63.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: briefcraft-releases
+          fetch-depth: 0
+
+      - name: Materialize and verify 3.8.63 fileset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import gzip
+          import hashlib
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path.cwd()
+          chunks = [
+              root / 'bootstrap/osminog-3.8.63-fileset.gz.b64.part00',
+              root / 'bootstrap/osminog-3.8.63-fileset.gz.b64.part01',
+          ]
+          for chunk in chunks:
+              if not chunk.is_file():
+                  raise SystemExit(f'Missing fileset chunk: {chunk}')
+
+          encoded = ''.join(chunk.read_text(encoding='ascii').strip() for chunk in chunks)
+          raw = gzip.decompress(base64.b64decode(encoded, validate=True))
+          expected_sha = 'f8fc8547e22c0cb04a4e21eb7d859ec95d6af43334d6e0c7c0522b0e3df72858'
+          actual_sha = hashlib.sha256(raw).hexdigest()
+          if actual_sha != expected_sha:
+              raise SystemExit(f'Fileset SHA-256 mismatch: {actual_sha}')
+          if len(raw) != 58303:
+              raise SystemExit(f'Unexpected fileset size: {len(raw)}')
+
+          fileset = json.loads(raw.decode('utf-8'))
+          if fileset.get('schema') != 'briefcraft-fileset/v1':
+              raise SystemExit('Unexpected fileset schema')
+          if fileset.get('version') != '3.8.63' or fileset.get('baseVersion') != '3.8.62':
+              raise SystemExit('Unexpected version transition')
+          if len(fileset.get('patches', [])) != 8:
+              raise SystemExit('Expected exactly 8 verified patch operations')
+
+          manifest_path = root / 'briefcraft/releases/3.8.63/chrome-extension/manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if manifest.get('version') != '3.8.63':
+              raise SystemExit('Published manifest version is not 3.8.63')
+          expected_key = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstI7PnHbheHLtFKZ+3khPxma+9VesIOBxZc8mu7VuJE8ahUos0draXfHzjy3F1j/42qXKTl+UgagUEO0sj4MYlKyGPpmD6gLBMKyrItP4Qd6PeowtMcyopOVDUUjZNkCa07B9JQ45xwCd3RaDiS1H+io4uOFEAkKrYdbcyUa8ytbJ1EKS4oMiRvyqJjn3T9GuHA7arMpFRwbyBuE/CNchDQ/hjW7LajfOkzS837twTybFGUp+tQHLbHKH3BMjwDmMKOis09DmAVTy2WH5OINqdq9WC+cgJxV2SQQdCZUK1bZ79/RaQzIsAIFN1w0AF0cme1DYF5+xQY8WHWpMGPXfQIDAQAB'
+          if manifest.get('key') != expected_key:
+              raise SystemExit('Fixed Chrome manifest key changed')
+
+          release_dir = root / 'briefcraft/releases/3.8.63'
+          extension_dir = release_dir / 'chrome-extension'
+          extension_dir.mkdir(parents=True, exist_ok=True)
+          fileset_path = extension_dir / 'fileset.json'
+          fileset_path.write_bytes(raw)
+
+          now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+          feed_path = root / 'briefcraft/channels/dev/chrome-extension.json'
+          old_feed = json.loads(feed_path.read_text(encoding='utf-8'))
+
+          history_candidates = [
+              {
+                  'version': '3.8.62',
+                  'platform': 'chrome-extension-dev',
+                  'kind': 'manual-baseline',
+                  'notes': 'OSMINOG rebrand baseline with red circle and initial canvas/widget bridge; manually installed for the next update test.',
+                  'publishedAt': '2026-08-27T17:00:00Z',
+              }
+          ]
+          old_latest = old_feed.get('latest')
+          if isinstance(old_latest, dict) and old_latest.get('version'):
+              history_candidates.append({
+                  key: value for key, value in old_latest.items()
+                  if key in {'version', 'platform', 'kind', 'url', 'sha256', 'size', 'notes', 'publishedAt'}
+              })
+          history_candidates.extend(old_feed.get('history', []))
+
+          history = []
+          seen = {'3.8.63'}
+          for item in history_candidates:
+              version = str(item.get('version', '')).strip()
+              if not version or version in seen:
+                  continue
+              seen.add(version)
+              history.append(item)
+
+          feed = {
+              'schema': 'briefcraft-update-feed/v1',
+              'product': 'OSMINOG',
+              'channel': 'dev',
+              'generatedAt': now,
+              'latest': {
+                  'version': '3.8.63',
+                  'platform': 'chrome-extension-dev',
+                  'kind': 'fileset',
+                  'url': 'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.63/chrome-extension/fileset.json',
+                  'sha256': expected_sha,
+                  'size': len(raw),
+                  'notes': 'Google AI chat rebuilt in OSMINOG style with request deduplication and an isolated service-tab transport; Ctrl+V falls back to the cached screenshot; obsolete installer hint removed.',
+                  'publishedAt': now,
+              },
+              'history': history,
+          }
+          feed_path.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          release_meta = {
+              'product': 'OSMINOG',
+              'version': '3.8.63',
+              'baseVersion': '3.8.62',
+              'kind': 'patch-fileset',
+              'fileset': {
+                  'path': 'chrome-extension/fileset.json',
+                  'sha256': expected_sha,
+                  'size': len(raw),
+                  'patchCount': 8,
+              },
+              'reservePackage': {
+                  'name': 'OSMINOG-Chrome-3.8.63-ROOT.zip',
+                  'sha256': '3c4fc65a8b77ee0d6de019cfd2034febe58402c76bab41206768912663d2aa53',
+                  'size': 239075,
+                  'distribution': 'ChatGPT artifact; not required by the patch updater',
+              },
+              'changes': [
+                  'Google AI chat uses the supplied OSMINOG dark-indigo/purple visual design.',
+                  'Google AI request IDs, busy lock, and rendered-turn deduplication prevent duplicate UI messages.',
+                  'Google AI uses a dedicated inactive authenticated service tab rather than writing prompts into the user-visible Google AI conversation.',
+                  'DeepSeek direct authenticated web-session transport is preserved.',
+                  'Ctrl+V accepts clipboard images and falls back to briefCraftLastCachedImage when the clipboard has no image payload.',
+                  'The obsolete INSTALL_BRIEFCRAFT_DEV.cmd instruction is removed from the updater error copy.',
+              ],
+              'checks': {
+                  'javascriptSyntax': True,
+                  'jsonParse': True,
+                  'htmlDuplicateIds': 0,
+                  'zipIntegrity': True,
+                  'fixedManifestKeyPreserved': True,
+                  'patchReplayByteIdentical': True,
+              },
+              'runtimeVerified': False,
+              'runtimePending': [
+                  '3.8.62 to 3.8.63 update-button test on the owner Windows/Chrome installation',
+                  'Google AI authenticated service-tab send/receive test',
+                  'Ctrl+V clipboard and cached-screenshot attachment test',
+              ],
+              'publishedAt': now,
+          }
+          (release_dir / 'release.json').write_text(
+              json.dumps(release_meta, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
+
+          notes = f'''# OSMINOG Chrome 3.8.63\n\nBase: 3.8.62\n\n- Google AI chat redesigned from the supplied OSMINOG widget specification.\n- Duplicate request/response rendering is blocked with request IDs and a busy lock.\n- Google AI traffic is routed through a dedicated inactive authenticated service tab, not the visible user conversation.\n- DeepSeek's proven direct authenticated web-session transport is unchanged.\n- Ctrl+V can attach clipboard images and falls back to the most recent cached screenshot.\n- Obsolete INSTALL_BRIEFCRAFT_DEV.cmd text is removed.\n\nStatic verification passed. Runtime verification is pending on the owner's Windows/Chrome installation.\n'''
+          (release_dir / 'RELEASE_NOTES.md').write_text(notes, encoding='utf-8')
+
+          print(f'Published fileset {actual_sha} ({len(raw)} bytes)')
+          PY
+
+      - name: Commit release and feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f \
+            bootstrap/osminog-3.8.63-fileset.gz.b64.part00 \
+            bootstrap/osminog-3.8.63-fileset.gz.b64.part01 \
+            .github/workflows/publish-osminog-3.8.63.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add briefcraft/releases/3.8.63 briefcraft/channels/dev/chrome-extension.json
+          git commit -m 'Publish OSMINOG Chrome 3.8.63'
+          git push origin HEAD:briefcraft-releases
