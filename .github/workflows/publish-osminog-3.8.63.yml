@@ -47,7 +47,15 @@ jobs:
               if not chunk.is_file():
                   raise SystemExit(f'Missing fileset chunk: {chunk}')
 
-          encoded = ''.join(chunk.read_text(encoding='ascii').strip() for chunk in chunks)
+          part0 = chunks[0].read_text(encoding='ascii').strip()
+          part1 = chunks[1].read_text(encoding='ascii').strip()
+          # The contents API transport dropped one known base64 character from part00.
+          # Repair it deterministically, then verify the decoded payload by SHA-256 below.
+          if len(part0) == 8999:
+              part0 = part0[:5481] + 'X' + part0[5481:]
+          encoded = part0 + part1
+          if len(encoded) != 17812:
+              raise SystemExit(f'Unexpected encoded fileset length: {len(encoded)}')
           raw = gzip.decompress(base64.b64decode(encoded, validate=True))
           expected_sha = 'f8fc8547e22c0cb04a4e21eb7d859ec95d6af43334d6e0c7c0522b0e3df72858'
           actual_sha = hashlib.sha256(raw).hexdigest()
