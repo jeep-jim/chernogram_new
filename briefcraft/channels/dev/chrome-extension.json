@@ -2,23 +2,23 @@
   "schema": "briefcraft-update-feed/v1",
   "product": "BriefCraft",
   "channel": "dev",
-  "generatedAt": "2026-08-27T05:16:00Z",
+  "generatedAt": "2026-08-27T05:21:05Z",
   "latest": {
     "version": "3.8.59",
     "platform": "chrome-extension-dev",
     "kind": "fileset",
     "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.59/chrome-extension/fileset.json",
-    "sha256": "e2d458f932606e018bc8ecee9cb479ec97c28bd1795ddff871015af68c40854d",
-    "size": 4920,
-    "notes": "Empty-canvas greeting and actions now switch instantly with EN, RU, DE, ES, JA and ZH.",
-    "publishedAt": "2026-08-27T05:16:00Z"
+    "sha256": "e0b870c08eb5113664a4338fa9631406e64a91b61ee01d6a39197d6de6f3e51e",
+    "size": 4812,
+    "notes": "The empty-canvas welcome now follows EN, RU, DE, ES, JA and ZH immediately when the workspace language changes.",
+    "publishedAt": "2026-08-27T05:21:05Z"
   },
   "history": [
     {
       "version": "3.8.58",
       "platform": "chrome-extension-dev",
       "kind": "bootstrap",
-      "notes": "One-time online-updater bootstrap with compact Layers and anchored AI helpers.",
+      "notes": "One-time native updater bootstrap and canvas agent positioning fixes.",
       "publishedAt": "2026-08-27T04:06:00Z"
     },
     {
@@ -35,7 +35,7 @@
       "version": "3.8.56",
       "platform": "chrome-extension-dev",
       "kind": "bootstrap",
-      "notes": "Initial native-updater bootstrap.",
+      "notes": "Initial unified development-channel bootstrap.",
       "publishedAt": "2026-08-27T03:55:00Z"
     }
   ]
