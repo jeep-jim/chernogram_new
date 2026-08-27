@@ -27,34 +27,63 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from io import BytesIO
-          import base64, glob, hashlib, json, shutil, urllib.request, subprocess, lzma, tarfile, re
+          import base64, glob, hashlib, itertools, json, shutil, urllib.request, subprocess, lzma, tarfile, re
 
           root = Path.cwd()
           work = root / '.tmp-osminog-3.8.62'
           if work.exists(): shutil.rmtree(work)
           work.mkdir()
 
-          def decode_parts(pattern: str) -> bytes:
-              parts = sorted(glob.glob(pattern))
-              if not parts:
-                  raise RuntimeError(f'No parts for {pattern}')
-              chunks = []
-              for p in parts:
-                  raw = Path(p).read_text(encoding='utf-8-sig')
-                  runs = re.findall(r'[A-Za-z0-9+/=]{32,}', raw)
-                  if not runs:
-                      raise RuntimeError(f'No base64 payload in {p}')
-                  cleaned = ''.join(runs)
-                  print('PART', Path(p).name, 'raw', len(raw), 'runs', [len(x) for x in runs], 'clean', len(cleaned), 'head', cleaned[:12], 'tail', cleaned[-12:])
-                  chunks.append(cleaned)
-              text = ''.join(chunks)
-              text += '=' * (-len(text) % 4)
-              return base64.b64decode(text, validate=True)
+          def payload_runs(path: Path):
+              raw = path.read_text(encoding='utf-8-sig')
+              runs = re.findall(r'[A-Za-z0-9+/=]{32,}', raw)
+              if not runs:
+                  raise RuntimeError(f'No base64 payload in {path}')
+              print('PART', path.name, 'raw', len(raw), 'runs', [len(x) for x in runs])
+              return runs
 
-          archive_xz = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
+          part_paths = sorted(Path(p) for p in glob.glob(str(root / 'bootstrap/osminog-3.8.61.b64.part*')))
+          if not part_paths:
+              raise RuntimeError('No 3.8.61 source parts')
+          chunks = []
+          for p in part_paths:
+              for idx, run in enumerate(payload_runs(p)):
+                  chunks.append((f'{p.name}:{idx}', run))
+
+          starts = [x for x in chunks if x[1].startswith('/Td6WFo')]
+          if len(starts) != 1:
+              raise RuntimeError(f'Expected one XZ header chunk, got {[x[0] for x in starts]}')
+          start = starts[0]
+          rest = [x for x in chunks if x is not start]
+          archive_xz = None
+          archive_order = None
+          failures = []
+          # Try all non-empty subsets and orders after the XZ-header chunk.
+          for length in range(1, len(rest) + 1):
+              for perm in itertools.permutations(rest, length):
+                  names = [start[0], *[x[0] for x in perm]]
+                  text = start[1] + ''.join(x[1] for x in perm)
+                  text += '=' * (-len(text) % 4)
+                  try:
+                      candidate = base64.b64decode(text, validate=True)
+                      unpacked = lzma.decompress(candidate)
+                  except Exception as exc:
+                      failures.append((names, type(exc).__name__))
+                      continue
+                  archive_xz = candidate
+                  tar_bytes = unpacked
+                  archive_order = names
+                  break
+              if archive_xz is not None:
+                  break
+          if archive_xz is None:
+              print('CANDIDATES_TRIED', len(failures))
+              print('LAST_FAILURES', failures[-12:])
+              raise RuntimeError('No valid XZ ordering found')
+
+          print('BASE_ORDER', archive_order)
           print('BASE_XZ_BYTES', len(archive_xz))
           print('BASE_XZ_SHA256', hashlib.sha256(archive_xz).hexdigest())
-          tar_bytes = lzma.decompress(archive_xz)
           print('BASE_TAR_BYTES', len(tar_bytes))
           source = work / 'source'
           source.mkdir()
@@ -82,7 +111,11 @@ jobs:
           if manifest.get('version') != '3.8.61':
               raise RuntimeError(f"Unexpected base version {manifest.get('version')}")
 
-          fs_bytes = decode_parts(str(root / 'bootstrap/osminog-3.8.62-fileset.part*'))
+          fs_parts = sorted(Path(p) for p in glob.glob(str(root / 'bootstrap/osminog-3.8.62-fileset.part*')))
+          if not fs_parts: raise RuntimeError('No 3.8.62 fileset parts')
+          fs_text = ''.join(''.join(payload_runs(p)) for p in fs_parts)
+          fs_text += '=' * (-len(fs_text) % 4)
+          fs_bytes = base64.b64decode(fs_text, validate=True)
           fileset = json.loads(fs_bytes.decode('utf-8'))
           if fileset.get('version') != '3.8.62': raise RuntimeError('Bad fileset version')
           print('FILESET_BYTES', len(fs_bytes))
@@ -139,6 +172,7 @@ jobs:
               'version': '3.8.62',
               'baseVersion': '3.8.61',
               'sourceFileCount': sum(1 for p in source.rglob('*') if p.is_file()),
+              'baseArchiveOrder': archive_order,
               'baseArchiveXzSha256': sha256(archive_xz),
               'filesetSha256': sha256(fs_bytes),
               'checks': {'archiveIntegrity': True, 'javascriptSyntax': True, 'jsonParse': True}
