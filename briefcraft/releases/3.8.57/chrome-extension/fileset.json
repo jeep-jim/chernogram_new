@@ -1,0 +1,23 @@
+{
+  "schema": "briefcraft-fileset/v1",
+  "version": "3.8.57",
+  "baseVersion": "3.8.56",
+  "files": [
+    {
+      "path": "manifest.json",
+      "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.57/chrome-extension/manifest.json",
+      "sha256": "92a4929992e9fb6d6dcedacf9a14b2968525d7b35c696e4ce5f2c6547f2ab0db",
+      "size": 1360
+    }
+  ],
+  "patches": [
+    {
+      "path": "editor.html",
+      "search": "<b id=\"updateStatusText\">GitHub Dev channel</b>",
+      "replace": "<b id=\"updateStatusText\">GitHub Dev channel · ONLINE</b>",
+      "beforeSha256": "4818da0c9151d9634298c492d320dfb5cad24a9ca1fe5869875658b77dd76395",
+      "afterSha256": "e9a5708a421e6c18bfe24e7b565cd44180c9d0280f218c2d1d634927d86df3c3"
+    }
+  ],
+  "delete": []
+}
