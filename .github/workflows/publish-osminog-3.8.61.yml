@@ -16,11 +16,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout release branch
-        uses: actions/checkout@v4
-        with:
-          ref: briefcraft-releases
-          fetch-depth: 0
+      - name: Checkout release branch without checkout action
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags origin briefcraft-releases
+          git checkout -B briefcraft-releases FETCH_HEAD
 
       - name: Reconstruct verified source archive
         shell: bash
