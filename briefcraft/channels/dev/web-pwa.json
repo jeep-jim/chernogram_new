@@ -1,0 +1,9 @@
+{
+  "schema": "briefcraft-update-feed/v1",
+  "product": "BriefCraft",
+  "channel": "dev",
+  "platform": "web-pwa",
+  "status": "placeholder",
+  "latest": null,
+  "history": []
+}
