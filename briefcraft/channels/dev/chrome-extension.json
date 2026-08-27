@@ -2,23 +2,40 @@
   "schema": "briefcraft-update-feed/v1",
   "product": "BriefCraft",
   "channel": "dev",
-  "generatedAt": "2026-08-27T04:00:00Z",
+  "generatedAt": "2026-08-27T05:16:00Z",
   "latest": {
-    "version": "3.8.57",
+    "version": "3.8.59",
     "platform": "chrome-extension-dev",
     "kind": "fileset",
-    "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.57/chrome-extension/fileset.json",
-    "sha256": "6042f69d3534bd3399de579baffee638b74887314ca5e13d3ba7c0bde6483239",
-    "size": 810,
-    "notes": "First one-click online update proof from the unified BriefCraft release feed.",
-    "publishedAt": "2026-08-27T04:00:00Z"
+    "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.59/chrome-extension/fileset.json",
+    "sha256": "e2d458f932606e018bc8ecee9cb479ec97c28bd1795ddff871015af68c40854d",
+    "size": 4920,
+    "notes": "Empty-canvas greeting and actions now switch instantly with EN, RU, DE, ES, JA and ZH.",
+    "publishedAt": "2026-08-27T05:16:00Z"
   },
   "history": [
+    {
+      "version": "3.8.58",
+      "platform": "chrome-extension-dev",
+      "kind": "bootstrap",
+      "notes": "One-time online-updater bootstrap with compact Layers and anchored AI helpers.",
+      "publishedAt": "2026-08-27T04:06:00Z"
+    },
+    {
+      "version": "3.8.57",
+      "platform": "chrome-extension-dev",
+      "kind": "fileset",
+      "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.57/chrome-extension/fileset.json",
+      "sha256": "6042f69d3534bd3399de579baffee638b74887314ca5e13d3ba7c0bde6483239",
+      "size": 810,
+      "notes": "First one-click online update proof from the unified BriefCraft release feed.",
+      "publishedAt": "2026-08-27T04:00:00Z"
+    },
     {
       "version": "3.8.56",
       "platform": "chrome-extension-dev",
       "kind": "bootstrap",
-      "notes": "One-time bootstrap installed by BriefCraft Unified Dev Setup.",
+      "notes": "Initial native-updater bootstrap.",
       "publishedAt": "2026-08-27T03:55:00Z"
     }
   ]
