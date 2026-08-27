@@ -41,12 +41,15 @@ jobs:
               chunks = []
               for p in parts:
                   raw = Path(p).read_text(encoding='utf-8-sig')
-                  cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
-                  print('PART', Path(p).name, 'raw', len(raw), 'clean', len(cleaned), 'head', cleaned[:12], 'tail', cleaned[-12:])
+                  runs = re.findall(r'[A-Za-z0-9+/=]{32,}', raw)
+                  if not runs:
+                      raise RuntimeError(f'No base64 payload in {p}')
+                  cleaned = ''.join(runs)
+                  print('PART', Path(p).name, 'raw', len(raw), 'runs', [len(x) for x in runs], 'clean', len(cleaned), 'head', cleaned[:12], 'tail', cleaned[-12:])
                   chunks.append(cleaned)
               text = ''.join(chunks)
               text += '=' * (-len(text) % 4)
-              return base64.b64decode(text, validate=False)
+              return base64.b64decode(text, validate=True)
 
           archive_xz = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
           print('BASE_XZ_BYTES', len(archive_xz))
