@@ -27,7 +27,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from io import BytesIO
-          import base64, glob, hashlib, json, shutil, urllib.request, subprocess, lzma, tarfile
+          import base64, glob, hashlib, json, shutil, urllib.request, subprocess, lzma, tarfile, re
 
           root = Path.cwd()
           work = root / '.tmp-osminog-3.8.62'
@@ -40,11 +40,13 @@ jobs:
                   raise RuntimeError(f'No parts for {pattern}')
               chunks = []
               for p in parts:
-                  raw = Path(p).read_text(encoding='utf-8')
-                  chunks.append(''.join(raw.split()))
+                  raw = Path(p).read_text(encoding='utf-8-sig')
+                  cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
+                  print('PART', Path(p).name, 'raw', len(raw), 'clean', len(cleaned), 'head', cleaned[:12], 'tail', cleaned[-12:])
+                  chunks.append(cleaned)
               text = ''.join(chunks)
               text += '=' * (-len(text) % 4)
-              return base64.b64decode(text, validate=True)
+              return base64.b64decode(text, validate=False)
 
           archive_xz = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
           print('BASE_XZ_BYTES', len(archive_xz))
@@ -62,7 +64,6 @@ jobs:
                       raise RuntimeError(f'Unsafe tar member: {member.name}')
               tf.extractall(source)
 
-          # Some packers wrap the extension in one top-level folder. Normalize it.
           if not (source / 'manifest.json').exists():
               candidates = list(source.glob('*/manifest.json'))
               if len(candidates) == 1:
