@@ -1,0 +1,37 @@
+{
+  "schema": "briefcraft-fileset/v1",
+  "version": "3.8.60",
+  "baseVersion": "3.8.58",
+  "files": [
+    {
+      "path": "manifest.json",
+      "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.60/chrome-extension/manifest.json",
+      "sha256": "86c9500a136f8c70c4a5ecbb7094e363f7044be98586d340ca74151a96b65985",
+      "size": 1360
+    }
+  ],
+  "patches": [
+    {
+      "path": "editor.js",
+      "search": "  if(!$(\"#app\").hidden&&project()){renderObjects(true);renderLayers();renderInspector()}syncLayersPolishLanguage();syncLayersMiniRailLanguage();updateSaveIndicator()",
+      "replace": "  if(!$(\"#app\").hidden&&project()){renderObjects(true);renderLayers();renderInspector()}syncLayersPolishLanguage();syncLayersMiniRailLanguage();syncEmptyHintLanguage();updateSaveIndicator()",
+      "beforeSha256": "fcacf92e3607fb3867f3c7c14d69c9ef8057d642e60338a8e2e48ccd22ae4010",
+      "afterSha256": "9f87b88b8693fb3096dda49523736e9129258918516b15bbb244447f98225c26"
+    },
+    {
+      "path": "editor.js",
+      "search": "  const empty=document.getElementById(\"emptyHint\");if(empty){const h=empty.querySelector(\"h2\"),p=empty.querySelector(\"p\");if(h)h.textContent=text(\"Соберите проект вместе с командой ИИ\",\"Build the project with your AI team\");if(p)p.textContent=text(\"Файлы, код, сайты, дизайн и решения живут на одном холсте. Подключайте агентов к конкретным объектам — контекст всегда остаётся перед глазами.\",\"Files, code, websites, design and decisions live on one canvas. Attach agents to exact objects and keep the whole context visible.\")}",
+      "replace": "  syncEmptyHintLanguage();",
+      "beforeSha256": "9f87b88b8693fb3096dda49523736e9129258918516b15bbb244447f98225c26",
+      "afterSha256": "7c69a0eeeba849bd1674c30eb6aeb83b50244511586b4f436babaf29c57ec30f"
+    },
+    {
+      "path": "editor.js",
+      "search": "  document.getElementById(\"screenshotTool\")?.addEventListener(\"click\",e=>{e.preventDefault();e.stopImmediatePropagation();openScreenshotStudio()},true);\n  renderFrame();\n})();",
+      "replace": "  document.getElementById(\"screenshotTool\")?.addEventListener(\"click\",e=>{e.preventDefault();e.stopImmediatePropagation();openScreenshotStudio()},true);\n  renderFrame();\n})();\n\n/* Microfix 3.8.60: empty-canvas welcome follows the selected workspace language */\nfunction syncEmptyHintLanguage(){\n  const copy={\n    en:{title:\"Build the project with your AI team\",text:\"Files, code, websites, design and decisions live on one canvas. Attach agents to exact objects and keep the whole context visible.\"},\n    ru:{title:\"Соберите проект вместе с командой ИИ\",text:\"Файлы, код, сайты, дизайн и решения живут на одном холсте. Подключайте агентов к конкретным объектам — весь контекст всегда остаётся перед глазами.\"},\n    de:{title:\"Erstelle das Projekt mit deinem KI-Team\",text:\"Dateien, Code, Websites, Design und Entscheidungen leben auf einer gemeinsamen Arbeitsfläche. Verknüpfe Agenten mit konkreten Objekten und behalte den gesamten Kontext im Blick.\"},\n    es:{title:\"Construye el proyecto con tu equipo de IA\",text:\"Archivos, código, sitios web, diseño y decisiones conviven en un solo lienzo. Vincula agentes a objetos concretos y mantén siempre visible todo el contexto.\"},\n    ja:{title:\"AIチームと一緒にプロジェクトを構築\",text:\"ファイル、コード、Webサイト、デザイン、意思決定を1つのキャンバスにまとめます。エージェントを特定のオブジェクトに接続し、全体のコンテキストを常に見える状態に保ちます。\"},\n    zh:{title:\"与 AI 团队一起构建项目\",text:\"文件、代码、网站、设计和决策都集中在同一画布上。将智能体连接到具体对象，并始终保持完整上下文可见。\"}\n  }[state.language]||null;\n  const fallback={title:(COPY[state.language]||COPY.en).emptyTitle,text:(COPY[state.language]||COPY.en).emptyText};\n  const value=copy||fallback,empty=document.getElementById(\"emptyHint\");\n  if(!empty)return;\n  const title=empty.querySelector(\"h2\"),body=empty.querySelector(\"p\");\n  if(title)title.textContent=value.title;if(body)body.textContent=value.text;\n}\nsyncEmptyHintLanguage();",
+      "beforeSha256": "7c69a0eeeba849bd1674c30eb6aeb83b50244511586b4f436babaf29c57ec30f",
+      "afterSha256": "97686dbceed3c247f56c27de7e7b305f852dfa59eb952e1f405ad4681316e674"
+    }
+  ],
+  "delete": []
+}
