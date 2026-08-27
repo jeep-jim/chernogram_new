@@ -1,0 +1,264 @@
+name: Publish OSMINOG Chrome 3.8.62 final
+
+on:
+  push:
+    branches:
+      - briefcraft-releases
+    paths:
+      - '.github/workflows/publish-osminog-3.8.62-final.yml'
+      - 'bootstrap/osminog-3.8.61.b64.part*'
+      - 'bootstrap/osminog-3.8.62-fileset.part*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osminog-chrome-dev-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: briefcraft-releases
+          fetch-depth: 0
+
+      - name: Reconstruct 3.8.61 and build 3.8.62
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $temp = Join-Path $env:RUNNER_TEMP 'osminog-3.8.62-final'
+          if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }
+          New-Item -ItemType Directory -Path $temp | Out-Null
+
+          # Reconstruct the owner-approved 3.8.61 package from text-safe Git parts.
+          $baseParts = Get-ChildItem (Join-Path $root 'bootstrap') -Filter 'osminog-3.8.61.b64.part*' | Sort-Object Name
+          if ($baseParts.Count -lt 1) { throw 'No 3.8.61 source parts found.' }
+          $base64 = ($baseParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $base64 = $base64 -replace '\s',''
+          $baseBytes = [Convert]::FromBase64String($base64)
+          $baseBundle = Join-Path $temp 'osminog-3.8.61.bundle'
+          [IO.File]::WriteAllBytes($baseBundle, $baseBytes)
+          $extract = Join-Path $temp 'extension'
+          New-Item -ItemType Directory -Path $extract | Out-Null
+          if ($baseBytes.Length -ge 6 -and $baseBytes[0] -eq 0xFD -and $baseBytes[1] -eq 0x37 -and $baseBytes[2] -eq 0x7A -and $baseBytes[3] -eq 0x58 -and $baseBytes[4] -eq 0x5A -and $baseBytes[5] -eq 0x00) {
+            tar -xJf $baseBundle -C $extract
+            if ($LASTEXITCODE -ne 0) { throw "3.8.61 tar.xz extraction failed: $LASTEXITCODE" }
+          } elseif ($baseBytes.Length -ge 2 -and $baseBytes[0] -eq 0x50 -and $baseBytes[1] -eq 0x4B) {
+            $zipPath = Join-Path $temp 'osminog-3.8.61.zip'
+            Move-Item $baseBundle $zipPath -Force
+            Expand-Archive -Path $zipPath -DestinationPath $extract -Force
+          } else {
+            throw 'The reconstructed 3.8.61 package has an unknown format.'
+          }
+          $nestedManifest = Get-ChildItem $extract -Recurse -Filter manifest.json | Where-Object { $_.DirectoryName -notmatch '\\_locales\\' } | Select-Object -First 1
+          if (!$nestedManifest) { throw '3.8.61 manifest.json was not found after extraction.' }
+          if ($nestedManifest.DirectoryName -ne $extract) {
+            $nestedRoot = $nestedManifest.DirectoryName
+            $normalized = Join-Path $temp 'normalized-extension'
+            New-Item -ItemType Directory -Path $normalized | Out-Null
+            Get-ChildItem -Force $nestedRoot | Copy-Item -Destination $normalized -Recurse -Force
+            Remove-Item $extract -Recurse -Force
+            Move-Item $normalized $extract
+          }
+
+          $manifestPath = Join-Path $extract 'manifest.json'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -ne '3.8.61') { throw "Expected base 3.8.61; got $($manifest.version)." }
+          $fixedKey = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstI7PnHbheHLtFKZ+3khPxma+9VesIOBxZc8mu7VuJE8ahUos0draXfHzjy3F1j/42qXKTl+UgagUEO0sj4MYlKyGPpmD6gLBMKyrItP4Qd6PeowtMcyopOVDUUjZNkCa07B9JQ45xwCd3RaDiS1H+io4uOFEAkKrYdbcyUa8ytbJ1EKS4oMiRvyqJjn3T9GuHA7arMpFRwbyBuE/CNchDQ/hjW7LajfOkzS837twTybFGUp+tQHLbHKH3BMjwDmMKOis09DmAVTy2WH5OINqdq9WC+cgJxV2SQQdCZUK1bZ79/RaQzIsAIFN1w0AF0cme1DYF5+xQY8WHWpMGPXfQIDAQAB'
+          if ($manifest.key -ne $fixedKey) { throw 'The fixed Chrome manifest key changed in the 3.8.61 base.' }
+
+          # Decode the previously prepared and hash-pinned 3.8.62 fileset.
+          $filesetParts = Get-ChildItem (Join-Path $root 'bootstrap') -Filter 'osminog-3.8.62-fileset.part*' | Sort-Object Name
+          if ($filesetParts.Count -lt 1) { throw 'No 3.8.62 fileset parts found.' }
+          $filesetBase64 = ($filesetParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $filesetBase64 = $filesetBase64 -replace '\s',''
+          $filesetJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($filesetBase64))
+          $prepared = $filesetJson | ConvertFrom-Json
+          if ($prepared.version -ne '3.8.62' -or $prepared.baseVersion -ne '3.8.61') { throw 'Prepared fileset version/base mismatch.' }
+
+          function Get-Sha256([string]$Path) {
+            return (Get-FileHash $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          function Resolve-SafePath([string]$Base, [string]$Relative) {
+            if ([string]::IsNullOrWhiteSpace($Relative)) { throw 'Empty relative path.' }
+            $full = [IO.Path]::GetFullPath((Join-Path $Base $Relative))
+            $prefix = [IO.Path]::GetFullPath($Base).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+            if (!$full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe path: $Relative" }
+            return $full
+          }
+
+          # Candidate blobs were uploaded through Git data but never linked after the interrupted previous attempt.
+          $candidateBlobShas = @(
+            'b9d623ebbdb7810a6828774e0ecf4cf001fa8f1e',
+            '5a14d081cc494115d093ca4e634f25020ecfb8c9'
+          )
+          $candidatePayloads = @()
+          foreach ($blobSha in $candidateBlobShas) {
+            try {
+              $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+              $response = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/jeep-jim/chernogram_new/git/blobs/$blobSha"
+              $bytes = [Convert]::FromBase64String(($response.content -replace '\s',''))
+              $candidateFile = Join-Path $temp ("candidate-" + $blobSha)
+              [IO.File]::WriteAllBytes($candidateFile, $bytes)
+              $candidatePayloads += [pscustomobject]@{ Sha = $blobSha; Path = $candidateFile; Size = $bytes.Length; Hash = (Get-Sha256 $candidateFile) }
+            } catch {
+              Write-Warning "Could not read candidate blob $blobSha: $($_.Exception.Message)"
+            }
+          }
+
+          foreach ($file in @($prepared.files)) {
+            $target = Resolve-SafePath $extract ([string]$file.path)
+            $expectedHash = ([string]$file.sha256).ToLowerInvariant()
+            $expectedSize = [int64]$file.size
+            $alreadyValid = (Test-Path $target) -and ((Get-Item $target).Length -eq $expectedSize) -and ((Get-Sha256 $target) -eq $expectedHash)
+            if (!$alreadyValid) {
+              $match = $candidatePayloads | Where-Object { $_.Hash -eq $expectedHash -and $_.Size -eq $expectedSize } | Select-Object -First 1
+              if (!$match) { throw "No verified payload found for $($file.path) ($expectedHash)." }
+              New-Item -ItemType Directory -Path (Split-Path $target) -Force | Out-Null
+              Copy-Item $match.Path $target -Force
+            }
+            if ((Get-Sha256 $target) -ne $expectedHash) { throw "Full-file hash mismatch for $($file.path)." }
+          }
+
+          foreach ($patch in @($prepared.patches)) {
+            $target = Resolve-SafePath $extract ([string]$patch.path)
+            if (!(Test-Path $target)) { throw "Patch target missing: $($patch.path)" }
+            $before = Get-Sha256 $target
+            if ($before -ne ([string]$patch.beforeSha256).ToLowerInvariant()) { throw "Patch precondition failed for $($patch.path): $before" }
+            $content = [IO.File]::ReadAllText($target, [Text.Encoding]::UTF8)
+            $search = [string]$patch.search
+            $replacement = [string]$patch.replace
+            $first = $content.IndexOf($search, [StringComparison]::Ordinal)
+            if ($first -lt 0) { throw "Patch text not found in $($patch.path)." }
+            $second = $content.IndexOf($search, $first + $search.Length, [StringComparison]::Ordinal)
+            if ($second -ge 0) { throw "Patch text is ambiguous in $($patch.path)." }
+            $updated = $content.Substring(0, $first) + $replacement + $content.Substring($first + $search.Length)
+            [IO.File]::WriteAllText($target, $updated, [Text.UTF8Encoding]::new($false))
+            $after = Get-Sha256 $target
+            if ($after -ne ([string]$patch.afterSha256).ToLowerInvariant()) { throw "Patch result hash mismatch for $($patch.path): $after" }
+          }
+
+          foreach ($entry in @($prepared.delete)) {
+            $relative = if ($entry -is [string]) { $entry } else { [string]$entry.path }
+            if ([string]::IsNullOrWhiteSpace($relative)) { continue }
+            $target = Resolve-SafePath $extract $relative
+            if (Test-Path $target -PathType Leaf) { Remove-Item $target -Force }
+            elseif (Test-Path $target -PathType Container) { Remove-Item $target -Recurse -Force }
+          }
+
+          $finalManifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($finalManifest.version -ne '3.8.62') { throw "Final manifest version is $($finalManifest.version), expected 3.8.62." }
+          if ($finalManifest.key -ne $fixedKey) { throw 'The 3.8.62 release changed the fixed Chrome key.' }
+          Get-ChildItem $extract -Recurse -Filter '*.js' | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $($_.FullName)" } }
+          Get-ChildItem $extract -Recurse -Filter '*.json' | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null }
+
+          # Materialize a complete immutable release so the updater never depends on a local owner folder.
+          $releaseRoot = Join-Path $root 'briefcraft/releases/3.8.62'
+          $releaseExtension = Join-Path $releaseRoot 'chrome-extension'
+          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $releaseExtension -Force | Out-Null
+          Get-ChildItem -Force $extract | Copy-Item -Destination $releaseExtension -Recurse -Force
+
+          $baseUrl = 'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.62/chrome-extension/'
+          $files = @()
+          Get-ChildItem $releaseExtension -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($releaseExtension, $_.FullName).Replace('\','/')
+            $files += [ordered]@{
+              path = $relative
+              url = $baseUrl + $relative
+              sha256 = (Get-Sha256 $_.FullName)
+              size = $_.Length
+            }
+          }
+          $publishedFileset = [ordered]@{
+            schema = 'briefcraft-fileset/v1'
+            version = '3.8.62'
+            baseVersion = '3.8.61'
+            files = $files
+            patches = @()
+            delete = @()
+          }
+          $filesetPath = Join-Path $releaseExtension 'fileset.json'
+          $publishedFileset | ConvertTo-Json -Depth 8 | Set-Content $filesetPath -Encoding utf8NoBOM
+          $filesetHash = Get-Sha256 $filesetPath
+          $filesetSize = (Get-Item $filesetPath).Length
+
+          $zipPath = Join-Path $releaseRoot 'OSMINOG-Chrome-3.8.62-ROOT.zip'
+          Compress-Archive -Path (Join-Path $extract '*') -DestinationPath $zipPath -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            if (!($zip.Entries | Where-Object { $_.FullName -eq 'manifest.json' })) { throw 'Root manifest.json is missing from release ZIP.' }
+          } finally { $zip.Dispose() }
+          $zipHash = Get-Sha256 $zipPath
+
+          $now = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          $feedPath = Join-Path $root 'briefcraft/channels/dev/chrome-extension.json'
+          $oldFeed = Get-Content $feedPath -Raw | ConvertFrom-Json
+          $history = @(
+            [ordered]@{ version='3.8.61'; platform='chrome-extension-dev'; kind='manual-baseline'; notes='Owner-installed OSMINOG visible rebrand baseline.'; publishedAt=$now }
+          ) + @($oldFeed.history)
+          $feed = [ordered]@{
+            schema = 'briefcraft-update-feed/v1'
+            product = 'OSMINOG'
+            channel = 'dev'
+            generatedAt = $now
+            latest = [ordered]@{
+              version = '3.8.62'
+              platform = 'chrome-extension-dev'
+              kind = 'fileset'
+              url = 'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.62/chrome-extension/fileset.json'
+              sha256 = $filesetHash
+              size = $filesetSize
+              notes = 'Red circle beside OSMINOG in the header plus the canvas-widget chat request/response bridge requested in Новый-мир.md.'
+              publishedAt = $now
+            }
+            history = $history
+          }
+          $feed | ConvertTo-Json -Depth 10 | Set-Content $feedPath -Encoding utf8NoBOM
+
+          $releaseMeta = [ordered]@{
+            product = 'OSMINOG'
+            version = '3.8.62'
+            baseVersion = '3.8.61'
+            package = 'OSMINOG-Chrome-3.8.62-ROOT.zip'
+            packageSha256 = $zipHash
+            packageSize = (Get-Item $zipPath).Length
+            filesetSha256 = $filesetHash
+            filesetSize = $filesetSize
+            fileCount = $files.Count
+            checks = [ordered]@{
+              javascriptSyntax = $true
+              jsonParse = $true
+              fixedManifestKeyPreserved = $true
+              rootManifest = $true
+              completeReleaseFiles = $true
+            }
+          }
+          $releaseMeta | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $releaseRoot 'release.json') -Encoding utf8NoBOM
+          Write-Host "OSMINOG 3.8.62 staged: $($files.Count) extension files; ZIP $zipHash; fileset $filesetHash."
+
+      - name: Commit release and dev feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item bootstrap/osminog-3.8.61.b64.part* -Force -ErrorAction SilentlyContinue
+          Remove-Item bootstrap/osminog-3.8.61.zip -Force -ErrorAction SilentlyContinue
+          Remove-Item bootstrap/osminog-3.8.62-fileset.part* -Force -ErrorAction SilentlyContinue
+          Remove-Item .github/workflows/publish-osminog-3.8.61.yml -Force -ErrorAction SilentlyContinue
+          Remove-Item .github/workflows/test-osminog-drive-download.yml -Force -ErrorAction SilentlyContinue
+          Remove-Item .github/workflows/publish-osminog-3.8.62-final.yml -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Publish OSMINOG Chrome 3.8.62 and promote dev feed'
+          git push origin HEAD:briefcraft-releases
