@@ -1,0 +1,12 @@
+{
+  "schema": "briefcraft-platforms/v1",
+  "product": "BriefCraft",
+  "platforms": [
+    {"id":"web-pwa","sourceBranch":"platform/web-pwa","releaseChannel":"briefcraft/channels/dev/web-pwa.json","status":"placeholder"},
+    {"id":"chrome-extension","sourceBranch":"platform/chrome-extension","releaseChannel":"briefcraft/channels/dev/chrome-extension.json","status":"active"},
+    {"id":"windows","sourceBranch":"platform/windows","releaseChannel":"briefcraft/channels/dev/windows.json","status":"placeholder"},
+    {"id":"macos","sourceBranch":"platform/macos","releaseChannel":"briefcraft/channels/dev/macos.json","status":"placeholder"},
+    {"id":"android","sourceBranch":"platform/android","releaseChannel":"briefcraft/channels/dev/android.json","status":"placeholder"},
+    {"id":"ios","sourceBranch":"platform/ios","releaseChannel":"briefcraft/channels/dev/ios.json","status":"placeholder"}
+  ]
+}
