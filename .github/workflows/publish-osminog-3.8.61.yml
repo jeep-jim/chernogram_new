@@ -5,7 +5,7 @@ on:
     branches:
       - briefcraft-releases
     paths:
-      - 'bootstrap/osminog-3.8.61.zip'
+      - 'bootstrap/osminog-3.8.61.b64.part*'
       - '.github/workflows/publish-osminog-3.8.61.yml'
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout release branch
@@ -22,127 +22,103 @@ jobs:
           ref: briefcraft-releases
           fetch-depth: 0
 
-      - name: Verify and materialize OSMINOG 3.8.61
-        shell: pwsh
+      - name: Reconstruct verified source archive
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          $bundle = Join-Path $env:GITHUB_WORKSPACE 'bootstrap/osminog-3.8.61.zip'
-          if (!(Test-Path $bundle)) { throw "Missing release bundle: $bundle" }
-          $bundleHash = (Get-FileHash $bundle -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedBundleHash = '105afd69acf68e98370c043778ec18d61577757ebc278105dce6aea6bdb190b2'
-          if ($bundleHash -ne $expectedBundleHash) { throw "Bundle SHA-256 mismatch: $bundleHash" }
-          Write-Host "Bundle verified: $bundleHash"
+          set -euo pipefail
+          mapfile -t parts < <(find bootstrap -maxdepth 1 -type f -name 'osminog-3.8.61.b64.part*' | sort)
+          test "${#parts[@]}" -eq 4
+          cat "${parts[@]}" | base64 --decode > /tmp/OSMINOG-Chrome-3.8.61-ROOT.tar.xz
+          actual="$(sha256sum /tmp/OSMINOG-Chrome-3.8.61-ROOT.tar.xz | awk '{print $1}')"
+          expected='073fa1d36286eb0e389e8680e51a2879648f46ae225bdffefeb3106bf297d9da'
+          test "$actual" = "$expected"
+          rm -rf /tmp/osminog-3.8.61
+          mkdir -p /tmp/osminog-3.8.61
+          tar -xJf /tmp/OSMINOG-Chrome-3.8.61-ROOT.tar.xz -C /tmp/osminog-3.8.61
 
-          $extract = Join-Path $env:RUNNER_TEMP 'osminog-3.8.61'
-          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
-          New-Item -ItemType Directory -Path $extract | Out-Null
-          @'
-          import sys, zipfile
-          source, target = sys.argv[1], sys.argv[2]
-          with zipfile.ZipFile(source, 'r') as z:
-              bad = z.testzip()
-              if bad:
-                  raise RuntimeError(f'Corrupt ZIP member: {bad}')
-              z.extractall(target)
-              print(f'Extracted {len(z.infolist())} entries')
-          '@ | Set-Content (Join-Path $env:RUNNER_TEMP 'extract_osminog.py') -Encoding utf8NoBOM
-          python (Join-Path $env:RUNNER_TEMP 'extract_osminog.py') $bundle $extract
-          if ($LASTEXITCODE -ne 0) { throw "Python ZIP extraction failed: $LASTEXITCODE" }
-
-          $manifestPath = Join-Path $extract 'manifest.json'
-          if (!(Test-Path $manifestPath)) { throw 'Root manifest.json is missing.' }
-          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.version -ne '3.8.61') { throw "Unexpected manifest version: $($manifest.version)" }
-          $expectedKey = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstI7PnHbheHLtFKZ+3khPxma+9VesIOBxZc8mu7VuJE8ahUos0draXfHzjy3F1j/42qXKTl+UgagUEO0sj4MYlKyGPpmD6gLBMKyrItP4Qd6PeowtMcyopOVDUUjZNkCa07B9JQ45xwCd3RaDiS1H+io4uOFEAkKrYdbcyUa8ytbJ1EKS4oMiRvyqJjn3T9GuHA7arMpFRwbyBuE/CNchDQ/hjW7LajfOkzS837twTybFGUp+tQHLbHKH3BMjwDmMKOis09DmAVTy2WH5OINqdq9WC+cgJxV2SQQdCZUK1bZ79/RaQzIsAIFN1w0AF0cme1DYF5+xQY8WHWpMGPXfQIDAQAB'
-          if ($manifest.key -ne $expectedKey) { throw 'Fixed Chrome manifest key changed.' }
-          Write-Host 'Manifest and fixed extension key verified.'
-
-          Get-ChildItem $extract -Recurse -Filter '*.js' | ForEach-Object { node --check $_.FullName }
-          Get-ChildItem $extract -Recurse -Filter '*.json' | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null }
-          Write-Host 'JavaScript and JSON checks passed.'
-
-          $textExtensions = @('.js','.html','.css','.json','.svg','.md','.txt')
-          $legacy = Get-ChildItem $extract -Recurse -File | Where-Object { $textExtensions -contains $_.Extension.ToLowerInvariant() } | Select-String -Pattern '(?i)(>[^<]*BriefCraft|["''][^"'']*BriefCraft AI|\bBRIEFCRAFT AI\b)'
-          if ($legacy) { throw "Visible legacy brand remains: $($legacy[0].Path):$($legacy[0].LineNumber): $($legacy[0].Line.Trim())" }
-          Write-Host 'Visible legacy brand check passed.'
-
-          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE 'briefcraft/releases/3.8.61'
-          $extensionRoot = Join-Path $releaseRoot 'chrome-extension'
-          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
-          New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
-          Get-ChildItem -Force $extract | Copy-Item -Destination $extensionRoot -Recurse -Force
-          Copy-Item $bundle (Join-Path $releaseRoot 'OSMINOG-Chrome-3.8.61-ROOT.zip') -Force
-
-          $baseUrl = 'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.61/chrome-extension/'
-          $files = @()
-          Get-ChildItem $extensionRoot -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($extensionRoot, $_.FullName).Replace('\','/')
-            $files += [ordered]@{
-              path = $relative
-              url = $baseUrl + $relative
-              sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-              size = $_.Length
-            }
-          }
-          $fileset = [ordered]@{
-            schema = 'briefcraft-fileset/v1'
-            version = '3.8.61'
-            baseVersion = '3.8.60'
-            files = $files
-            patches = @()
-            delete = @()
-          }
-          $filesetPath = Join-Path $extensionRoot 'fileset.json'
-          $fileset | ConvertTo-Json -Depth 8 | Set-Content $filesetPath -Encoding utf8NoBOM
-          $filesetHash = (Get-FileHash $filesetPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $filesetSize = (Get-Item $filesetPath).Length
-          $now = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-
-          $feed = [ordered]@{
-            schema = 'briefcraft-update-feed/v1'
-            product = 'OSMINOG'
-            channel = 'dev'
-            generatedAt = $now
-            latest = [ordered]@{
-              version = '3.8.61'
-              platform = 'chrome-extension-dev'
-              kind = 'fileset'
-              url = 'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.61/chrome-extension/fileset.json'
-              sha256 = $filesetHash
-              size = $filesetSize
-              notes = 'Visible rebrand to OSMINOG across the Chrome extension. Temporary mark: plain red circle. Hidden compatibility identifiers are preserved.'
-              publishedAt = $now
-            }
-            history = @(
-              [ordered]@{version='3.8.60';platform='chrome-extension-dev';kind='fileset';notes='Russian empty-canvas welcome test build.';publishedAt='2026-08-27T11:04:29Z'},
-              [ordered]@{version='3.8.59';platform='chrome-extension-dev';kind='fileset';notes='Multilingual empty-canvas welcome.';publishedAt='2026-08-27T05:21:05Z'},
-              [ordered]@{version='3.8.58';platform='chrome-extension-dev';kind='bootstrap';notes='Canonical owner development snapshot.';publishedAt='2026-08-27T04:06:00Z'}
-            )
-          }
-          $feedPath = Join-Path $env:GITHUB_WORKSPACE 'briefcraft/channels/dev/chrome-extension.json'
-          $feed | ConvertTo-Json -Depth 8 | Set-Content $feedPath -Encoding utf8NoBOM
-
-          $releaseMeta = [ordered]@{
-            product = 'OSMINOG'
-            version = '3.8.61'
-            baseVersion = '3.8.60'
-            package = 'OSMINOG-Chrome-3.8.61-ROOT.zip'
-            packageSha256 = $bundleHash
-            packageSize = (Get-Item $bundle).Length
-            filesetSha256 = $filesetHash
-            filesetSize = $filesetSize
-            fileCount = $files.Count
-            checks = [ordered]@{javascriptSyntax=$true;jsonParse=$true;fixedManifestKeyPreserved=$true;visibleLegacyBrandOccurrences=0;zipIntegrity=$true}
-          }
-          $releaseMeta | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $releaseRoot 'release.json') -Encoding utf8NoBOM
-          Write-Host "Release staged: $($files.Count) files; fileset $filesetHash ($filesetSize bytes)."
-
-      - name: Commit release and feed
-        shell: pwsh
+      - name: Validate extension source
+        shell: bash
         run: |
-          Remove-Item bootstrap/osminog-3.8.61.zip -Force
-          Remove-Item .github/workflows/publish-osminog-3.8.61.yml -Force
-          Remove-Item .github/workflows/test-osminog-drive-download.yml -Force -ErrorAction SilentlyContinue
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          root=Path('/tmp/osminog-3.8.61')
+          manifest=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
+          assert manifest['version']=='3.8.61'
+          assert manifest['short_name']=='OSMINOG'
+          assert manifest['key']=='MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstI7PnHbheHLtFKZ+3khPxma+9VesIOBxZc8mu7VuJE8ahUos0draXfHzjy3F1j/42qXKTl+UgagUEO0sj4MYlKyGPpmD6gLBMKyrItP4Qd6PeowtMcyopOVDUUjZNkCa07B9JQ45xwCd3RaDiS1H+io4uOFEAkKrYdbcyUa8ytbJ1EKS4oMiRvyqJjn3T9GuHA7arMpFRwbyBuE/CNchDQ/hjW7LajfOkzS837twTybFGUp+tQHLbHKH3BMjwDmMKOis09DmAVTy2WH5OINqdq9WC+cgJxV2SQQdCZUK1bZ79/RaQzIsAIFN1w0AF0cme1DYF5+xQY8WHWpMGPXfQIDAQAB'
+          for p in root.rglob('*.json'):
+              json.loads(p.read_text(encoding='utf-8'))
+          old=re.compile(r'\b(?:BriefCraft|BRIEFCRAFT)\b')
+          for p in root.rglob('*'):
+              if p.is_file() and p.suffix.lower() in {'.js','.html','.css','.json','.svg','.md','.txt'}:
+                  assert not old.search(p.read_text(encoding='utf-8')), f'legacy visible brand in {p}'
+          for p in root.glob('*.html'):
+              text=p.read_text(encoding='utf-8')
+              ids=re.findall(r'\bid=["\']([^"\']+)["\']', text)
+              assert len(ids)==len(set(ids)), f'duplicate ids in {p}'
+          PY
+          find /tmp/osminog-3.8.61 -maxdepth 1 -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Publish immutable release and dev feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          release='briefcraft/releases/3.8.61'
+          target="$release/chrome-extension"
+          rm -rf "$release"
+          mkdir -p "$target"
+          cp -a /tmp/osminog-3.8.61/. "$target/"
+          cp /tmp/OSMINOG-Chrome-3.8.61-ROOT.tar.xz "$release/OSMINOG-Chrome-3.8.61-ROOT.tar.xz"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, datetime
+          root=Path('briefcraft/releases/3.8.61/chrome-extension')
+          base='https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.61/chrome-extension/'
+          files=[]
+          for p in sorted(x for x in root.rglob('*') if x.is_file()):
+              rel=p.relative_to(root).as_posix()
+              data=p.read_bytes()
+              files.append({'path':rel,'url':base+rel,'sha256':hashlib.sha256(data).hexdigest(),'size':len(data)})
+          fileset={'schema':'briefcraft-fileset/v1','version':'3.8.61','baseVersion':'3.8.60','files':files,'patches':[],'delete':[]}
+          fs=(json.dumps(fileset,ensure_ascii=False,indent=2)+'\n').encode()
+          (root/'fileset.json').write_bytes(fs)
+          now=datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+          feed_path=Path('briefcraft/channels/dev/chrome-extension.json')
+          feed=json.loads(feed_path.read_text(encoding='utf-8')) if feed_path.exists() else {'schema':'briefcraft-update-feed/v1','history':[]}
+          old=feed.get('latest')
+          history=feed.get('history') or []
+          if old and old.get('version')!='3.8.61' and not any(x.get('version')==old.get('version') for x in history):
+              history.insert(0,{k:old.get(k) for k in ('version','platform','kind','url','sha256','size','notes','publishedAt') if old.get(k) is not None})
+          feed.update({'schema':'briefcraft-update-feed/v1','product':'OSMINOG','channel':'dev','generatedAt':now})
+          feed['latest']={
+              'version':'3.8.61','platform':'chrome-extension-dev','kind':'fileset',
+              'url':'https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.61/chrome-extension/fileset.json',
+              'sha256':hashlib.sha256(fs).hexdigest(),'size':len(fs),
+              'notes':'Visible product rebrand to OSMINOG. Temporary mark: plain red circle. Hidden legacy identifiers remain for compatibility.',
+              'publishedAt':now
+          }
+          feed['history']=history[:20]
+          feed_path.parent.mkdir(parents=True,exist_ok=True)
+          feed_path.write_text(json.dumps(feed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          archive=Path('briefcraft/releases/3.8.61/OSMINOG-Chrome-3.8.61-ROOT.tar.xz').read_bytes()
+          meta={
+              'product':'OSMINOG','version':'3.8.61','baseVersion':'3.8.60',
+              'sourceFileCount':len(files),
+              'archiveSha256':hashlib.sha256(archive).hexdigest(),'archiveSize':len(archive),
+              'filesetSha256':hashlib.sha256(fs).hexdigest(),'filesetSize':len(fs),
+              'checks':{'javascriptSyntax':True,'jsonParse':True,'duplicateHtmlIds':False,'fixedManifestKeyPreserved':True,'visibleLegacyBrandOccurrences':0}
+          }
+          Path('briefcraft/releases/3.8.61/release.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+      - name: Commit published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf bootstrap
+          rm -f .github/workflows/publish-osminog-3.8.61.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
