@@ -26,7 +26,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import base64, glob, hashlib, json, shutil, urllib.request, zipfile, subprocess
+          from io import BytesIO
+          import base64, glob, hashlib, json, shutil, urllib.request, subprocess, lzma, tarfile
 
           root = Path.cwd()
           work = root / '.tmp-osminog-3.8.62'
@@ -37,23 +38,40 @@ jobs:
               parts = sorted(glob.glob(pattern))
               if not parts:
                   raise RuntimeError(f'No parts for {pattern}')
-              text = ''.join(Path(p).read_text(encoding='utf-8').strip() for p in parts)
-              text = ''.join(text.split())
+              chunks = []
+              for p in parts:
+                  raw = Path(p).read_text(encoding='utf-8')
+                  chunks.append(''.join(raw.split()))
+              text = ''.join(chunks)
               text += '=' * (-len(text) % 4)
               return base64.b64decode(text, validate=True)
 
-          zip_bytes = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
-          base_zip = work / 'osminog-3.8.61.zip'
-          base_zip.write_bytes(zip_bytes)
-          print('BASE_ZIP_BYTES', len(zip_bytes))
-          print('BASE_ZIP_SHA256', hashlib.sha256(zip_bytes).hexdigest())
-          with zipfile.ZipFile(base_zip) as z:
-              bad = z.testzip()
-              if bad: raise RuntimeError(f'Bad ZIP member: {bad}')
-              print('BASE_ZIP_ENTRIES', len(z.infolist()))
-              z.extractall(work / 'source')
-
+          archive_xz = decode_parts(str(root / 'bootstrap/osminog-3.8.61.b64.part*'))
+          print('BASE_XZ_BYTES', len(archive_xz))
+          print('BASE_XZ_SHA256', hashlib.sha256(archive_xz).hexdigest())
+          tar_bytes = lzma.decompress(archive_xz)
+          print('BASE_TAR_BYTES', len(tar_bytes))
           source = work / 'source'
+          source.mkdir()
+          with tarfile.open(fileobj=BytesIO(tar_bytes), mode='r:') as tf:
+              members = tf.getmembers()
+              print('BASE_TAR_ENTRIES', len(members))
+              for member in members:
+                  target = (source / member.name).resolve()
+                  if source.resolve() not in target.parents and target != source.resolve():
+                      raise RuntimeError(f'Unsafe tar member: {member.name}')
+              tf.extractall(source)
+
+          # Some packers wrap the extension in one top-level folder. Normalize it.
+          if not (source / 'manifest.json').exists():
+              candidates = list(source.glob('*/manifest.json'))
+              if len(candidates) == 1:
+                  nested = candidates[0].parent
+                  normalized = work / 'normalized'
+                  shutil.copytree(nested, normalized)
+                  shutil.rmtree(source)
+                  normalized.rename(source)
+
           manifest_path = source / 'manifest.json'
           if not manifest_path.exists(): raise RuntimeError('3.8.61 root manifest missing')
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
@@ -117,9 +135,9 @@ jobs:
               'version': '3.8.62',
               'baseVersion': '3.8.61',
               'sourceFileCount': sum(1 for p in source.rglob('*') if p.is_file()),
-              'baseZipSha256': sha256(zip_bytes),
+              'baseArchiveXzSha256': sha256(archive_xz),
               'filesetSha256': sha256(fs_bytes),
-              'checks': {'zipIntegrity': True, 'javascriptSyntax': True, 'jsonParse': True}
+              'checks': {'archiveIntegrity': True, 'javascriptSyntax': True, 'jsonParse': True}
           }
           (snapshot.parent / 'snapshot.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           print(json.dumps(meta, ensure_ascii=False))
