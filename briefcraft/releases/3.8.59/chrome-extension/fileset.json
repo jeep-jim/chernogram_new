@@ -7,29 +7,29 @@
       "path": "editor.js",
       "search": "function applyLanguage(){\n",
       "replace": "function syncEmptyHintLanguage(){\n  const copy={\n    en:{title:\"Build the project with your AI team\",text:\"Files, code, websites, design and decisions live on one canvas. Attach agents to exact objects and keep the whole context visible.\",connect:\"Connect AI\",brief:\"Create brief\",reference:\"Add reference\"},\n    ru:{title:\"Соберите проект вместе с командой ИИ\",text:\"Файлы, код, сайты, дизайн и решения живут на одном холсте. Подключайте агентов к конкретным объектам — весь контекст всегда перед глазами.\",connect:\"Подключить ИИ\",brief:\"Создать бриф\",reference:\"Добавить референс\"},\n    de:{title:\"Baue dein Projekt mit deinem KI-Team\",text:\"Dateien, Code, Websites, Design und Entscheidungen leben auf einer gemeinsamen Arbeitsfläche. Verbinde Agenten mit konkreten Objekten und behalte den gesamten Kontext im Blick.\",connect:\"KI verbinden\",brief:\"Briefing erstellen\",reference:\"Referenz hinzufügen\"},\n    es:{title:\"Crea el proyecto con tu equipo de IA\",text:\"Archivos, código, sitios web, diseño y decisiones conviven en un solo lienzo. Conecta agentes a objetos concretos y mantén todo el contexto a la vista.\",connect:\"Conectar IA\",brief:\"Crear brief\",reference:\"Añadir referencia\"},\n    ja:{title:\"AIチームと一緒にプロジェクトを作成\",text:\"ファイル、コード、Webサイト、デザイン、意思決定を1つのキャンバスにまとめます。エージェントを特定のオブジェクトに接続し、常に全体のコンテキストを確認できます。\",connect:\"AIを接続\",brief:\"ブリーフを作成\",reference:\"リファレンスを追加\"},\n    zh:{title:\"与你的 AI 团队一起构建项目\",text:\"文件、代码、网站、设计和决策都汇集在同一画布中。将智能体连接到具体对象，随时掌握完整上下文。\",connect:\"连接 AI\",brief:\"创建简报\",reference:\"添加参考\"}\n  }[state.language]||null;\n  if(!copy)return;\n  const empty=$(\"#emptyHint\");if(!empty)return;\n  const title=$(\"h2\",empty),body=$(\"p\",empty),connect=$(\"#emptyConnectAi\",empty),brief=$(\"[data-create=brief]\",empty),reference=$(\"[data-create=browser]\",empty);\n  if(title)title.textContent=copy.title;if(body)body.textContent=copy.text;if(connect)connect.textContent=copy.connect;if(brief)brief.textContent=copy.brief;if(reference)reference.textContent=copy.reference;\n}\nfunction applyLanguage(){\n",
-      "beforeSha256": "72fe9f0b4832421f149a08c2d0ac8dbd9ff882f9ed8b2989eb0309e80408c958",
-      "afterSha256": "6c86583eeb56f4bcc7e26e7c9c08f38b1b3bd6aec2ae2e5feab98a92c61ae52e"
+      "beforeSha256": "fcacf92e3607fb3867f3c7c14d69c9ef8057d642e60338a8e2e48ccd22ae4010",
+      "afterSha256": "2c0e760931938339b463f51c4426b2ab972569cfe0b5dbba81a0cd4696de0fc2"
     },
     {
       "path": "editor.js",
       "search": "  $(\"#welcomeLanguage\").value=state.language;$(\"#workspaceLanguage\").value=state.language;\n  renderProfile();renderStoryDetails();syncSmartSelects();\n",
       "replace": "  $(\"#welcomeLanguage\").value=state.language;$(\"#workspaceLanguage\").value=state.language;\n  syncEmptyHintLanguage();renderProfile();renderStoryDetails();syncSmartSelects();\n",
-      "beforeSha256": "6c86583eeb56f4bcc7e26e7c9c08f38b1b3bd6aec2ae2e5feab98a92c61ae52e",
-      "afterSha256": "dfc69b3d5a3b8119fbcd9b6e503fd14a55d24f5f93d5b45b31b94ff36023eb91"
+      "beforeSha256": "2c0e760931938339b463f51c4426b2ab972569cfe0b5dbba81a0cd4696de0fc2",
+      "afterSha256": "47a2643eef45b86ac18f2727fb9ed6863a99bc48c2558e78151d066c6fa631ac"
     },
     {
       "path": "editor.js",
       "search": "  const empty=document.getElementById(\"emptyHint\");if(empty){const h=empty.querySelector(\"h2\"),p=empty.querySelector(\"p\");if(h)h.textContent=text(\"Соберите проект вместе с командой ИИ\",\"Build the project with your AI team\");if(p)p.textContent=text(\"Файлы, код, сайты, дизайн и решения живут на одном холсте. Подключайте агентов к конкретным объектам — контекст всегда остаётся перед глазами.\",\"Files, code, websites, design and decisions live on one canvas. Attach agents to exact objects and keep the whole context visible.\")}\n",
       "replace": "  syncEmptyHintLanguage();\n",
-      "beforeSha256": "dfc69b3d5a3b8119fbcd9b6e503fd14a55d24f5f93d5b45b31b94ff36023eb91",
-      "afterSha256": "99b967db6462767e7a5d25b51ef49f7651dc3d785bd143655896b0899c68e4f4"
+      "beforeSha256": "47a2643eef45b86ac18f2727fb9ed6863a99bc48c2558e78151d066c6fa631ac",
+      "afterSha256": "dfb21a17ec7d5fb130dd142be960eca16df69a70ee6e2f0b4207f9358a381dcf"
     },
     {
       "path": "manifest.json",
       "search": "  \"version\": \"3.8.58\",\n",
       "replace": "  \"version\": \"3.8.59\",\n",
       "beforeSha256": "5cc3cf237962b57527daca9f386159b27910d806c44fd651b70827c78c538f67",
-      "afterSha256": "a78560a7b7bd1844d9a3230254f2b01c8842abfb20da9ead0a008dc48b3692df"
+      "afterSha256": "312dab33e909c93a51365e67e7d946e3533c1d7c52797fb354799682861385c3"
     }
   ]
 }
