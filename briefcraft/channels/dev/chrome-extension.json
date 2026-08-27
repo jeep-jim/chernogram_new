@@ -1,0 +1,26 @@
+{
+  "schema": "briefcraft-update-feed/v1",
+  "product": "BriefCraft",
+  "channel": "dev",
+  "generatedAt": "2026-08-27T03:00:00Z",
+  "latest": {
+    "version": "3.8.57",
+    "platform": "chrome-extension-dev",
+    "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.57/BriefCraft-AI-3.8.57-EXTENSION.zip",
+    "sha256": "f1385bba8bf3348b69acbebd3bd0dba21f08a97f9bed8bb7456c4c113f15d2d0",
+    "size": 242381,
+    "notes": "First online update proof: stable 3.8.43 core plus unified GitHub Native Updater.",
+    "publishedAt": "2026-08-27T03:00:00Z"
+  },
+  "history": [
+    {
+      "version": "3.8.56",
+      "platform": "chrome-extension-dev",
+      "url": "https://raw.githubusercontent.com/jeep-jim/chernogram_new/briefcraft-releases/briefcraft/releases/3.8.56/BriefCraft-AI-3.8.56-EXTENSION.zip",
+      "sha256": "b8f0c8fe56a8b1e74f84be2f989ccaed1c20fbef231b612e75b95ac39adbb0e7",
+      "size": 242375,
+      "notes": "One-time bootstrap extension installed by BriefCraft GitHub Online Setup.",
+      "publishedAt": "2026-08-27T02:55:00Z"
+    }
+  ]
+}
