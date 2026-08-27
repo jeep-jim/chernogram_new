@@ -29,7 +29,7 @@ jobs:
           $bundle = Join-Path $env:GITHUB_WORKSPACE 'bootstrap/osminog-3.8.61.zip'
           if (!(Test-Path $bundle)) { throw "Missing release bundle: $bundle" }
           $bundleHash = (Get-FileHash $bundle -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedBundleHash = 'b84d09f450f355a9e0fca8c0abd93fb646a1d09ec2313c99bf2292df652bec74'
+          $expectedBundleHash = '105afd69acf68e98370c043778ec18d61577757ebc278105dce6aea6bdb190b2'
           if ($bundleHash -ne $expectedBundleHash) { throw "Bundle SHA-256 mismatch: $bundleHash" }
 
           $extract = Join-Path $env:RUNNER_TEMP 'osminog-3.8.61'
