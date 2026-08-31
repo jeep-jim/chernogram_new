@@ -1,0 +1,21 @@
+{
+  "product": "OSMINOG",
+  "platform": "chrome-extension",
+  "version": "3.11.32",
+  "baseVersion": "3.11.31",
+  "codename": "SPACE FX FREEZE HOTFIX",
+  "package": "OSMINOG-Chrome-3.11.32-SPACE-FX-FREEZE-HOTFIX-ROOT.zip",
+  "packageSha256": "b9f4effc5196c301bfe83b2d3cf65ea41e6440202c767e0b0a029e33fa9245c1",
+  "packageSize": 350604,
+  "fileCount": 56,
+  "manifestAtRoot": true,
+  "manifestVersion": "3.11.32",
+  "fixedManifestKeyPreserved": true,
+  "runtimeVerified": false,
+  "source": "exact owner-supplied package uploaded 2026-08-31",
+  "notes": [
+    "P0 Dark-theme MutationObserver freeze hotfix.",
+    "Exact package archived before further Space FX visibility work.",
+    "Space FX visibility is not runtime-verified in this build."
+  ]
+}
