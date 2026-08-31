@@ -1,0 +1,35 @@
+{
+  "product": "OSMINOG",
+  "platform": "chrome-extension",
+  "version": "3.11.32",
+  "codename": "SPACE FX FREEZE HOTFIX",
+  "baseVersion": "3.11.31",
+  "artifact": "OSMINOG-Chrome-3.11.32-SPACE-FX-FREEZE-HOTFIX-ROOT.zip",
+  "fileCount": 56,
+  "manifestAtRoot": true,
+  "manifestVersion": "3.11.32",
+  "fixedManifestKeyPreserved": true,
+  "changedFromBase": [
+    "manifest.json",
+    "OSMINOG_BUILD.json",
+    "editor.html",
+    "editor.js",
+    "osminog-ocean-shell.js",
+    "popup.html",
+    "screenshot.html"
+  ],
+  "runtimeVerified": false,
+  "ownerRuntime": "pending",
+  "binaryInGitHub": false,
+  "notes": [
+    "P0 freeze fixed: SPACE FX inspector injection no longer removes/re-adds its own section on every childList mutation.",
+    "Added reentrancy and microtask coalescing guards around theme FX inspector injection.",
+    "Dark Space FX visuals and theme icons from 3.11.31 are preserved; no other product behavior changed."
+  ],
+  "staticChecks": {
+    "jsSyntax": "21 PASS",
+    "jsonParse": "9 PASS",
+    "duplicateHtmlIds": "0 real duplicates PASS",
+    "zipIntegrity": "PASS"
+  }
+}
